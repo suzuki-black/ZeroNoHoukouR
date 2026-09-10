@@ -1,0 +1,4 @@
+# バイナリアセット(EOL変換・テキスト差分を禁止=破損防止)
+*.yjk binary
+*.bin binary
+*.rom binary

@@ -1,0 +1,15 @@
+# ビルド生成物
+build/
+GAME.ROM
+GAME.BIN
+
+# macOS
+.DS_Store
+
+# エディタ
+.idea/
+*.swp
+
+# デバッグ/一時
+GAME_DEBUG*.ROM
+*.ROM.tmp
