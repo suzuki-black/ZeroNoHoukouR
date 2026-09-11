@@ -20,9 +20,11 @@
 #include "aa_hot.h"        /* AA状態(cam/curstage/aa_*)を hot.c と共有(公開=非static化) */
 #include "ramexec.h"
 #include "raster.h"
+#include "curtain.h"
 #ifdef DEBUG_SPRSPLIT
 #define SPRSPLIT_LINE 96   /* 分割行(この行から下がセットB) */
-#define SPRX_N 8           /* 1帯あたりの追加枚数。この数だけ g_spr_limit を下げて枠を予約する */
+#define SPRX_N 12          /* 1帯あたりの弾幕表示枚数。この数だけ g_spr_limit を下げて枠を予約する
+                              (2帯＝同時に最大24発。増やすほどゲーム本来のスプライトが減る) */
 #endif       /* ★§4-3: ramx_use_ram/use_cart(ホット区間だけ常駐24KB=page1+page2をRAM実行化) */
 #ifdef DEBUG_PROF
 #include "prof.h"
@@ -366,7 +368,8 @@ static void stage_build(void) {
     /* ★ent_reset の後に置くこと: ent_reset が g_spr_limit を既定(32)へ戻すので、先に書くと消される。 */
     vdp_sprite_setb_init(11);   /* セットBの色表を用意し全枚を画面外へ(1回だけ) */
     g_spr_dual = 1;             /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない */
-    g_spr_limit = 32 - SPRX_N;  /* ★追加スプライトの枠を予約(これが無いと混雑時にゲーム側が使い切る) */
+    g_spr_limit = 32 - SPRX_N;  /* ★弾幕の枠を予約(これが無いと混雑時にゲーム側が使い切る) */
+    curtain_reset();
 #endif
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
@@ -602,35 +605,16 @@ static u8 vcnt;   /* 縦スクロール速度の位相(5コマ周期)。phase0=�
 #define SEA0_DIV 3    /* phase0(海モード)で海うねりを塗る間隔(3=3フレームに1回)。実機turboRに合わせ微調整可。 */
 static u8 seatick;    /* phase0 海間引き用カウンタ。 */
 #ifdef DEBUG_SPRSPLIT
-/* ★分割の追加描画(疎通デモ)。ent_draw_all が使い終えた次のslotから、
-   セットA には上帯(y<SPRSPLIT_LINE)の弾、セットB には下帯の弾を置く。
-   同じslot番号に別内容を入れてよいのは、どちらも分割線をまたがない位置に置くから
-   (またぐと境界で化ける＝Grauw の split guide の注意点)。
-   色表は毎フレーム直書きするので、entity.c の色キャッシュを無効化しておくこと。 */
-static void sprsplit_extra(void) {
-    u8 base = g_spr_used, k, slot, n;
-    static u8 ph;
-    /* ★空きが足りないときは「全部やめる」のではなく「出せるだけ出す」。全滅させると、
-       混雑フレーム(戦艦フェーズは g_spr_used が実測29まで到達)で追加分が丸ごと消えて
-       「スクロール方向によって全部消える」ように見える。実際にこれで踏んだ。 */
+/* ★CPU弾幕の描画: ent_draw_all が使い終えた次のslotから、帯ごとに弾を流し込む。
+   セットA には上帯、セットB には下帯。同じslot番号に別内容を置けるのは、どちらも
+   分割線をまたがない弾だけを選んでいるため(またぐと境界で化ける＝split guide の注意点)。
+   色表を直書きするので entity.c の色キャッシュを捨てること。 */
+static void curtain_present(void) {
+    u8 base = g_spr_used;
     if (base >= 32) return;
-    n = (u8)(32 - base);
-    if (n > SPRX_N) n = SPRX_N;
-    ph++;
-    for (k = 0; k < n; k++) {
-        slot = (u8)(base + k);
-        /* 上帯: セットA。左右に振った縦列を少しずつ流す */
-        vdp_sprite_color_a(slot, 10);
-        vdp_sprite_pos_a(slot, (u8)(20 + k * 28), (u8)(20 + ((ph + k * 5) & 63)), SPR_BULLET);
-        /* 下帯: セットB。上帯とは別の弾 */
-        vdp_sprite_color_b(slot, 11);
-        vdp_sprite_pos_b(slot, (u8)(26 + k * 28), (u8)(SPRSPLIT_LINE + 8 + ((ph + k * 7) & 95)), SPR_BULLET);
-    }
-    if ((u8)(base + n) < 32) {
-        vdp_sprite_hide_from_a((u8)(base + n));
-        vdp_sprite_hide_from_b((u8)(base + n));
-    }
-    ent_spr_cache_inval(base);         /* 色表を直書きしたのでキャッシュを捨てる */
+    { u8 n = (u8)(32 - base); if (n > SPRX_N) n = SPRX_N;
+      curtain_draw(base, n, SPRSPLIT_LINE); }
+    ent_spr_cache_inval(base);
 }
 #endif
 
@@ -771,6 +755,12 @@ u8 stage_update(void) {
       if (sea_on) sea_step();  if (DBG_ON(4)) PROF_CALL(PF_UPDATE, ent_update_all());
       if (sea_on) sea_step();  if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_update());
       if (sea_on) sea_step();  if (DBG_ON(4)) PROF_CALL(PF_UPDATE, special_update());
+#ifdef DEBUG_SPRSPLIT
+      /* ★CPU弾幕の更新。VDP に一切触れない純RAM演算なので、VDPコマンドの裏(§4-1)に置ける。
+         発生源は画面上部中央から16方向リングを定期的に撒くだけの仮実装(次段でボスの砲へ繋ぐ)。 */
+      curtain_update();
+      { static u8 ct; if ((++ct & 31) == 0) curtain_ring(128, 24, 16, 6, (u8)(ct >> 5), 11); }
+#endif
       if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
       if (sea_on) { while (sea_step()) { } vdp_cmd_wait(); }   /* ★aa_collide(burn=VDPコマンド)前に海完全完了 */
       if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_collide());
@@ -780,7 +770,7 @@ u8 stage_update(void) {
 #endif
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
 #ifdef DEBUG_SPRSPLIT
-    sprsplit_extra();                    /* ★余りスロットを帯ごとに別の弾で埋める(32枚の壁を超える) */
+    curtain_present();                   /* ★CPU弾幕を予約slotへ帯ごとに流し込む */
 #endif
 #ifdef DEBUG_PROF
     PROF_ADD(PF_DRAW, _pd); }

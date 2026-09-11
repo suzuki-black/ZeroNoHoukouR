@@ -67,6 +67,7 @@ HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h
 RESIDENT_RELS = \
   $(BUILD)/ramexec.rel \
   $(BUILD)/raster.rel \
+  $(BUILD)/curtain.rel \
   $(BUILD)/sys.rel \
   $(BUILD)/vdp.rel \
   $(BUILD)/bank.rel \

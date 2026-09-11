@@ -44,4 +44,9 @@ u8 aim_dir(s16 ex, s16 ey, s16 px, s16 py);
 /* 射手 e の FireDesc(e->fire)を進め、interval 毎に発砲オペを実行する。 */
 void run_fire(Entity *e);
 
+/* ★32分割方向の単位速度(半径8, dir0=上, 時計回り 11.25°刻み)。実速度 = tab * spd / 8。
+   curtain.c(CPU弾幕)も同じ方向定義を使うので共有する(テーブルの二重持ちを避ける)。 */
+extern const s8 dvx[32];
+extern const s8 dvy[32];
+
 #endif /* FIRE_H */
