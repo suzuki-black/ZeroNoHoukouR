@@ -28,6 +28,11 @@ endif
 ifdef DEBUG_RASTER
   DEFS += -DDEBUG_RASTER
 endif
+# ── パレットエンジン(設計メモ §2-A: 被弾の赤染め/撃破の白フラッシュ/海のシマー):
+#    make clean && make DEBUG_PAL=1
+ifdef DEBUG_PAL
+  DEFS += -DDEBUG_PAL
+endif
 # ── スプライト分割の疎通デモ(下帯に32枚を追加表示=画面上の総数が32枚を超える):
 #    make clean && make DEBUG_SPRSPLIT=1
 ifdef DEBUG_SPRSPLIT
@@ -222,10 +227,13 @@ $(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs $(SRC)/include/hotcode.h
 # page2 を RAM 化している間だけ見える seg5 上位8KB(=0xA000-0xBFFF)へ載せる。0xA000 リンク。
 # data-loc はバンクシーン(0xE000)と衝突しない高位フリー帯へ。rompack が bank OVL_BANK へ格納し、
 # シーン初期化で overlay_load() が seg5 上位へ複製する。
-$(BUILD)/ovl.ihx: $(SRC)/banked/ovl_curtain.c $(HDRS) $(BUILD)/ovlhead.rel $(BUILD)/resident_syms.rel
+OVL_SRCS = $(SRC)/banked/ovl_curtain.c $(SRC)/banked/ovl_palette.c
+OVL_RELS = $(BUILD)/ovl_curtain.rel $(BUILD)/ovl_palette.rel
+$(BUILD)/ovl.ihx: $(OVL_SRCS) $(HDRS) $(BUILD)/ovlhead.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_curtain.c -o $(BUILD)/ovl_curtain.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl_palette.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
-	     $(BUILD)/ovlhead.rel $(BUILD)/ovl_curtain.rel $(BUILD)/resident_syms.rel -o $@
+	     $(BUILD)/ovlhead.rel $(OVL_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
 	@node tools/ihx2bin.mjs $(BUILD)/ovl.ihx 0xA000 $@; \
 	 SZ=$$(wc -c < $@ | tr -d ' '); \

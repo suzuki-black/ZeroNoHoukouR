@@ -22,6 +22,9 @@
 #include "raster.h"
 #include "curtain.h"
 #include "overlay.h"
+#ifdef DEBUG_PAL
+static u8 pal_need_reset;   /* 面開始/再開でパレット状態を捨てる(実際の reset はホット区間で) */
+#endif
 #ifdef DEBUG_SPRSPLIT
 #define SPRSPLIT_LINE 96   /* 分割行(この行から下がセットB) */
 #define SPRX_N 12          /* 1帯あたりの弾幕表示枚数。この数だけ g_spr_limit を下げて枠を予約する
@@ -371,8 +374,12 @@ static void stage_build(void) {
     g_spr_dual = 1;             /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない */
     g_spr_limit = 32 - SPRX_N;  /* ★弾幕の枠を予約(これが無いと混雑時にゲーム側が使い切る) */
     curtain_reset();
+#endif
     overlay_load(OVL_BANK);     /* ★演出コードを seg5 上位8KB(=ホット区間の 0xA000)へ複製。
-                                   page2 が cart のこの文脈でのみ実行できる(overlay.h の制約4)。 */
+                                   page2 が cart のこの文脈でのみ実行できる(overlay.h の制約4)。
+                                   ★ifdef の外: パレットエンジン等 分割を使わない演出もこれを要る。 */
+#ifdef DEBUG_PAL
+    pal_need_reset = 1;         /* 実際の reset はホット区間の中で(オーバレイは 0xA000=RAM時のみ有効) */
 #endif
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
@@ -626,6 +633,17 @@ u8 stage_update(void) {
     if (g_view) { g_view = 0; return SC_TITLE; }   /* ★ビューア表示(カード/結果)はstage_initで完結→タイトルへ戻る */
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
     if (sfresh) { sfresh--; g_shake = 0; g_hitstop = 0; }   /* 出だしの誤揺れを抑止(上記) */
+#ifdef DEBUG_PAL
+    /* ★ヒットストップ中もパレットだけは動かす。凍結の間ホット区間ごと止めると、被弾の赤染めが
+       凍結明け(実測で7フレーム後)にずれて出て、被弾と演出が繋がって見えない。
+       凍結＋同時フラッシュが本来の手応え。オーバレイ呼び出しのため page2 を一瞬 RAM にする。 */
+    if (g_hitstop && g_ovl_ok) {
+        ramx_use_ram();
+        if (pal_need_reset) { pal_need_reset = 0; pal_reset(); }
+        pal_update();
+        ramx_use_cart();
+    }
+#endif
     if (g_hitstop) { g_hitstop--; return SCENE_NONE; }   /* ★ヒットストップ=数フレーム凍結(手応え) */
 #ifdef DEBUG_FPS
     /* ★デバッグ(FPSビルド): M(TRIGB)で有用なプリセットを巡回。各モードのFPSで海モードの重さの内訳を切り分ける。
@@ -642,6 +660,16 @@ u8 stage_update(void) {
        R800で約3.8×速フェッチ。区間内で唯一バンキングする bgm_play(艦出現時1回)だけ一時cartへ退避する。
        区間の出口(fire_draw後 と 全早期return経路)で必ず ramx_use_cart() に戻す。 */
     ramx_use_ram();
+
+#ifdef DEBUG_PAL
+    /* ★パレットエンジン(設計メモ §2-A)。ホット区間の**先頭**で呼ぶ:
+       パレット書換は即座に画面へ反映されるので、ラスタが画面上端に近いうちに書き終えたい
+       (遅いと画面の途中から色が変わって継ぎ目が見える)。16色全書換でも実測単価から 0.32ms。 */
+    if (g_ovl_ok) {
+        if (pal_need_reset) { pal_need_reset = 0; pal_reset(); }
+        pal_update();
+    }
+#endif
 
     if (phase == 0) {
         /* 海のみ: ゆっくり前進。★毎フレーム1pxで動かす=停止フレームを作らない(整数スクロールで

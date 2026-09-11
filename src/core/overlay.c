@@ -70,3 +70,5 @@ void curtain_draw(u8 base, u8 nper, u8 line) __naked {
     __asm jp 0xA006 __endasm;
 }
 void curtain_collide(void) __naked { __asm jp 0xA009 __endasm; }
+void pal_update(void) __naked      { __asm jp 0xA00C __endasm; }
+void pal_reset(void) __naked       { __asm jp 0xA00F __endasm; }

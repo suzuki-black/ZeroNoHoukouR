@@ -35,6 +35,8 @@
 #define OVL_SLOT_CURTAIN_RING   1
 #define OVL_SLOT_CURTAIN_DRAW   2
 #define OVL_SLOT_CURTAIN_COLLIDE 3
+#define OVL_SLOT_PAL_UPDATE      4
+#define OVL_SLOT_PAL_RESET       5
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -43,5 +45,9 @@ extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0�
      差し替えるため、0x6000 以降に居ると自分自身が窓ごと消えて暴走する。
      Makefile がリンク後に番地を検証する(ramexec_page2_to_ram と同じ理由・同じ守り方)。 */
 void overlay_load(u8 bank);
+
+/* ---- オーバレイ入口(ホット区間の中でのみ呼べる。g_ovl_ok も見ること) ---- */
+void pal_update(void);   /* パレットエンジン(設計メモ §2-A)。毎フレーム16色を計算して差分書き */
+void pal_reset(void);    /* 面開始/再開: 状態を捨て次フレームに全書き直し */
 
 #endif /* OVERLAY_H */
