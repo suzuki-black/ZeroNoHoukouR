@@ -95,6 +95,19 @@ void scorepop_add(s16 sx, s16 sy, u16 val) {
 }
 static void scorepop_reset(void) { u8 i; for (i = 0; i < SPOP_MAX; i++) spop_t[i] = 0; }
 
+/* 敵弾/敵機が自機に当たったときの共通処理。
+   ★CPU弾幕(ovl_curtain.c)からも呼ぶので独立関数にした。無敵中(被弾直後/設定)は無傷で抜ける。
+     弾を消すのは呼び出し側の責任(弾の実体が系統ごとに違うため)。 */
+void ent_player_hit(s16 px, s16 py) {
+    if (g_pinv != 0 || g_invinc) return;       /* 被弾直後の無敵中/設定無敵 は無傷 */
+    g_playerhit++;
+    sfx(0, SFX_PHIT);                          /* 被弾の痛み音(tone A) */
+    ent_spawn_explosion(px, py);
+    g_hitstop = 5; g_shake = 12;               /* 被弾=強い手応え(凍結＋大きめ揺れ) */
+    if (g_php > 1) { g_php--; g_pinv = 90; }   /* 耐久残=生存(1.5秒無敵点滅) */
+    else { g_php = 0; g_miss = 1; }            /* 耐久尽き=撃墜。残機/リスタートはシーンが処理 */
+}
+
 /* ent_resolve_collisions — 当たり判定(最重ホットパスの一つ)。
    ★かつてRAM実行化(hot_ram)を試したが実機turboRで速度変化ゼロ(戦闘中の衝突は自機弾数発×敵数体＝
      X早期棄却込みで数十イテレーションと元々軽く、フレーム時間の支配要因ではない)と実証されたため、
@@ -170,14 +183,7 @@ void ent_resolve_collisions(void) {
             if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
             if (dx < tol && dy < tol) {
                 e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
-                if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
-                    g_playerhit++;
-                    sfx(0, SFX_PHIT);          /* 被弾の痛み音(tone A) */
-                    ent_spawn_explosion(p->x, p->y);
-                    g_hitstop = 5; g_shake = 12;   /* 被弾=強い手応え(凍結＋大きめ揺れ) */
-                    if (g_php > 1) { g_php--; g_pinv = 90; }  /* 耐久残=生存(1.5秒無敵点滅) */
-                    else { g_php = 0; g_miss = 1; }           /* 耐久尽き=撃墜。残機/リスタートはシーンが処理 */
-                }
+                ent_player_hit(p->x, p->y);    /* ★被弾処理は共通化(CPU弾幕からも同じ経路を通す) */
             }
         }
     }

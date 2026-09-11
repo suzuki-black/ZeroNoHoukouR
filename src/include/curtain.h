@@ -10,7 +10,8 @@
      速度は 1/16 px/frame の s8(±127 = ±7.9px/frame)。
      方向は fire.c と同じ 32分割(dvx/dvy を共有)。
 
-   ★当たり判定は未接続(次段)。今は生成・移動・カリング・表示まで。 */
+   ★当たり判定は ovl_curtain_collide。被弾処理は常駐 ent_player_hit に集約してあるので、
+     無敵時間・耐久・ミス判定・手応えが既存の敵弾と完全に同じ挙動になる。 */
 #ifndef CURTAIN_H
 #define CURTAIN_H
 
@@ -41,5 +42,6 @@ void curtain_update(void);   /* 移動＋画面外カリング。VDP に一切�
 /* 予約スロットへ帯ごとに描く。base=最初の予約slot, nper=1帯あたりの枚数, line=分割行。
    上帯(y<line)はセットA、下帯はセットBへ。どちらも分割線をまたがない位置のものだけを選ぶ。 */
 void curtain_draw(u8 base, u8 nper, u8 line);
+void curtain_collide(void);  /* 自機との当たり(被弾処理は常駐 ent_player_hit に集約) */
 
 #endif /* CURTAIN_H */

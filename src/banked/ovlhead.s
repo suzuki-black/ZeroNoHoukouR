@@ -6,7 +6,9 @@
         .globl  _ovl_curtain_update
         .globl  _ovl_curtain_ring
         .globl  _ovl_curtain_draw
+        .globl  _ovl_curtain_collide
         .area   _CODE
         jp      _ovl_curtain_update   ; slot0 (OVL_SLOT_CURTAIN_UPDATE)
         jp      _ovl_curtain_ring     ; slot1 (OVL_SLOT_CURTAIN_RING)
         jp      _ovl_curtain_draw     ; slot2 (OVL_SLOT_CURTAIN_DRAW)
+        jp      _ovl_curtain_collide  ; slot3 (OVL_SLOT_CURTAIN_COLLIDE)

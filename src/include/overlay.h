@@ -34,6 +34,7 @@
 #define OVL_SLOT_CURTAIN_UPDATE 0
 #define OVL_SLOT_CURTAIN_RING   1
 #define OVL_SLOT_CURTAIN_DRAW   2
+#define OVL_SLOT_CURTAIN_COLLIDE 3
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 

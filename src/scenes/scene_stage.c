@@ -767,6 +767,9 @@ u8 stage_update(void) {
       }
 #endif
       if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
+#ifdef DEBUG_SPRSPLIT
+      if (g_ovl_ok && DBG_ON(8)) curtain_collide();   /* ★CPU弾幕の被弾(常駐 ent_player_hit に集約) */
+#endif
       if (sea_on) { while (sea_step()) { } vdp_cmd_wait(); }   /* ★aa_collide(burn=VDPコマンド)前に海完全完了 */
       if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_collide());
     }

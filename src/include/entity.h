@@ -51,6 +51,8 @@ typedef struct Entity {
 
 /* 当たり判定を解決(自機弾×敵戦闘機、敵弾/戦闘機×自機)。撃破/被弾数を計上。 */
 void ent_resolve_collisions(void);
+/* 被弾の共通処理(無敵中は無傷で抜ける)。★弾を消すのは呼び側の責任。CPU弾幕(ovl_curtain.c)からも呼ぶ。 */
+void ent_player_hit(s16 px, s16 py);
 extern s16 g_meander;    /* 蛇行の横揺れ量(weaveX, ±)。ET_TURRET が x を追従補正 */
 extern u8 g_kills;       /* 撃破した敵戦闘機の累計 */
 extern u8 g_gun_kills;   /* 撃破した砲台の累計(撃破演出/クリア判定用) */

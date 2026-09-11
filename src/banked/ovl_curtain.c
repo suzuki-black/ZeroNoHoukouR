@@ -9,6 +9,8 @@
 #include "vdp.h"
 #include "sprites.h"
 #include "scroll.h"
+#include "entity.h"   /* ent_player_hit: 被弾の共通処理 */
+#include "player.h"   /* g_player_x/y */
 
 /* 画面外カリングの範囲(1/16 px)。16px ぶん外へ出たら捨てる。 */
 #define CB_XMIN (-16 * 16)
@@ -102,4 +104,23 @@ void ovl_curtain_draw(u8 base, u8 nper, u8 line) {
     }
     if ((u8)(base + na) < 32) vdp_sprite_hide_from_a((u8)(base + na));
     if ((u8)(base + nb) < 32) vdp_sprite_hide_from_b((u8)(base + nb));
+}
+
+/* 自機との当たり。★既存の敵弾と同じ許容(±6px, 弾の左上同士で比較)。
+   被弾処理は常駐の ent_player_hit に集約してあるので、無敵時間・耐久・ミス判定・手応え(hitstop/shake)は
+   既存の敵弾と完全に同じ挙動になる。1フレームに1発だけ処理すれば十分(被弾は無敵時間を張るため)。 */
+void ovl_curtain_collide(void) {
+    u8 i;
+    CBul *b = g_cbul;
+    s16 px = (s16)g_player_x, py = (s16)g_player_y;
+    for (i = 0; i < CBUL_MAX; i++, b++) {
+        s16 dx, dy;
+        if (!b->alive) continue;
+        dx = (s16)(b->x >> 4) - px; if (dx < 0) dx = -dx; if (dx >= 6) continue;
+        dy = (s16)(b->y >> 4) - py; if (dy < 0) dy = -dy; if (dy >= 6) continue;
+        b->alive = 0;                              /* 当たった弾は消す(すり抜け防止) */
+        if (g_cbul_live) g_cbul_live--;
+        ent_player_hit(px, py);
+        return;
+    }
 }

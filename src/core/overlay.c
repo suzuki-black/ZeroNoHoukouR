@@ -69,3 +69,4 @@ void curtain_draw(u8 base, u8 nper, u8 line) __naked {
     (void)base; (void)nper; (void)line;
     __asm jp 0xA006 __endasm;
 }
+void curtain_collide(void) __naked { __asm jp 0xA009 __endasm; }
