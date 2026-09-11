@@ -18,6 +18,11 @@ DEFS =
 ifdef DEBUG_FPS
   DEFS += -DDEBUG_FPS
 endif
+# ── page2(常駐bank2)のRAM実行を切る(実機A/B計測用): make clean && make DEBUG_PROF=1 NO_RAMX2=1
+#    page1 のみRAM実行=旧挙動のROMを作り、page2 も足した版との差分を実機で測るためのスイッチ。
+ifdef NO_RAMX2
+  DEFS += -DNO_RAMX2
+endif
 # ── 実機µs計測(S1990タイマ自己診断): make clean && make DEBUG_PROF=1
 ifdef DEBUG_PROF
   DEFS += -DDEBUG_PROF
@@ -118,9 +123,20 @@ $(BUILD)/crt0rom.rel: $(SRC)/crt0rom.s | $(BUILD)
 # (bank4 は開始カードの事前ベイク艦画像 assets/cards.bin に転用。旧 bank_demo は撤去)
 
 # 常駐イメージのリンク(crt0 が先頭 = _HEADER/_CODE 起点)。rom.noi に常駐シンボル番地が出る。
+# ★リンク後の番地検証: ramexec_page2_to_ram は複製元として 0x6000-0x7FFF 窓を一時 bank2 へ差し替えるので、
+#   自分自身が 0x6000 以降に居ると窓ごと消えて暴走する。RESIDENT_RELS の並び替えで壊れないよう機械強制する
+#   (ramexec.rel を先頭に置き続ければ満たされる)。
 $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc $(CODELOC) --data-loc $(DATALOC) \
 	     $(BUILD)/crt0rom.rel $(RESIDENT_RELS) -o $@
+	@A=$$(awk '/^DEF _ramexec_page2_to_ram /{print $$3}' $(BUILD)/rom.noi); \
+	 if [ -z "$$A" ]; then echo "ERROR: rom.noi に _ramexec_page2_to_ram が無い"; exit 2; fi; \
+	 if [ $$(printf '%d' $$A) -ge $$(printf '%d' 0x6000) ]; then \
+	   echo "ERROR: _ramexec_page2_to_ram=$$A が 0x6000 以降。この関数は複製中に 0x6000-0x7FFF 窓を bank2 へ差し替えるため、"; \
+	   echo "       0x4000-0x5FFF に居なければ自分自身が消えて暴走します。RESIDENT_RELS の先頭付近に ramexec.rel を戻してください。"; \
+	   exit 2; \
+	 fi; \
+	 echo "  ramexec_page2_to_ram=$$A (<0x6000 OK)"
 
 # ── バンクシーン(冷たいシーン)ビルド(2パス) ──
 # 1) 常駐 rom.ihx → rom.noi から常駐シンボル絶対番地を .s に落とす(バンク側が常駐関数を呼ぶため)

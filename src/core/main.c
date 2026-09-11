@@ -14,6 +14,8 @@ void main(void) {
     hot_load();           /* AA(対空砲)処理の本体を bank→hot_ram(RAM実行)へコピー(機種非依存で常時) */
     ramexec_page1_to_ram(); /* ★§4-3: page1(常駐ホットコード)を空きRAMセグメントへ複製し動的切替を準備
                                (成功でg_ramx_ok=1。ISR設置前・page1=cartのうちに1回。失敗時はROMのまま=安全) */
+    ramexec_page2_to_ram(); /* ★同上の page2(常駐bank2)版。stage_update と乗除算ランタイムが 0x8000 以降に
+                               落ちていて ROM フェッチのままだったのを解消する(成功で g_ramx2_ok=1)。 */
 #ifdef DEBUG_PROF
     prof_selftest();      /* 実機µs自己診断(CPUモード比/VDP I/O単価/HMMM所要)→トリガで抜ける */
 #endif

@@ -18,7 +18,7 @@
 #include "assets_data.h"   /* 自動生成: ship_ops_off/len, ship_hull/bowcnt/bowyb, SHIP_OPS_RAM_MAX, ASSET_BANK */
 #include "hotcode.h"       /* ent_resolve_collisions/aa_update/aa_collide のRAM実行ラッパ */
 #include "aa_hot.h"        /* AA状態(cam/curstage/aa_*)を hot.c と共有(公開=非static化) */
-#include "ramexec.h"       /* ★§4-3: page1_use_ram/use_cart(ホット区間だけpage1をRAM実行化) */
+#include "ramexec.h"       /* ★§4-3: ramx_use_ram/use_cart(ホット区間だけ常駐24KB=page1+page2をRAM実行化) */
 #ifdef DEBUG_PROF
 #include "prof.h"
 #define PROF_CALL(grp, call) do { PROF_T0(_pt); call; PROF_ADD(grp, _pt); } while (0)
@@ -609,8 +609,8 @@ u8 stage_update(void) {
     /* ★§4-3: 早期return(g_view/dmode/hitstop)を抜けたここから page1 を RAM スロットへ。
        以降 phase処理(scroll_to/蛇行)・HUD・ホット区間(海/AI/衝突/描画/炎)まで page1常駐コードを
        R800で約3.8×速フェッチ。区間内で唯一バンキングする bgm_play(艦出現時1回)だけ一時cartへ退避する。
-       区間の出口(fire_draw後 と 全早期return経路)で必ず page1_use_cart() に戻す。 */
-    page1_use_ram();
+       区間の出口(fire_draw後 と 全早期return経路)で必ず ramx_use_cart() に戻す。 */
+    ramx_use_ram();
 
     if (phase == 0) {
         /* 海のみ: ゆっくり前進。★毎フレーム1pxで動かす=停止フレームを作らない(整数スクロールで
@@ -644,9 +644,9 @@ u8 stage_update(void) {
            新規戦闘機の湧きは spawn ゲート(cam>SC_CAM_SHIP)が既に止めるので、艦の上に突然湧く心配は無い。 */
         if (cam <= SC_CAM_SHIP && !raided) {
             raided = 1; sea_set_ship(curstage);
-            page1_use_cart();                /* ★§4-3: bgm_playはdata_read(バンキング)=cartが必要 */
+            ramx_use_cart();                 /* ★§4-3: bgm_playはdata_read(バンキング)=cartが必要 */
             bgm_play(stage_bgm[curstage]);   /* ★敵艦が見えた=海イントロ共通→面別BGMへ切替 */
-            page1_use_ram();                 /* ★戻す(以降のホット区間へ) */
+            ramx_use_ram();                  /* ★戻す(以降のホット区間へ) */
         }
         if (cam <= SC_CAM_SHIP) { phase = 1; camdir = -1; }   /* ★艦出現(=BGM切替)の瞬間から蛇行開始 */
     } else {
@@ -717,7 +717,7 @@ u8 stage_update(void) {
        VDPコマンド(炎コピー)を走らせると競合して双方遅くなる(実測でDRAW+1ms悪化→前に出す案は撤回)。
        VDP並列化はVRAM非接触の純CPU(=海interleaveのAI)とだけ行う。 */
     PROF_CALL(PF_FIRE, fire_draw());
-    page1_use_cart();   /* ★§4-3: ホット区間終了→page1をカートリッジへ戻す(以降のバンキング=ミス/クリア/setup可) */
+    ramx_use_cart();    /* ★§4-3: ホット区間終了→page1/page2をカートリッジへ戻す(以降のバンキング=ミス/クリア/setup可) */
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。
        尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */
