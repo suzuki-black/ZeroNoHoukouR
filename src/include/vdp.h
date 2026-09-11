@@ -81,6 +81,15 @@ void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum); /* slot の属性(Y=y-1,X,p
 void vdp_sprite_hide_from(u8 slot);                  /* slot に停止マーカ(Y=208)=以降非表示 */
 /* ★A6: SAT属性をRAM鏡へ溜め→一括バースト(ent_draw_all専用=ポートアクセス削減)。色表は別テーブルで従来通り。 */
 void vdp_sat_pos(u8 slot, u8 x, u8 y, u8 patnum);    /* 属性をシャドウへ(VRAM直書きせず) */
-void vdp_sat_flush(u8 from, u8 live);                /* シャドウの from..live-1 をSATへ一括バースト＋停止マーカ */
+void vdp_sat_flush(u8 from, u8 live);
+
+/* ---- スプライト表の2セット目(ラスタ分割で32枚の総数制限を破る。詳細は vdp.c) ----
+   R#5 = (色表>>7)|0x07 / 属性表 = 色表+0x200。A=0xEF(既定) / B=0xE7(色0x7000,属性0x7200)。 */
+#define SPR_R5_A 0xEF
+#define SPR_R5_B 0xE7
+void vdp_sprite_setbase(u8 r5);            /* R#5 を切替(分割行では RasSplit の reg=5 で直接書く) */
+void vdp_sprite_setb_init(u8 color);       /* セットBを初期化(色表を単色で埋め全枚を画面外へ)。1回だけ */
+void vdp_sprite_pos_b(u8 slot, u8 x, u8 y, u8 patnum);
+void vdp_sprite_hide_from_b(u8 slot);                /* シャドウの from..live-1 をSATへ一括バースト＋停止マーカ */
 
 #endif /* VDP_H */

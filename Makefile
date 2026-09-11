@@ -28,6 +28,11 @@ endif
 ifdef DEBUG_RASTER
   DEFS += -DDEBUG_RASTER
 endif
+# ── スプライト分割の疎通デモ(下帯に32枚を追加表示=画面上の総数が32枚を超える):
+#    make clean && make DEBUG_SPRSPLIT=1
+ifdef DEBUG_SPRSPLIT
+  DEFS += -DDEBUG_SPRSPLIT
+endif
 # ── 実機µs計測(S1990タイマ自己診断): make clean && make DEBUG_PROF=1
 ifdef DEBUG_PROF
   DEFS += -DDEBUG_PROF

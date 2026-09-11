@@ -676,6 +676,28 @@ u8 stage_update(void) {
        ラスタが既に上端を通過→R#23とズレて1px上下振動する(旧版で残っていた不具合)。 */
     hud_draw(g_score, g_lives);
 
+#ifdef DEBUG_SPRSPLIT
+    /* ★スプライト分割の疎通デモ: 行106 で R#5 をセットB(0xE7)へ切替え、下帯だけ別の32枚を出す。
+       上帯はゲーム本来のスプライト(HUD/自機/敵)＝セットA なので、画面上の総数は 32 を超える。
+       下帯ではセットB しか見えない＝ゲーム本来のスプライトは消えるが、これは機構の確認用デモ
+       (本実装では両セットに振り分ける)。
+       ★分割で書くのは R#5 の1本だけ＝HBLANK に確実に間に合う。 */
+    {
+        static u8 sb_init;
+        u8 k;
+        if (!sb_init) { sb_init = 1; vdp_sprite_setb_init(11); }   /* 色11=赤 */
+        /* 下帯に 8列×4行 = 32枚。行間 24px で 1走査線あたり最大8枚(mode2の上限)に収める。 */
+        for (k = 0; k < 32; k++) {
+            u8 col = (u8)(k & 7), row = (u8)(k >> 3);
+            vdp_sprite_pos_b(k, (u8)(16 + col * 30), (u8)(120 + row * 24), SPR_BULLET);
+        }
+        g_ras[0].line = 0;    /* フレーム先頭=セットAへ戻す */
+        g_ras[0].reg  = 5;  g_ras[0].val = SPR_R5_A;  g_ras[0].pidx = RAS_NOPAL;
+        g_ras[1].line = 106;  /* ここから下=セットB */
+        g_ras[1].reg  = 5;  g_ras[1].val = SPR_R5_B;  g_ras[1].pidx = RAS_NOPAL;
+        raster_arm(2);
+    }
+#endif
 #ifdef DEBUG_RASTER
     /* ★疎通デモ: 画面中央(行106)でパレット1(海の中間色)を赤に差し替える。
        成功なら上下で海の色が変わって見える＝R#19/FH の割込み基盤が効いている証拠。
