@@ -62,6 +62,7 @@ extern u8 g_shake;       /* >0: 画面を数フレーム縦に揺らす(砲台�
 
 extern u8 g_spr_base;               /* エンティティ描画の開始スプライトslot(HUDが先頭を確保) */
 extern u8 g_spr_used;               /* ent_draw_all が使い終えたslot数(=最初の空きslot)。分割の追加描画が使う */
+extern u8 g_spr_limit;              /* ent_draw_all が使ってよいslot上限(既定32)。分割時は下げて枠を予約する */
 void ent_spr_cache_inval(u8 from);  /* slot以降の色キャッシュ無効化(追加描画が色表を直書きしたら呼ぶ) */
 void    ent_reset(void);            /* プール全消去 */
 Entity *ent_spawn(u8 type);         /* 空きを1つ確保(既定値で初期化)。無ければ NULL */

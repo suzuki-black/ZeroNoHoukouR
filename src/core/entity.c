@@ -13,6 +13,11 @@
 u8 g_spr_base;          /* エンティティ描画の開始スプライトスロット(先頭はHUDが確保) */
 u8 g_spr_used;          /* ★ent_draw_all が使い終えたスロット数(=次に空いているslot)。
                            ラスタ分割で「余りスロットを帯ごとに別の弾で埋める」ために公開する。 */
+u8 g_spr_limit;         /* ★ent_draw_all が使ってよいslotの上限。ラスタ分割で追加スプライトを出すときは
+                           ここを下げて枠を予約する。下げないと混雑時(戦艦フェーズは実測 29 まで到達)に
+                           ゲーム側が全slotを使い切り、追加分が出せなくなる。
+                           ★初期値付きグローバルにしないこと(ARCHITECTURE: ROM では _INITIALIZER の扱いが
+                             面倒なので init 関数で実行時に書く規約)。ent_reset で 32 を入れる。 */
 
 static Entity pool[ENT_MAX];
 
@@ -180,6 +185,7 @@ void ent_resolve_collisions(void) {
 
 void ent_reset(void) {
     u8 i;
+    g_spr_limit = 32;   /* 既定=全slot。分割を使うシーンだけが後から下げる */
     for (i = 0; i < ENT_MAX; i++) pool[i].active = 0;
     for (i = 0; i < 32; i++) { slot_col[i] = 0xFF; slot_ctab[i] = 0; }   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す) */
     g_ebul = 0;
@@ -344,25 +350,25 @@ void ent_draw_all(void) {
     if (n) {
         u8 start = (u8)(rot % n);
         u8 rev = (u8)(rot & 1);   /* 交互フレームで反転 */
-        for (j = 0; j < n && slot < 32; j++) {
+        for (j = 0; j < n && slot < g_spr_limit; j++) {
             u8 d = rev ? (u8)(n - 1 - j) : j;   /* 逆順フレームは末尾から割当て=優先が反転 */
             i = (u8)(start + d); if (i >= n) i -= n;
             slot = draw1(slot, vis[i]);
         }
     }
     /* 合体弾パス(双子艦): 中心±off の2発として描く。 */
-    for (i = 0; i < nco && slot < 31; i++) {
+    for (i = 0; i < nco && slot + 1 < g_spr_limit; i++) {
         s16 cx = co[i]->ay, cy = co[i]->y, off = co[i]->x, lx = cx - off, rx = cx + off;
         if (lx >= 0 && lx < 256) { spr_col1(slot, 12); vdp_sat_pos(slot, (u8)lx, (u8)cy, SPR_EBSHELL); slot++; }
-        if (slot < 32 && rx >= 0 && rx < 256) { spr_col1(slot, 12); vdp_sat_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
+        if (slot < g_spr_limit && rx >= 0 && rx < 256) { spr_col1(slot, 12); vdp_sat_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
     }
     /* 落ち影パス: 影は最後=最も高いslot=最低優先(混雑ラインではゲーム弾/敵機に譲って先に落ちる)。 */
-    for (i = 0; i < nsh && slot < 32; i++) slot = draw_shadow(slot, sh[i]);
+    for (i = 0; i < nsh && slot < g_spr_limit; i++) slot = draw_shadow(slot, sh[i]);
     /* ★破壊点数ポップアップ: 撃破位置の"真上"(中心の16px上)に加算点を数字スプライトで表示。
        エンティティの後=高slot=低優先なので混雑走査線ではゲームスプライトへ譲る。ここで残フレームも減らす。
        ★画面内へクランプ: 真上が上端外だとスプライトYがu8回り込みで画面下へ飛び"消える"ため、
          上端(=艦首側の一個目の砲台等)/下端/左右で画面内に留めて必ず見えるようにする。 */
-    for (i = 0; i < SPOP_MAX && slot < 32; i++) {
+    for (i = 0; i < SPOP_MAX && slot < g_spr_limit; i++) {
         if (!spop_t[i]) continue;
         { u16 v = spop_val[i]; u8 dbuf[4], nd = 0;
           if (v == 0) dbuf[nd++] = 0; else while (v && nd < 4) { dbuf[nd++] = (u8)(v % 10); v /= 10; }
@@ -374,7 +380,7 @@ void ent_draw_all(void) {
             if (y0 > 204) y0 = 204;                        /* 下端クランプ */
             if (x0 < 0)   x0 = 0;
             if (x0 > xmax) x0 = xmax;
-            for (k = 0; k < nd && slot < 32; k++) {
+            for (k = 0; k < nd && slot < g_spr_limit; k++) {
                 spr_col1(slot, 15);                        /* 白(HUDスコアと同色) */
                 vdp_sat_pos(slot, (u8)(x0 + (s16)k * 8), (u8)y0, (u8)(SPR_DIGIT0 + dbuf[nd - 1 - k] * 4));
                 slot++;

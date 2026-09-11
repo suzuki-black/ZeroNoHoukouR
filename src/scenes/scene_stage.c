@@ -19,7 +19,11 @@
 #include "hotcode.h"       /* ent_resolve_collisions/aa_update/aa_collide のRAM実行ラッパ */
 #include "aa_hot.h"        /* AA状態(cam/curstage/aa_*)を hot.c と共有(公開=非static化) */
 #include "ramexec.h"
-#include "raster.h"       /* ★§4-3: ramx_use_ram/use_cart(ホット区間だけ常駐24KB=page1+page2をRAM実行化) */
+#include "raster.h"
+#ifdef DEBUG_SPRSPLIT
+#define SPRSPLIT_LINE 96   /* 分割行(この行から下がセットB) */
+#define SPRX_N 8           /* 1帯あたりの追加枚数。この数だけ g_spr_limit を下げて枠を予約する */
+#endif       /* ★§4-3: ramx_use_ram/use_cart(ホット区間だけ常駐24KB=page1+page2をRAM実行化) */
 #ifdef DEBUG_PROF
 #include "prof.h"
 #define PROF_CALL(grp, call) do { PROF_T0(_pt); call; PROF_ADD(grp, _pt); } while (0)
@@ -356,12 +360,14 @@ static void stage_build(void) {
     prerender_ship();     /* 艦をバッファB(オフスクリーン)へ。stage_begin_display の前に必須 */
     vdp_sprite_init();
     sprites_load(curstage);   /* ★静的パターン＋この面の戦闘機8方向×3サイズを生成 */
-    hud_init();
+    hud_init();  /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
+    ent_reset();
 #ifdef DEBUG_SPRSPLIT
+    /* ★ent_reset の後に置くこと: ent_reset が g_spr_limit を既定(32)へ戻すので、先に書くと消される。 */
     vdp_sprite_setb_init(11);   /* セットBの色表を用意し全枚を画面外へ(1回だけ) */
     g_spr_dual = 1;             /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない */
-#endif           /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
-    ent_reset();
+    g_spr_limit = 32 - SPRX_N;  /* ★追加スプライトの枠を予約(これが無いと混雑時にゲーム側が使い切る) */
+#endif
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
 
@@ -601,14 +607,17 @@ static u8 seatick;    /* phase0 海間引き用カウンタ。 */
    同じslot番号に別内容を入れてよいのは、どちらも分割線をまたがない位置に置くから
    (またぐと境界で化ける＝Grauw の split guide の注意点)。
    色表は毎フレーム直書きするので、entity.c の色キャッシュを無効化しておくこと。 */
-#define SPRSPLIT_LINE 96
-#define SPRX_N 8                       /* 1帯あたりの追加枚数 */
 static void sprsplit_extra(void) {
-    u8 base = g_spr_used, k, slot;
+    u8 base = g_spr_used, k, slot, n;
     static u8 ph;
-    if (base > 32 - SPRX_N) return;    /* 空きが足りないフレームは何もしない(安全側) */
+    /* ★空きが足りないときは「全部やめる」のではなく「出せるだけ出す」。全滅させると、
+       混雑フレーム(戦艦フェーズは g_spr_used が実測29まで到達)で追加分が丸ごと消えて
+       「スクロール方向によって全部消える」ように見える。実際にこれで踏んだ。 */
+    if (base >= 32) return;
+    n = (u8)(32 - base);
+    if (n > SPRX_N) n = SPRX_N;
     ph++;
-    for (k = 0; k < SPRX_N; k++) {
+    for (k = 0; k < n; k++) {
         slot = (u8)(base + k);
         /* 上帯: セットA。左右に振った縦列を少しずつ流す */
         vdp_sprite_color_a(slot, 10);
@@ -617,8 +626,10 @@ static void sprsplit_extra(void) {
         vdp_sprite_color_b(slot, 11);
         vdp_sprite_pos_b(slot, (u8)(26 + k * 28), (u8)(SPRSPLIT_LINE + 8 + ((ph + k * 7) & 95)), SPR_BULLET);
     }
-    vdp_sprite_hide_from_a((u8)(base + SPRX_N));
-    vdp_sprite_hide_from_b((u8)(base + SPRX_N));
+    if ((u8)(base + n) < 32) {
+        vdp_sprite_hide_from_a((u8)(base + n));
+        vdp_sprite_hide_from_b((u8)(base + n));
+    }
     ent_spr_cache_inval(base);         /* 色表を直書きしたのでキャッシュを捨てる */
 }
 #endif
