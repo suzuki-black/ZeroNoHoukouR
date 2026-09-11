@@ -55,7 +55,7 @@ static void busyloop(void) __naked {
         ret
     __endasm;
 }
-static u8 rambuf[48];   /* busyloop を RAM(page3)へコピーして実行する枠 */
+static u8 __at(PROF_RAM_ADDR + 0x40) rambuf[48];   /* busyloop を RAM(page3)へコピーして実行する枠(高位フリー帯) */
 static void copy_busyloop(void) {
     u8 i; const u8 *src = (const u8 *)busyloop;
     for (i = 0; i < 48; i++) rambuf[i] = src[i];
@@ -102,7 +102,7 @@ static u16 time_hmmm(void) {
 }
 
 /* ===== 表示ヘルパ(u16→10進, ラベル前置) ===== */
-static char pbuf[24];
+static char __at(PROF_RAM_ADDR + 0x80) pbuf[24];   /* 表示整形バッファ(高位フリー帯) */
 static char hxd(u8 n) { return (char)(n < 10 ? '0' + n : 'A' + (n - 10)); }
 /* ラベル＋4個の8bit値を16進で表示(スロット/マッパー偵察用)。 */
 static void put_hex4(u8 px, u8 py, const char *label, u8 a, u8 b, u8 c, u8 d) {
@@ -162,7 +162,7 @@ void prof_selftest(void) {
 }
 
 /* ===== 実行時 区間計測 ===== */
-u32 g_prof_acc[PF_N];
+u32 __at(PROF_RAM_ADDR) g_prof_acc[PF_N];
 u16 g_prof_over;
 u16 prof_tick(void) { return tmr_read(); }
 

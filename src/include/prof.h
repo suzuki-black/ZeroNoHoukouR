@@ -16,7 +16,15 @@ void prof_selftest(void);   /* 起動時1回: 自己診断を画面表示しト�
 /* ===== 実行時 区間計測 =====
    ゲームループの各区間の滞在tickを60フレーム蓄積→凍結表示(Mキーで進む)。「何に何ms」を実機で確定する。 */
 enum { PF_COMPUTE, PF_CMDWAIT, PF_WAIT, PF_DRAW, PF_UPDATE, PF_AA, PF_COL, PF_SEASCROLL, PF_FIRE, PF_SCROLL, PF_N };
-extern u32 g_prof_acc[PF_N];   /* 区間別 蓄積tick(60フレーム窓)。★u32(フルフレーム4200tick×60=25万でu16溢れ) */
+
+/* ★計測用RAMは常駐_DATAでなく高位フリー帯(0xEB00-)へ固定する。
+   常駐_DATA が 0xE000 を越えると、バンクシーンの static(--data-loc 0xE000)に踏み潰される
+   ＝設定値(g_view 等)が化けて「タイトルでSPACE→即タイトルへ戻る」等の怪奇現象になる(実際に踏んだ)。
+   DEBUG_PROF は 100B 強を足すのでこれを越えていた。高位の固定帯は
+   g_card_ram(0xE100)/ship_ram(0xE700)/fb_ram(0xE900,512B) の直後＝0xEB00 以降が空き。
+   Makefile が常駐_DATA末尾 < 0xE000 をリンク後に機械検証する。 */
+#define PROF_RAM_ADDR 0xEB00
+extern u32 __at(PROF_RAM_ADDR) g_prof_acc[PF_N];   /* 区間別 蓄積tick(60フレーム窓)。★u32(フルフレーム4200tick×60=25万でu16溢れ) */
 extern u16 g_prof_over;        /* 窓内で1VBLANK(4262tick)を超えた計算フレーム数 */
 
 u16  prof_tick(void);          /* S1990タイマ現在値(tick)。区間の前後で読んで差=滞在tick */

@@ -137,6 +137,15 @@ $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
 	   exit 2; \
 	 fi; \
 	 echo "  ramexec_page2_to_ram=$$A (<0x6000 OK)"
+	@H=$$(awk '/^DEF s__HEAP /{print $$3}' $(BUILD)/rom.noi); \
+	 if [ -z "$$H" ]; then echo "ERROR: rom.noi に s__HEAP が無い(常駐RAM末尾を判定できない)"; exit 2; fi; \
+	 if [ $$(printf '%d' $$H) -gt $$(printf '%d' 0xE000) ]; then \
+	   echo "ERROR: 常駐RAM末尾 s__HEAP=$$H が 0xE000 を超過。バンクシーンの static は --data-loc 0xE000 に置かれるため、"; \
+	   echo "       常駐グローバル(g_view/g_difficulty 等)がシーン入場のたびに踏み潰されます(設定値が化けて挙動が壊れる)。"; \
+	   echo "       → 常駐DATAを減らすか、大物を高位フリー帯(fb_ram 0xE900+512=0xEB00 以降)へ __at で退避してください。"; \
+	   exit 2; \
+	 fi; \
+	 echo "  常駐RAM末尾 s__HEAP=$$H (<=0xE000 OK。バンクscene staticと非衝突)"
 
 # ── バンクシーン(冷たいシーン)ビルド(2パス) ──
 # 1) 常駐 rom.ihx → rom.noi から常駐シンボル絶対番地を .s に落とす(バンク側が常駐関数を呼ぶため)
