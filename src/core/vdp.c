@@ -372,6 +372,7 @@ void vdp_set_display_page(u8 page) {
 #define SPR_COLOR 0x7400   /* 色表(16B/枚: 行ごとの色)         */
 #define SPR_PAT   0x7800   /* パターン生成表(8B単位)           */
 
+
 /* R#1 の size ビットを立て 16x16 に(mag=0)。RG1SAV(0xF3E0)経由で他ビット保持。 */
 static void set_sprite16(void) {
     __asm
@@ -426,10 +427,19 @@ void vdp_sprite_color_tab(u8 slot, const u8 *tab16) {
     for (i = 0; i < 16; i++) VDP_DAT = tab16[i];
 }
 
+/* ★縦スクロール補正後の属性Yを求める。**216(0xD8)は停止マーカ**なので、計算結果がちょうど 216 に
+   なったら 215 へ 1px ずらす。これを怠ると、そのスロット以降のスプライトが全部消える
+   (Y は u8 で R#23 を足すため、どんな R#23 でも画面内のどこか1ラインが必ず 216 に化ける＝
+    スクロール中にランダムにスプライトが消える潜在バグ。ラスタ分割のデモで最下段8枚が消えて発覚)。 */
+static u8 spr_y(u8 y) {
+    u8 v = (u8)(y + g_vscroll - 1);
+    return (v == 216) ? 215 : v;
+}
+
 void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum) {
     vdp_write_addr(SPR_ATTR + (u16)slot * 4);
-    /* 表示Y=属性Y+1 のため -1。縦スクロール量を足して画面固定に補正。 */
-    VDP_DAT = (u8)(y + g_vscroll - 1);
+    /* 表示Y=属性Y+1 のため -1。縦スクロール量を足して画面固定に補正(216 回避は spr_y)。 */
+    VDP_DAT = spr_y(y);
     VDP_DAT = x;
     VDP_DAT = patnum;
     VDP_DAT = 0;
@@ -451,7 +461,7 @@ void vdp_sprite_hide_from(u8 slot) {
 u8 sat_shadow[128];   /* ★entity.cのASM draw1が直接書くため非static */   /* 32枚×4B(Y,X,pattern,予約) */
 void vdp_sat_pos(u8 slot, u8 x, u8 y, u8 patnum) {
     u8 *p = &sat_shadow[(u16)slot * 4];
-    p[0] = (u8)(y + g_vscroll - 1);   /* 表示Y=属性Y+1のため-1。縦スクロール量を足して画面固定に補正(直書き版と同一) */
+    p[0] = spr_y(y);                  /* 表示Y=属性Y+1のため-1。縦スクロール補正＋216(停止マーカ)回避 */
     p[1] = x;
     p[2] = patnum;
     /* p[3](予約)は書かない: sat_shadowはBSSで0初期化・非0を書く者がいないので常に0のまま。 */
@@ -470,3 +480,4 @@ void vdp_sat_flush(u8 from, u8 live) {
     for (i = 0; i < n; i++) VDP_DAT = src[i];
     if (live < 32) VDP_DAT = 216;   /* 停止マーカ(=スロットliveのY)。以降のスプライト非表示 */
 }
+
