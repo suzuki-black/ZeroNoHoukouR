@@ -382,6 +382,13 @@ void vdp_set_display_page(u8 page) {
 #define SPR_ATTR_B  0x7200
 #define SPR_COLOR_B 0x7000
 
+/* ★1=スプライト表を2セットへミラーする。ラスタ分割で下帯だけ R#5 をセットBへ切替えるとき、
+   両セットの内容を同一に保っておけば「分割しても見た目が変わらない」土台になる。その上で
+   セットA の余りスロットに上帯の弾、セットB の余りスロットに下帯の弾を足すと総数制限を超えられる。
+   ★分割線をまたぐスプライトは両セットの同じスロットに同じ内容で無ければ境界で化ける
+     (Grauw の split guide)。丸ごとミラーすればこの条件は自動的に満たされる。 */
+u8 g_spr_dual;
+
 /* R#1 の size ビットを立て 16x16 に(mag=0)。RG1SAV(0xF3E0)経由で他ビット保持。 */
 static void set_sprite16(void) {
     __asm
@@ -423,10 +430,16 @@ void vdp_sprite_pattern(u8 patnum, const u8 *d32) {
     for (i = 0; i < 32; i++) VDP_DAT = d32[i];
 }
 
+/* ★色表も両セットへミラー。entity.c の slot_col/slot_ctab キャッシュが効いており、これらが呼ばれるのは
+   実測 66フレームに1回程度＝ミラーしても追加コストは無視できる。 */
 void vdp_sprite_color(u8 slot, u8 color) {
     u8 i;
     vdp_write_addr(SPR_COLOR + (u16)slot * 16);
     for (i = 0; i < 16; i++) VDP_DAT = color;
+    if (g_spr_dual) {
+        vdp_write_addr((u16)(SPR_COLOR_B + (u16)slot * 16));
+        for (i = 0; i < 16; i++) VDP_DAT = color;
+    }
 }
 
 /* mode2の「1ライン1色」で陰影を付ける: 16行それぞれの色を tab16[0..15] から書く(row0=上)。 */
@@ -434,6 +447,10 @@ void vdp_sprite_color_tab(u8 slot, const u8 *tab16) {
     u8 i;
     vdp_write_addr(SPR_COLOR + (u16)slot * 16);
     for (i = 0; i < 16; i++) VDP_DAT = tab16[i];
+    if (g_spr_dual) {
+        vdp_write_addr((u16)(SPR_COLOR_B + (u16)slot * 16));
+        for (i = 0; i < 16; i++) VDP_DAT = tab16[i];
+    }
 }
 
 /* ★縦スクロール補正後の属性Yを求める。**216(0xD8)は停止マーカ**なので、計算結果がちょうど 216 に
@@ -446,19 +463,31 @@ static u8 spr_y(u8 y) {
 }
 
 void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum) {
+    u8 yy = spr_y(y);   /* 表示Y=属性Y+1 のため -1。縦スクロール補正＋216(停止マーカ)回避 */
     vdp_write_addr(SPR_ATTR + (u16)slot * 4);
-    /* 表示Y=属性Y+1 のため -1。縦スクロール量を足して画面固定に補正(216 回避は spr_y)。 */
-    VDP_DAT = spr_y(y);
+    VDP_DAT = yy;
     VDP_DAT = x;
     VDP_DAT = patnum;
     VDP_DAT = 0;
+    if (g_spr_dual) {
+        vdp_write_addr((u16)(SPR_ATTR_B + (u16)slot * 4));
+        VDP_DAT = yy;
+        VDP_DAT = x;
+        VDP_DAT = patnum;
+        VDP_DAT = 0;
+    }
 }
 
 void vdp_sprite_hide_from(u8 slot) {
     vdp_write_addr(SPR_ATTR + (u16)slot * 4);
     VDP_DAT = 216;           /* Y=216(0xD8)=212ライン時の停止マーカ。以降のスプライトを非表示
                                 (208=0xD0は192ライン用。212ラインでは終端にならず古い残像が残る) */
+    if (g_spr_dual) {
+        vdp_write_addr((u16)(SPR_ATTR_B + (u16)slot * 4));
+        VDP_DAT = 216;
+    }
 }
+
 
 /* ===== A6(§D1): SAT(属性表)のRAMシャドウ→一括バースト =====
    ent_draw_all は毎フレーム最大32枚の属性を書く。従来は1枚ごとに vdp_sprite_pos が
@@ -488,6 +517,11 @@ void vdp_sat_flush(u8 from, u8 live) {
     vdp_write_addr((u16)(SPR_ATTR + (u16)from * 4));
     for (i = 0; i < n; i++) VDP_DAT = src[i];
     if (live < 32) VDP_DAT = 216;   /* 停止マーカ(=スロットliveのY)。以降のスプライト非表示 */
+    if (g_spr_dual) {               /* セットBへ同一内容をミラー(追加コストは 4B×枚数) */
+        vdp_write_addr((u16)(SPR_ATTR_B + (u16)from * 4));
+        for (i = 0; i < n; i++) VDP_DAT = src[i];
+        if (live < 32) VDP_DAT = 216;
+    }
 }
 
 /* ---- スプライト表セットの切替(ラスタ分割用) ----
@@ -517,4 +551,29 @@ void vdp_sprite_pos_b(u8 slot, u8 x, u8 y, u8 patnum) {
 void vdp_sprite_hide_from_b(u8 slot) {
     vdp_write_addr((u16)(SPR_ATTR_B + (u16)slot * 4));
     VDP_DAT = 216;
+}
+
+/* ---- セットA限定の書き込み(g_spr_dual でもミラーしない) ----
+   ★分割の追加スプライトは「上帯はA・下帯はB」と**別内容**を同じslotに置くので、
+     ミラー版(vdp_sprite_pos)ではなくこちらを使う。両セットで別内容にしてよいのは、
+     そのスプライトが分割線をまたがない(片方の帯に完全に収まる)ときだけ。 */
+void vdp_sprite_pos_a(u8 slot, u8 x, u8 y, u8 patnum) {
+    vdp_write_addr(SPR_ATTR + (u16)slot * 4);
+    VDP_DAT = spr_y(y);
+    VDP_DAT = x;
+    VDP_DAT = patnum;
+    VDP_DAT = 0;
+}
+void vdp_sprite_hide_from_a(u8 slot) {
+    vdp_write_addr(SPR_ATTR + (u16)slot * 4);
+    VDP_DAT = 216;
+}
+/* セットA/B それぞれの色表を単色で1枚ぶん書く(追加スプライト用)。 */
+void vdp_sprite_color_a(u8 slot, u8 color) {
+    u8 i; vdp_write_addr(SPR_COLOR + (u16)slot * 16);
+    for (i = 0; i < 16; i++) VDP_DAT = color;
+}
+void vdp_sprite_color_b(u8 slot, u8 color) {
+    u8 i; vdp_write_addr((u16)(SPR_COLOR_B + (u16)slot * 16));
+    for (i = 0; i < 16; i++) VDP_DAT = color;
 }

@@ -87,8 +87,13 @@ void vdp_sat_flush(u8 from, u8 live);
    R#5 = (色表>>7)|0x07 / 属性表 = 色表+0x200。A=0xEF(既定) / B=0xE7(色0x7000,属性0x7200)。 */
 #define SPR_R5_A 0xEF
 #define SPR_R5_B 0xE7
+extern u8 g_spr_dual;                      /* 1=属性/色をセットBへもミラー(分割しても見た目不変の土台) */
 void vdp_sprite_setbase(u8 r5);            /* R#5 を切替(分割行では RasSplit の reg=5 で直接書く) */
 void vdp_sprite_setb_init(u8 color);       /* セットBを初期化(色表を単色で埋め全枚を画面外へ)。1回だけ */
+void vdp_sprite_pos_a(u8 slot, u8 x, u8 y, u8 patnum);   /* セットA限定(ミラーしない) */
+void vdp_sprite_hide_from_a(u8 slot);
+void vdp_sprite_color_a(u8 slot, u8 color);
+void vdp_sprite_color_b(u8 slot, u8 color);
 void vdp_sprite_pos_b(u8 slot, u8 x, u8 y, u8 patnum);
 void vdp_sprite_hide_from_b(u8 slot);                /* シャドウの from..live-1 をSATへ一括バースト＋停止マーカ */
 

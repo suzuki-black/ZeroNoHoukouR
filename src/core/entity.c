@@ -11,6 +11,8 @@
 #include "player.h"     /* g_player_x/y(艦載機の自機追尾) */
 
 u8 g_spr_base;          /* エンティティ描画の開始スプライトスロット(先頭はHUDが確保) */
+u8 g_spr_used;          /* ★ent_draw_all が使い終えたスロット数(=次に空いているslot)。
+                           ラスタ分割で「余りスロットを帯ごとに別の弾で埋める」ために公開する。 */
 
 static Entity pool[ENT_MAX];
 
@@ -382,5 +384,13 @@ void ent_draw_all(void) {
     }
     /* ★A6: 溜めた属性(g_spr_base..slot-1)を1回のバーストでSATへ(flush内で停止マーカも直書き)。 */
     vdp_sat_flush(g_spr_base, slot);
+    g_spr_used = slot;
     rot++;
+}
+
+/* 指定slot以降の色キャッシュを無効化する。★分割の追加スプライトが色表を直接書いたときに呼ぶこと。
+   これを怠ると、次に同じslotをエンティティが使ったとき「色は既に正しい」と誤判定して書き直さない。 */
+void ent_spr_cache_inval(u8 from) {
+    u8 i;
+    for (i = from; i < 32; i++) { slot_col[i] = 0xFF; slot_ctab[i] = 0; }
 }

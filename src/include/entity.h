@@ -61,6 +61,8 @@ extern u8 g_hitstop;     /* >0: シーンが数フレーム更新を凍結=撃�
 extern u8 g_shake;       /* >0: 画面を数フレーム縦に揺らす(砲台撃破/被弾の迫力) */
 
 extern u8 g_spr_base;               /* エンティティ描画の開始スプライトslot(HUDが先頭を確保) */
+extern u8 g_spr_used;               /* ent_draw_all が使い終えたslot数(=最初の空きslot)。分割の追加描画が使う */
+void ent_spr_cache_inval(u8 from);  /* slot以降の色キャッシュ無効化(追加描画が色表を直書きしたら呼ぶ) */
 void    ent_reset(void);            /* プール全消去 */
 Entity *ent_spawn(u8 type);         /* 空きを1つ確保(既定値で初期化)。無ければ NULL */
 void    ent_update_all(void);       /* 全 active の behavior update を回す */

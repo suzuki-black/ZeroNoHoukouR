@@ -3,6 +3,8 @@
    bank!=0 のシーンは「冷たいシーン」= 当該バンクの 0xA000 エントリを bcall で実行(常駐窓を食わない)。
    バンク側エントリは g_scene_phase(0=init/1=update)を見て分岐し、update 結果を g_scene_ret に書く。 */
 #include "scene.h"
+#include "raster.h"
+#include "vdp.h"
 #include "input.h"
 #include "vdp.h"
 #include "bank.h"
@@ -102,6 +104,11 @@ void scene_run(u8 cur) {
         g_scene_ret = SCENE_NONE;
         call_scene(cur, 1);
         if (g_scene_ret != SCENE_NONE && g_scene_ret != cur) {
+            /* ★シーンを抜けるときは分割とスプライト表のミラーを必ず止める。
+               分割を張ったままバンクシーン(タイトル/エンディング)へ行くと、分割行から下は
+               セットB(ステージ用の内容)を見にいくのでそのシーンのスプライトが消える。 */
+            raster_off();
+            g_spr_dual = 0;
             cur = g_scene_ret;
             g_scene = cur;
             scene_video_enter(cur);

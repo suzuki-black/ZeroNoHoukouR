@@ -356,7 +356,11 @@ static void stage_build(void) {
     prerender_ship();     /* 艦をバッファB(オフスクリーン)へ。stage_begin_display の前に必須 */
     vdp_sprite_init();
     sprites_load(curstage);   /* ★静的パターン＋この面の戦闘機8方向×3サイズを生成 */
-    hud_init();           /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
+    hud_init();
+#ifdef DEBUG_SPRSPLIT
+    vdp_sprite_setb_init(11);   /* セットBの色表を用意し全枚を画面外へ(1回だけ) */
+    g_spr_dual = 1;             /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない */
+#endif           /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
     ent_reset();
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
@@ -591,6 +595,34 @@ static u8 defeat_update(void) {
 static u8 vcnt;   /* 縦スクロール速度の位相(5コマ周期)。phase0=ゆっくり / phase1=高速(蛇行)。 */
 #define SEA0_DIV 3    /* phase0(海モード)で海うねりを塗る間隔(3=3フレームに1回)。実機turboRに合わせ微調整可。 */
 static u8 seatick;    /* phase0 海間引き用カウンタ。 */
+#ifdef DEBUG_SPRSPLIT
+/* ★分割の追加描画(疎通デモ)。ent_draw_all が使い終えた次のslotから、
+   セットA には上帯(y<SPRSPLIT_LINE)の弾、セットB には下帯の弾を置く。
+   同じslot番号に別内容を入れてよいのは、どちらも分割線をまたがない位置に置くから
+   (またぐと境界で化ける＝Grauw の split guide の注意点)。
+   色表は毎フレーム直書きするので、entity.c の色キャッシュを無効化しておくこと。 */
+#define SPRSPLIT_LINE 96
+#define SPRX_N 8                       /* 1帯あたりの追加枚数 */
+static void sprsplit_extra(void) {
+    u8 base = g_spr_used, k, slot;
+    static u8 ph;
+    if (base > 32 - SPRX_N) return;    /* 空きが足りないフレームは何もしない(安全側) */
+    ph++;
+    for (k = 0; k < SPRX_N; k++) {
+        slot = (u8)(base + k);
+        /* 上帯: セットA。左右に振った縦列を少しずつ流す */
+        vdp_sprite_color_a(slot, 10);
+        vdp_sprite_pos_a(slot, (u8)(20 + k * 28), (u8)(20 + ((ph + k * 5) & 63)), SPR_BULLET);
+        /* 下帯: セットB。上帯とは別の弾 */
+        vdp_sprite_color_b(slot, 11);
+        vdp_sprite_pos_b(slot, (u8)(26 + k * 28), (u8)(SPRSPLIT_LINE + 8 + ((ph + k * 7) & 95)), SPR_BULLET);
+    }
+    vdp_sprite_hide_from_a((u8)(base + SPRX_N));
+    vdp_sprite_hide_from_b((u8)(base + SPRX_N));
+    ent_spr_cache_inval(base);         /* 色表を直書きしたのでキャッシュを捨てる */
+}
+#endif
+
 u8 stage_update(void) {
     u8 vstep;
     if (g_view) { g_view = 0; return SC_TITLE; }   /* ★ビューア表示(カード/結果)はstage_initで完結→タイトルへ戻る */
@@ -677,26 +709,14 @@ u8 stage_update(void) {
     hud_draw(g_score, g_lives);
 
 #ifdef DEBUG_SPRSPLIT
-    /* ★スプライト分割の疎通デモ: 行106 で R#5 をセットB(0xE7)へ切替え、下帯だけ別の32枚を出す。
-       上帯はゲーム本来のスプライト(HUD/自機/敵)＝セットA なので、画面上の総数は 32 を超える。
-       下帯ではセットB しか見えない＝ゲーム本来のスプライトは消えるが、これは機構の確認用デモ
-       (本実装では両セットに振り分ける)。
-       ★分割で書くのは R#5 の1本だけ＝HBLANK に確実に間に合う。 */
-    {
-        static u8 sb_init;
-        u8 k;
-        if (!sb_init) { sb_init = 1; vdp_sprite_setb_init(11); }   /* 色11=赤 */
-        /* 下帯に 8列×4行 = 32枚。行間 24px で 1走査線あたり最大8枚(mode2の上限)に収める。 */
-        for (k = 0; k < 32; k++) {
-            u8 col = (u8)(k & 7), row = (u8)(k >> 3);
-            vdp_sprite_pos_b(k, (u8)(16 + col * 30), (u8)(120 + row * 24), SPR_BULLET);
-        }
-        g_ras[0].line = 0;    /* フレーム先頭=セットAへ戻す */
-        g_ras[0].reg  = 5;  g_ras[0].val = SPR_R5_A;  g_ras[0].pidx = RAS_NOPAL;
-        g_ras[1].line = 106;  /* ここから下=セットB */
-        g_ras[1].reg  = 5;  g_ras[1].val = SPR_R5_B;  g_ras[1].pidx = RAS_NOPAL;
-        raster_arm(2);
-    }
+    /* ★スプライト分割をゲームに統合: 行 SPRSPLIT_LINE で R#5 をセットBへ切替える。
+       両セットには ent_draw_all の内容が丸ごとミラーされている(g_spr_dual)ので、
+       分割しても見た目は変わらない。その上で「余ったスロット」を帯ごとに別の弾で埋める(下の追加描画)。 */
+    g_ras[0].line = 0;                 /* フレーム先頭=セットAへ戻す */
+    g_ras[0].reg = 5; g_ras[0].val = SPR_R5_A; g_ras[0].pidx = RAS_NOPAL;
+    g_ras[1].line = SPRSPLIT_LINE;     /* ここから下=セットB */
+    g_ras[1].reg = 5; g_ras[1].val = SPR_R5_B; g_ras[1].pidx = RAS_NOPAL;
+    raster_arm(2);
 #endif
 #ifdef DEBUG_RASTER
     /* ★疎通デモ: 画面中央(行106)でパレット1(海の中間色)を赤に差し替える。
@@ -748,6 +768,9 @@ u8 stage_update(void) {
     { PROF_T0(_pd);
 #endif
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
+#ifdef DEBUG_SPRSPLIT
+    sprsplit_extra();                    /* ★余りスロットを帯ごとに別の弾で埋める(32枚の壁を超える) */
+#endif
 #ifdef DEBUG_PROF
     PROF_ADD(PF_DRAW, _pd); }
 #endif
