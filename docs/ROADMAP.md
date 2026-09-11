@@ -112,6 +112,78 @@ openMSX 21.0 には `turbor.xml` があるが turboR システム ROM が未設�
 
 ---
 
+## 2-B. 大型演出 3 案の実現可能性（実測定数で判定・2026-09-11）
+
+判定の土台は [性能と高速化 §0-0](性能と高速化.md) の実測定数
+（**VDP 204 B/ms・残枠 3.9 KB/frame**）。**MSX コミュニティの一次情報に当たった結果、
+当初「帯域的に不可能」と判断した 3 案は、いずれも前提が誤っていた**ので記録を残す。
+
+### ① 縦の多重スクロール → **可能（ただし「左右」ではなく「レイヤ」）**
+
+- **誤っていた前提**: 「毎フレーム全画面を再合成しなければならない(27KB/frame)」。
+  実際は **償却できる**。[artrag/Parallax_scrolling_MSX2](https://github.com/artrag/Parallax_scrolling_MSX2)
+  は screen5 で 2 層パララックス＋8方向スムーススクロールを**素の MSX2(Z80 3.58MHz)**で実現している。
+- **機構**: 画面を 16×16 ブロックで構成し、**16 フレームかけて 1 列ずつ裏ページに再構築** →
+  完成したら表裏入替。その間の 1px の動きは HW スクロール(R#23/R#26-27)が担う。
+  背景は前景の **15/16 速度**（16 はスクロールレジスタのステップ数由来）。スプライトは全部ゲーム用に空く。
+  VRAM 4 ページ使用（2=ダブルバッファ / 2=両レイヤのブロック素材）。
+- **コスト**: 27KB ÷ 16 = **1.7 KB/frame = 8.3 ms**。残枠 3.9KB に収まる。現行の海+艦描画
+  (2.9KB/frame)と**置き換える**形なので差し引きでは軽くなりうる。
+- **障壁は帯域でなく VRAM 設計**: 本作は page0=スプライト/炎, page1=表示リング, page2-3=艦バッファB で
+  128KB を使い切っている。艦を「ブロックの集合」として持ち直す改造が要る。
+- **残る本当の制約**: **画面を縦に割って左右で別速度は不可**（R#23 は画面全体に効く単一レジスタ。
+  community も "A clean split of the screen in left and right parts is not possible on V9938/V9958"）。
+  横帯に割る screen split は可能。
+
+### ② 戦艦級の疑似回転・拡大縮小 → **サイズで線が引ける**
+
+- **誤っていた前提**: 「R800 が毎ピクセル計算 → VRAM へ転送」という形だけを検討していた。
+  MSX2 の定石は **事前生成コマを VRAM に置き、VDP コマンドで貼る**。screen5 は 4 ページ=128KB ある。
+- G4 の「1 バイト = 2 ピクセル」で**横 2 倍は無料**（半解像度で作れば表示は倍）。
+
+| 対象 | バイト数 | 所要 | 判定 |
+|---|---|---|---|
+| 48×64 のコマ | 1,536 B | 7.5 ms/frame | 30fps で可 |
+| 64×100（表示 128×200） | 3,200 B | 15.7 ms/frame | 15fps なら可 |
+| 戦艦級 128×200 実解像度 | 12,800 B | 63 ms/frame | **不可（2fps 相当）** |
+
+- ★**見落としていた強い手: [screen split で R#23 を行ごとに変える](https://map.grauw.nl/articles/split_guide.php)**。
+  R#23 は **mid-frame 変更が即時反映される非シームレス・レジスタ**＝走査線ごとに「VRAM のどの行を
+  表示するか」を選べる。**縦方向の拡大縮小・うねり・傾き・沈み込みが VRAM 転送ゼロで作れる**
+  （設計メモ §2-B の全画面ディストーションの相当部分が、コピーでなくレジスタ書換で実現できる）。
+  - 作法: R#23 を split で変えたら **R#19 を再計算**（split 行は画面行でなく VRAM 行 0 起点で数える）。
+    変更前に E1(R#0 bit4)を落として S#1 を読む。
+  - 制約: HBLANK 中に書けるのは **レジスタ 4 本（間接アクセスなら 8 本）＋パレット 8 エントリ**。
+    212 行全部で割り込むと CPU をほぼ食い潰す（split guide が警告）→ **帯単位に限定するのが現実的**。
+- **役割分担の結論**: 回転そのもの＝事前生成コマ＋HMMM / 縦の変形＝R#23 split。
+
+### ③ スプライト限界を超える弾数 → **可能。3 案で最も安い**
+
+- **誤っていた前提**: 「32 枚はハード上限だから終わり」。**回避技法が確立している**。
+- **スプライト分割(sprite split / line interrupt)**: R#19 に分割行、S#1 の FH を見る（または R#0 の
+  E1 で割り込み）。分割行で SAT を書き換え**同じ 32 枚を別の帯で再利用**。2 箇所分割で **48 枚**、
+  分割を増やせばさらに。**Space Manbow が実ゲームで使用**。
+- **別解**: SAT を VRAM に 2 つ持ち R#5/R#11 を切替（正順・逆順で並べ実効 16 枚/走査線をフレーム交互）。
+- **併用**: 1 パターンに複数弾を描くクラスタパターン（`run_fire` の RING/AIMFAN は元々編隊で出る）。
+- **コスト**: SAT 全書換 128B = 0.64ms。2 分割で 3 セット使っても **1.9 ms/frame**。
+  クラスタパターン 8 枚再生成 = 256B = 1.3ms。→ 合計 3ms 程度で **48〜96 発相当**。
+- **残る本当の制約**: **1 走査線 8 枚はハード制約で回避不可**。横一線の壁は出せない。
+  → 弾幕は**縦に散る形（リング・螺旋・雨）**に寄せる。
+- 弾の**計算**は純 RAM 演算で VDP コスト 0＝「重い計算・軽い出力」の理想形。**制約は表示だけ**。
+
+### 一次情報（次に読むときの入口）
+
+- [Screensplit programming guide (Grauw)](https://map.grauw.nl/articles/split_guide.php) ― split の作法の決定版
+- [A guide to scrolling game engines on MSX (Grauw)](https://map.grauw.nl/articles/scrolling.php)
+- [V9938 VRAM timings (Grauw/openMSX)](https://map.grauw.nl/articles/vdp-vram-timing/vdp-timing.html) ― コマンド単価の実機計測
+- [artrag/Parallax_scrolling_MSX2](https://github.com/artrag/Parallax_scrolling_MSX2) ― パララックスの動く実装
+- [More than 32 sprites on 9918/9938](https://www.msx.org/forum/msx-talk/development/more-than-32-sprites-on-99189938) / [Sprite split](https://www.msx.org/forum/msx-talk/development/sprite-split-0)
+- [VRAM access timing (MSX Game Library)](https://aoineko.org/msxgl/index.php?title=VRAM_access_timing)
+- ★[openMSX issue #2057](https://github.com/openMSX/openMSX/issues/2057): **openMSX 21 は VDP コマンドが
+  実機より速い(未解決)**。帯域の絶対値をエミュで測ってはいけない。実機の自己診断が唯一の正解。
+
+---
+
 ## 3. この計画で守る規律
 
 - **性能の主張は実機計測とセットでのみ書く**（§1-3）。openMSX の数値は正しさの検証にのみ使う。
