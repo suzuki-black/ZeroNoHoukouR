@@ -16,7 +16,10 @@
 
 #include "types.h"
 
-#define CBUL_MAX  64          /* 同時に飛べる弾数。表示できる数とは別(表示は予約slot数で決まる) */
+#define CBUL_MAX  64          /* プールの大きさ(計算上の上限) */
+#define CBUL_SOFT_MAX 20      /* ★同時生存の実効上限。表示能力(予約slot×帯数)を超えて撒くと、
+                                 どの弾を出すかが毎フレーム変わって**ちらつき**になる。
+                                 計算自体は 64発でも余裕だが、出せない弾は抱えない。 */
 #define CBUL_ADDR 0xEC00      /* ★高位フリー帯へ固定配置(常駐DATAは 0xE000 天井で空きが無い)。
                                  既存: g_card_ram 0xE100 / ship_ram 0xE700 / fb_ram 0xE900 /
                                  prof 0xEB00。0xEC00-0xEDFF の 512B を使う(BIOSスタックは 0xF380 付近) */

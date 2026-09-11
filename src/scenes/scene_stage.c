@@ -759,7 +759,7 @@ u8 stage_update(void) {
       /* ★CPU弾幕の更新。VDP に一切触れない純RAM演算なので、VDPコマンドの裏(§4-1)に置ける。
          発生源は画面上部中央から16方向リングを定期的に撒くだけの仮実装(次段でボスの砲へ繋ぐ)。 */
       curtain_update();
-      { static u8 ct; if ((++ct & 31) == 0) curtain_ring(128, 24, 16, 6, (u8)(ct >> 5), 11); }
+      { static u8 ct; if ((++ct & 15) == 0) curtain_ring(128, 24, 12, 6, (u8)(ct >> 4), 11); }
 #endif
       if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
       if (sea_on) { while (sea_step()) { } vdp_cmd_wait(); }   /* ★aa_collide(burn=VDPコマンド)前に海完全完了 */
