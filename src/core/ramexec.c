@@ -10,9 +10,10 @@
 u8 g_ramx_ok;             /* 1=RAM化利用可(initで確定)。0なら切替は何もしない(ROMのまま=安全) */
 u8 g_ramx2_ok;            /* 1=page2もRAM化可(initで確定)。0なら page2 は cart のまま(安全) */
 
-/* init で確定する値(切替に使う)。 */
-static u8 s_ram_slot;     /* page1へ入れる RAMスロットID (F000SSPP) */
-static u8 s_cart_slot;    /* page1へ戻す カートリッジスロットID (F000SSPP) */
+/* init で確定する値(切替に使う)。★overlay.c も使うので非static
+   (overlay は複製中に ei を挟みたくないので page2_use_ram/cart を呼ばず自前で ENASLT する)。 */
+u8 s_ram_slot;            /* RAMスロットID (F000SSPP) */
+u8 s_cart_slot;           /* カートリッジスロットID (F000SSPP) */
 
 /* page1 のスロット切替を行う位置独立asm(page1自身を触るので page3 RAM へ退避して実行)。
    引数(呼出前にRAMの固定番地へ格納): 目標スロットID / マッパーセグメント。ENASLT(0x0024)で拡張スロット対応。 */

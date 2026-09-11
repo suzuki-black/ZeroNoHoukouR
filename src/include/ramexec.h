@@ -28,6 +28,8 @@
 
 extern u8 g_ramx_ok;    /* 1=page1 RAM化利用可(ramexec_page1_to_ram成功)。0なら切替は無効(ROMのまま) */
 extern u8 g_ramx2_ok;   /* 1=page2 RAM化利用可(ramexec_page2_to_ram成功)。0なら page2 は cart のまま */
+extern u8 s_ram_slot;   /* RAMスロットID(F000SSPP)。overlay.c が自前 ENASLT に使う */
+extern u8 s_cart_slot;  /* カートリッジスロットID(F000SSPP) */
 
 /* 起動時1回。page1 ROMを空きセグメントへコピー＋切替準備。成功で1。main が sound_init 前に呼ぶ。 */
 u8 ramexec_page1_to_ram(void);

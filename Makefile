@@ -68,6 +68,7 @@ RESIDENT_RELS = \
   $(BUILD)/ramexec.rel \
   $(BUILD)/raster.rel \
   $(BUILD)/curtain.rel \
+  $(BUILD)/overlay.rel \
   $(BUILD)/sys.rel \
   $(BUILD)/vdp.rel \
   $(BUILD)/bank.rel \
@@ -100,6 +101,7 @@ ROMPACK_BANKS = --bank 4 assets/cards.bin \
                 --bank 8 $(BUILD)/assets.bin \
                 --bank 16 $(BUILD)/ship_render.ihx \
                 --bank 17 $(BUILD)/hot.bin \
+                --bank 18 $(BUILD)/ovl.bin \
                 --asset 9 assets/title.yjk
 
 .PHONY: all rom clean run
@@ -149,6 +151,14 @@ $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
 	   exit 2; \
 	 fi; \
 	 echo "  ramexec_page2_to_ram=$$A (<0x6000 OK)"
+	@A=$$(awk '/^DEF _overlay_load /{print $$3}' $(BUILD)/rom.noi); \
+	 if [ -z "$$A" ]; then echo "ERROR: rom.noi に _overlay_load が無い"; exit 2; fi; \
+	 if [ $$(printf '%d' $$A) -ge $$(printf '%d' 0x6000) ]; then \
+	   echo "ERROR: _overlay_load=$$A が 0x6000 以降。複製中に 0x6000-0x7FFF 窓を演出バンクへ差し替えるため、"; \
+	   echo "       0x4000-0x5FFF に居なければ自分自身が消えて暴走します(ramexec_page2_to_ram と同じ理由)。"; \
+	   exit 2; \
+	 fi; \
+	 echo "  overlay_load=$$A (<0x6000 OK)"
 	@H=$$(awk '/^DEF s__HEAP /{print $$3}' $(BUILD)/rom.noi); \
 	 if [ -z "$$H" ]; then echo "ERROR: rom.noi に s__HEAP が無い(常駐RAM末尾を判定できない)"; exit 2; fi; \
 	 if [ $$(printf '%d' $$H) -gt $$(printf '%d' 0xE000) ]; then \
@@ -169,6 +179,9 @@ $(BUILD)/bankhead.rel: $(SRC)/banked/bankhead.s | $(BUILD)
 	sdasz80 -o $@ $<
 # RAM実行モジュールの先頭スタブ(hot_ram 番地に jp _hot_aa_update/_hot_aa_collide のジャンプテーブルを確定)
 $(BUILD)/hothead.rel: $(SRC)/banked/hothead.s | $(BUILD)
+	sdasz80 -o $@ $<
+# RAMオーバレイの先頭スタブ(0xA000 に jp のジャンプテーブルを確定)
+$(BUILD)/ovlhead.rel: $(SRC)/banked/ovlhead.s | $(BUILD)
 	sdasz80 -o $@ $<
 # 2) バンクシーン汎用ルール(scene_<name>.c → bank .ihx)。追加は ROMPACK_BANKS に1行。
 #    bankhead + scene_<name> + resident_syms を 0xA000 リンク。data-loc は各シーン共用の退避域。
@@ -205,7 +218,24 @@ $(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs $(SRC)/include/hotcode.h
 	 fi; \
 	 echo "  hot.bin=$${SZ}B / HOT_CAP=$${CAP}B (残り$$((CAP-SZ))B)"
 
-BANK_IHX = $(BUILD)/scene_title.ihx \
+# ── RAMオーバレイ(演出コード) ──
+# page2 を RAM 化している間だけ見える seg5 上位8KB(=0xA000-0xBFFF)へ載せる。0xA000 リンク。
+# data-loc はバンクシーン(0xE000)と衝突しない高位フリー帯へ。rompack が bank OVL_BANK へ格納し、
+# シーン初期化で overlay_load() が seg5 上位へ複製する。
+$(BUILD)/ovl.ihx: $(SRC)/banked/ovl_curtain.c $(HDRS) $(BUILD)/ovlhead.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_curtain.c -o $(BUILD)/ovl_curtain.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
+	     $(BUILD)/ovlhead.rel $(BUILD)/ovl_curtain.rel $(BUILD)/resident_syms.rel -o $@
+$(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
+	@node tools/ihx2bin.mjs $(BUILD)/ovl.ihx 0xA000 $@; \
+	 SZ=$$(wc -c < $@ | tr -d ' '); \
+	 if [ "$$SZ" -gt 8192 ]; then \
+	   echo "ERROR: ovl.bin=$${SZ}B が オーバレイ枠 8192B を超過。seg5 上位8KB に収まりません。"; exit 3; \
+	 fi; \
+	 echo "  ovl.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"
+
+BANK_IHX = $(BUILD)/ovl.bin \
+           $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 
 GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk assets/cards.bin

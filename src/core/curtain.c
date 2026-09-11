@@ -1,109 +1,16 @@
-/* curtain.c — CPU 弾幕。設計と制約は curtain.h を参照。 */
+/* curtain.c — CPU弾幕の常駐側(プール実体とリセットのみ)。
+   ★本体(生成/更新/描画)は RAM オーバレイ side = banked/ovl_curtain.c にある。
+     常駐コード窓(24KB)が満杯なので、毎フレーム回る演出コードはオーバレイへ出した(ROADMAP P0-2)。
+     ラッパ(jp 0xA000+3*slot)は overlay.c にある。
+   ★curtain_reset だけは常駐: シーン初期化(page2=cart)の文脈で呼ばれるため、
+     オーバレイ(0xA000=page2 が RAM のときだけ有効)には置けない。 */
 #include "curtain.h"
-#include "fire.h"     /* dvx/dvy: 32分割方向の単位速度(fire.c と共有) */
-#include "vdp.h"
-#include "sprites.h"
-#include "scroll.h"   /* g_scroll_dy: 敵弾は艦(背景)と一緒に縦スクロールへ流れる */
 
 CBul __at(CBUL_ADDR) g_cbul[CBUL_MAX];
 u8 g_cbul_live;
-
-/* 画面外カリングの範囲(1/16 px)。16px ぶん外へ出たら捨てる。 */
-#define CB_XMIN (-16 * 16)
-#define CB_XMAX (272 * 16)
-#define CB_YMIN (-16 * 16)
-#define CB_YMAX (228 * 16)
 
 void curtain_reset(void) {
     u8 i;
     for (i = 0; i < CBUL_MAX; i++) g_cbul[i].alive = 0;
     g_cbul_live = 0;
-}
-
-void curtain_ring(s16 cx, s16 cy, u8 n, u8 spd, u8 ang, u8 col) {
-    u8 i, k = 0;
-    if (n == 0) return;
-    /* ★表示能力(帯あたりの予約slot×帯数)を超えて撒かないこと。超えると「今フレームどの弾を
-       出すか」が毎フレーム変わって**ちらつき**になる。計算は 64発でも余裕だが、出せない弾を
-       抱えても見た目が悪くなるだけ。実機で指摘されて入れた上限。 */
-    if ((u8)(g_cbul_live + n) > CBUL_SOFT_MAX) return;   /* ★リング単位で空きを見る(1発ずつ見ると
-                                                            リングが欠けて非対称になる。発射前に一度
-                                                            だけ見る書き方だと n 発ぶん超過する) */
-    for (i = 0; i < n; i++) {
-        u8 d = (u8)((ang + (u8)((u16)i * 32 / n)) & 31);
-        /* 空きスロットを探す(前回の続きから見るほど速いが、まずは素直に) */
-        while (k < CBUL_MAX && g_cbul[k].alive) k++;
-        if (k >= CBUL_MAX) return;              /* 満杯: 以降は捨てる(上限で頭打ち=安全側) */
-        g_cbul[k].x = (s16)(cx << 4);
-        g_cbul[k].y = (s16)(cy << 4);
-        g_cbul[k].vx = (s8)((s16)dvx[d] * spd);  /* 1/16px/frame。dvx は半径8基準 */
-        g_cbul[k].vy = (s8)((s16)dvy[d] * spd);
-        g_cbul[k].col = col;
-        g_cbul[k].alive = 1;
-        g_cbul_live++;
-        k++;
-    }
-}
-
-/* ★VDP に一切触れない純 RAM 演算。§4-1(VDPコマンドの裏でCPUを回す)の区間に置ける。
-   ★スクロール追従(既存 bh_bullet と同じ規約): 敵弾は艦(背景)と一緒に縦スクロールへ流れる。
-     論理Y自体を流すので、表示・当たり判定・画面外消滅が全て視覚と一致する
-     (自機弾=TEAM_PLAYER だけが画面固定)。これを入れないと、スクロール中に背景に対する
-     見かけの速度が変わってしまう(上りで遅く、下りで速く見える)。 */
-void curtain_update(void) {
-    u8 i;
-    s16 dy16 = (s16)(g_scroll_dy << 4);   /* px → 1/16px */
-    CBul *b = g_cbul;
-    for (i = 0; i < CBUL_MAX; i++, b++) {
-        s16 x, y;
-        if (!b->alive) continue;
-        x = (s16)(b->x + b->vx);
-        y = (s16)(b->y + b->vy - dy16);
-        if (x < CB_XMIN || x > CB_XMAX || y < CB_YMIN || y > CB_YMAX) {
-            b->alive = 0;
-            if (g_cbul_live) g_cbul_live--;
-            continue;
-        }
-        b->x = x; b->y = y;
-    }
-}
-
-void curtain_draw(u8 base, u8 nper, u8 line) {
-    u8 i, ns = 0, na, nb;
-    const CBul *b;
-    /* --- 1) 分割線をまたぐ弾: 両セットの**同じslotに同じ内容**で置く ---
-       ★またぐ弾を「どちらの帯にも入れない」で捨てると、弾が分割線を越える数フレームだけ
-         消える＝ちらつきに見える(実機で指摘された)。split guide の要求は「またぐスプライトは
-         両テーブルの同じ位置に同じ内容」なので、捨てずに両方へ同内容で置くのが正しい。 */
-    b = g_cbul;
-    for (i = 0; i < CBUL_MAX && ns < nper; i++, b++) {
-        s16 sx, sy;
-        if (!b->alive) continue;
-        sx = (s16)(b->x >> 4); sy = (s16)(b->y >> 4);
-        if (sx < 0 || sx > 255 || sy < 0 || sy > 211) continue;
-        if ((u8)(sy + 16) >= line && (u8)sy < line) {     /* またいでいる */
-            u8 s = (u8)(base + ns);
-            vdp_sprite_color_a(s, b->col); vdp_sprite_pos_a(s, (u8)sx, (u8)sy, SPR_BULLET);
-            vdp_sprite_color_b(s, b->col); vdp_sprite_pos_b(s, (u8)sx, (u8)sy, SPR_BULLET);
-            ns++;
-        }
-    }
-    /* --- 2) 片側に収まる弾: それぞれの帯のセットへ --- */
-    na = ns; nb = ns;
-    b = g_cbul;
-    for (i = 0; i < CBUL_MAX; i++, b++) {
-        s16 sx, sy;
-        if (!b->alive) continue;
-        sx = (s16)(b->x >> 4); sy = (s16)(b->y >> 4);
-        if (sx < 0 || sx > 255 || sy < 0 || sy > 211) continue;
-        if ((u8)(sy + 16) < line) {
-            if (na < nper) { u8 s = (u8)(base + na);
-                vdp_sprite_color_a(s, b->col); vdp_sprite_pos_a(s, (u8)sx, (u8)sy, SPR_BULLET); na++; }
-        } else if ((u8)sy >= line) {
-            if (nb < nper) { u8 s = (u8)(base + nb);
-                vdp_sprite_color_b(s, b->col); vdp_sprite_pos_b(s, (u8)sx, (u8)sy, SPR_BULLET); nb++; }
-        }
-    }
-    if ((u8)(base + na) < 32) vdp_sprite_hide_from_a((u8)(base + na));
-    if ((u8)(base + nb) < 32) vdp_sprite_hide_from_b((u8)(base + nb));
 }

@@ -21,6 +21,7 @@
 #include "ramexec.h"
 #include "raster.h"
 #include "curtain.h"
+#include "overlay.h"
 #ifdef DEBUG_SPRSPLIT
 #define SPRSPLIT_LINE 96   /* 分割行(この行から下がセットB) */
 #define SPRX_N 12          /* 1帯あたりの弾幕表示枚数。この数だけ g_spr_limit を下げて枠を予約する
@@ -370,6 +371,8 @@ static void stage_build(void) {
     g_spr_dual = 1;             /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない */
     g_spr_limit = 32 - SPRX_N;  /* ★弾幕の枠を予約(これが無いと混雑時にゲーム側が使い切る) */
     curtain_reset();
+    overlay_load(OVL_BANK);     /* ★演出コードを seg5 上位8KB(=ホット区間の 0xA000)へ複製。
+                                   page2 が cart のこの文脈でのみ実行できる(overlay.h の制約4)。 */
 #endif
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
@@ -611,7 +614,7 @@ static u8 seatick;    /* phase0 海間引き用カウンタ。 */
    色表を直書きするので entity.c の色キャッシュを捨てること。 */
 static void curtain_present(void) {
     u8 base = g_spr_used;
-    if (base >= 32) return;
+    if (!g_ovl_ok || base >= 32) return;
     { u8 n = (u8)(32 - base); if (n > SPRX_N) n = SPRX_N;
       curtain_draw(base, n, SPRSPLIT_LINE); }
     ent_spr_cache_inval(base);
@@ -758,8 +761,10 @@ u8 stage_update(void) {
 #ifdef DEBUG_SPRSPLIT
       /* ★CPU弾幕の更新。VDP に一切触れない純RAM演算なので、VDPコマンドの裏(§4-1)に置ける。
          発生源は画面上部中央から16方向リングを定期的に撒くだけの仮実装(次段でボスの砲へ繋ぐ)。 */
-      curtain_update();
-      { static u8 ct; if ((++ct & 15) == 0) curtain_ring(128, 24, 12, 6, (u8)(ct >> 4), 11); }
+      if (g_ovl_ok) {          /* ★オーバレイ未読込(g_ramx2_ok=0 の機械)では 0xA000 はスワップ窓＝呼ぶと暴走 */
+          curtain_update();
+          { static u8 ct; if ((++ct & 15) == 0) curtain_ring(128, 24, 12, 6, (u8)(ct >> 4), 11); }
+      }
 #endif
       if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
       if (sea_on) { while (sea_step()) { } vdp_cmd_wait(); }   /* ★aa_collide(burn=VDPコマンド)前に海完全完了 */
