@@ -23,6 +23,11 @@ endif
 ifdef NO_RAMX2
   DEFS += -DNO_RAMX2
 endif
+# ── ラスタ分割の疎通デモ(画面中央から下だけ海の色を変える): make clean && make DEBUG_RASTER=1
+#    R#19/FH の割込み基盤(raster.c)が実際に効いているかを目で確認するための一時デモ。
+ifdef DEBUG_RASTER
+  DEFS += -DDEBUG_RASTER
+endif
 # ── 実機µs計測(S1990タイマ自己診断): make clean && make DEBUG_PROF=1
 ifdef DEBUG_PROF
   DEFS += -DDEBUG_PROF
@@ -56,6 +61,7 @@ HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h
 #    ここへ足すたびに常駐サイズが増える。冷たいものは足さず bcall バンクへ回すこと。
 RESIDENT_RELS = \
   $(BUILD)/ramexec.rel \
+  $(BUILD)/raster.rel \
   $(BUILD)/sys.rel \
   $(BUILD)/vdp.rel \
   $(BUILD)/bank.rel \

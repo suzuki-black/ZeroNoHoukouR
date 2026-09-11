@@ -60,6 +60,8 @@ void vdp_wait_frame(void);
    よって縦スクロール中もスプライトを画面固定に見せるため、vdp_sprite_pos は
    現在の縦スクロール量を Y に加算して補正する(この値は vdp_set_vscroll が保持)。 */
 void vdp_set_vscroll(u8 v);                 /* R#23 = v(縦スクロール)。0で無効化。 */
+extern u8 g_vscroll;                        /* 現在の縦スクロール量(vdp_set_vscroll が保持)。
+                                               ★entity.c の asm と raster.c(分割行の VRAM 行補正)が参照する。 */
 void vdp_set_hscroll(u8 coarse, u8 fine);   /* R#26=coarse(8px単位)/R#27=fine(0-7)。蛇行はスプライト非影響。 */
 
 /* 表示ページ(SCREEN5: 0/1)。R#2。スプライトテーブルは page0末尾に居るので、縦スクロールする

@@ -18,7 +18,8 @@
 #include "assets_data.h"   /* 自動生成: ship_ops_off/len, ship_hull/bowcnt/bowyb, SHIP_OPS_RAM_MAX, ASSET_BANK */
 #include "hotcode.h"       /* ent_resolve_collisions/aa_update/aa_collide のRAM実行ラッパ */
 #include "aa_hot.h"        /* AA状態(cam/curstage/aa_*)を hot.c と共有(公開=非static化) */
-#include "ramexec.h"       /* ★§4-3: ramx_use_ram/use_cart(ホット区間だけ常駐24KB=page1+page2をRAM実行化) */
+#include "ramexec.h"
+#include "raster.h"       /* ★§4-3: ramx_use_ram/use_cart(ホット区間だけ常駐24KB=page1+page2をRAM実行化) */
 #ifdef DEBUG_PROF
 #include "prof.h"
 #define PROF_CALL(grp, call) do { PROF_T0(_pt); call; PROF_ADD(grp, _pt); } while (0)
@@ -674,6 +675,21 @@ u8 stage_update(void) {
        画面最上部のHUDは最もラスタ競合しやすく、重い ent_draw_all の後に書くと
        ラスタが既に上端を通過→R#23とズレて1px上下振動する(旧版で残っていた不具合)。 */
     hud_draw(g_score, g_lives);
+
+#ifdef DEBUG_RASTER
+    /* ★疎通デモ: 画面中央(行106)でパレット1(海の中間色)を赤に差し替える。
+       成功なら上下で海の色が変わって見える＝R#19/FH の割込み基盤が効いている証拠。
+       ・パレットは書き換えっぱなしだと次フレームまで赤が残るので、line=0(=VBLANK適用)で通常色へ戻す。
+         これで「1フレームに複数の分割を連鎖させる」経路も同時に検証できる。
+       ・R#23 確定(hud_draw の直前)の後に仕込むこと(分割行は VRAM 行 0 起点＝縦スクロール量を足すため)。 */
+    g_ras[0].line = 0;   /* 0=VBLANK中に適用＝フレーム先頭の状態 */
+    g_ras[0].reg  = RAS_NOREG;
+    g_ras[0].pidx = 1;  g_ras[0].pr = 1; g_ras[0].pg = 4; g_ras[0].pb = 5;   /* 通常の海(中) */
+    g_ras[1].line = 106;
+    g_ras[1].reg  = RAS_NOREG;
+    g_ras[1].pidx = 1;  g_ras[1].pr = 7; g_ras[1].pg = 0; g_ras[1].pb = 0;   /* 赤 */
+    raster_arm(2);
+#endif
 
     g_rage = (phase == 1 && ent_live_turrets() <= 1) ? 1 : 0;   /* ★最後の主砲=レイジ(全発砲が速射) */
 
