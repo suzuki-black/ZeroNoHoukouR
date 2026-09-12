@@ -109,6 +109,102 @@ static u16 time_hmmm(void) {
     return tmr_read();
 }
 
+/* ===== (4) R800 のハード乗算 MULUB/MULUW の検証(★C アフィン変形ボスのスパイク) =====
+   ★sdasz80 は mulub/muluw のニモニックを知らない(実測: "mnemonic error")。**生バイトで出す**。
+       MULUB A,r   = ED (C1 + 8*r)   … r は 0=B,1=C,2=D,3=E,4=H,5=L,7=A
+       MULUW HL,BC = ED C3
+       MULUW HL,SP = ED F3
+     (出典: Z80/R800 instruction set, MSX Assembly Page https://map.grauw.nl/resources/z80instr.php)
+   ★Z80 では ED の未定義オペコードは無視される(NOP2個相当)ので、答えが合わなければ
+     「R800 で動いていない(またはこの機械が turboR でない)」の判定にもなる。
+   ★結果の置き場(どのレジスタ対に何が入るか)は資料の記述がぶれていたので、
+     **実機/エミュで実測して確定する**のがこのスパイクの目的。
+     1234 * 5678 = 7,006,652 = 0x006A_EF7C なので、上位=0x006A / 下位=0xEF7C がどちらに入るかを見る。 */
+static u16 __at(PROF_RAM_ADDR + 0xB0) mul_res[6];
+/* [0]=MULUW後のHL / [1]=MULUW後のDE / [2]=MULUB後のHL / [3]下位バイト=MULUB後のA
+   [4]=MULUW×256 のtick / [5]=ソフト乗算×256 のtick(エミュ実測をスクリプトで読むため) */
+
+static void test_mul(void) {
+    __asm
+        ld   hl, #1234
+        ld   bc, #5678
+        .db  0xED, 0xC3          ; MULUW HL,BC
+        ld   (_mul_res), hl
+        ld   (_mul_res + 2), de
+        ld   a, #200
+        ld   b, #3
+        .db  0xED, 0xC1          ; MULUB A,B
+        ld   (_mul_res + 4), hl
+        ld   (_mul_res + 6), a
+    __endasm;
+}
+
+/* ★速度比較。**両方とも「オペランドをメモリから読んで掛ける」形に揃える**こと。
+   最初はハード側だけ即値ロードにし、ソフト側は C の `a*b` にしたら、**SDCC が乗算ごと
+   最適化で消して**しまい(結果を使っていなかった)、ソフトの方が速いという無意味な数字が出た。
+   生成された .asm を見て気づいた。**計測対象が消えていないかは必ず生成コードを見る。** */
+static volatile u16 mul_a, mul_b, mul_sink;   /* ★初期値付き static は避ける方針なので代入で入れる */
+
+/* MULUW を 256 回(8展開×32周)。★展開しすぎると jr が届かない(実測: 16展開=128B で
+   "Branching Range Exceeded")。 */
+static u16 time_mulw_hw(void) {
+    mul_a = 1234; mul_b = 5678;
+    tmr_reset();
+    __asm
+        ld   a, #32
+    00031$:
+        ld   hl, (_mul_a)
+        ld   bc, (_mul_b)
+        .db  0xED, 0xC3
+        ld   hl, (_mul_a)
+        ld   bc, (_mul_b)
+        .db  0xED, 0xC3
+        ld   hl, (_mul_a)
+        ld   bc, (_mul_b)
+        .db  0xED, 0xC3
+        ld   hl, (_mul_a)
+        ld   bc, (_mul_b)
+        .db  0xED, 0xC3
+        ld   hl, (_mul_a)
+        ld   bc, (_mul_b)
+        .db  0xED, 0xC3
+        ld   hl, (_mul_a)
+        ld   bc, (_mul_b)
+        .db  0xED, 0xC3
+        ld   hl, (_mul_a)
+        ld   bc, (_mul_b)
+        .db  0xED, 0xC3
+        ld   hl, (_mul_a)
+        ld   bc, (_mul_b)
+        .db  0xED, 0xC3
+        dec  a
+        jr   nz, 00031$
+    __endasm;
+    return tmr_read();
+}
+
+/* 比較用: SDCC の u16*u16(__mulint 相当)を同じ 256 回。
+   ★アフィン変形で実際に要るのはこの精度なので、これが正しい比較対象。
+   ★結果を volatile へ書き出して最適化で消えないようにする。 */
+static u16 time_mulw_sw(void) {
+    u8  i;
+    u16 s = 0;
+    mul_a = 1234; mul_b = 5678;
+    tmr_reset();
+    for (i = 0; i < 32; i++) {
+        s = (u16)(s + (u16)(mul_a * mul_b));
+        s = (u16)(s + (u16)(mul_a * mul_b));
+        s = (u16)(s + (u16)(mul_a * mul_b));
+        s = (u16)(s + (u16)(mul_a * mul_b));
+        s = (u16)(s + (u16)(mul_a * mul_b));
+        s = (u16)(s + (u16)(mul_a * mul_b));
+        s = (u16)(s + (u16)(mul_a * mul_b));
+        s = (u16)(s + (u16)(mul_a * mul_b));
+    }
+    mul_sink = s;
+    return tmr_read();
+}
+
 /* ===== 表示ヘルパ(u16→10進, ラベル前置) ===== */
 static char __at(PROF_RAM_ADDR + 0x80) pbuf[24];   /* 表示整形バッファ(高位フリー帯) */
 static char hxd(u8 n) { return (char)(n < 10 ? '0' + n : 'A' + (n - 10)); }
@@ -163,7 +259,19 @@ static void selftest(void) {
     { u8 ps = PSLOT;   /* A8 / page1スロット / page3(RAM)スロット / 0 */
       put_hex4(16, 78, "A8/P1/P3 ", ps, (u8)((ps >> 2) & 3), (u8)((ps >> 6) & 3), 0); }
     put_hex4(16, 86, "MAP0-3=  ", MAPSEG0, MAPSEG1, MAPSEG2, MAPSEG3);
-    vdp_text(16, 98, 8, 0, "PRESS TRIGGER");
+    /* ★R800 ハード乗算の検証(★C アフィン変形ボスのスパイク)。
+       1234*5678 = 0x006A_EF7C。MULUW の上位/下位がどのレジスタ対に入るかを実機で確定する。
+       200*3 = 0x0258(MULUB)。Z80 なら ED 未定義=無視されるので答えが合わない。 */
+    test_mul();
+    put_hex4(16, 106, "MULUW HL/DE ", (u8)(mul_res[0] >> 8), (u8)mul_res[0],
+                                      (u8)(mul_res[1] >> 8), (u8)mul_res[1]);
+    put_hex4(16, 114, "MULUB HL/A  ", (u8)(mul_res[2] >> 8), (u8)mul_res[2],
+                                      (u8)mul_res[3], 0);
+    mul_res[4] = time_mulw_hw();
+    mul_res[5] = time_mulw_sw();
+    put_num(16, 122, "MUL256 HW T ", mul_res[4]);
+    put_num(16, 130, "MUL256 SW T ", mul_res[5]);
+    vdp_text(16, 142, 8, 0, "PRESS TRIGGER");
 }
 
 /* ===== 用件1: 区間別µsの凍結表示 ===== */
