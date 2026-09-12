@@ -688,22 +688,28 @@ u8 stage_update(void) {
         }
         return SCENE_NONE;
     }
-    /* ★宙返り(ROADMAP P2 項目9): **B＋上**で発動。上に引き起こす操作なので自然で、かつ
-       クラッシュ(B単押し)と排他にできる。回数制ではなくクールダウン制。 */
-    if ((g_input_edge & INP_TRIGB) && (g_input & INP_UP)) {
-        /* ★上を押しながらの B は**常に**宙返りの操作。クールダウン中で出せなくても、
-           ここで else へ落としてはいけない(落とすとクラッシュが暴発する。実際に踏んだ)。 */
+    /* ★B の割り当て(ROADMAP P2 項目9)。**トリガAを押しているかどうかで振り分ける**:
+         A＋B(撃ちながら B) … 宙返り。実戦では指はほぼ常にAを押しているので、
+                              **撃ちっぱなしの指のまま反射で出せる**＝頻繁に使う技に合う。
+         B単押し(撃っていない)… メガクラッシュ。撃つのを一瞬やめる＝意図的な操作になり、
+                              「溜めて使うボム」の性格に合う。
+       ★上方向との組合せ(B＋上)は却下。上は移動なので、避けたい場面で突っ込む操作になる。
+       ★★排他は**入力の形で先に振り分け**、可否は内側で見る。可否で else へ落とすと、
+         クールダウン中の A＋B がクラッシュを暴発させる(実際に踏んだ。苦労と教訓 §14-6)。 */
+    if (g_input_edge & INP_TRIGB) {
+      if (g_input & INP_TRIG) {                /* A＋B = 宙返り */
         if (!g_loop_t && !g_loop_cd) {
             g_loop_t = LOOP_FRAMES;
             g_loop_cd = LOOP_CD;
-            sfx(0, SFX_SHOT);          /* 引き起こしの合図(専用音は後で) */
+            sfx(0, SFX_SHOT);                  /* 引き起こしの合図(専用音は後で) */
         }
-    } else if ((g_input_edge & INP_TRIGB) && g_crush) {
+      } else if (g_crush) {                    /* B単押し = メガクラッシュ */
         g_crush--;
         g_crush_t = CRUSH_FRAMES;
         bgm_stop();                      /* ★BGMを止めて雷鳴だけを聴かせる(バンキング=ホット区間の外) */
         sfx(2, SFX_THUNDER);             /* noise C の雷鳴(鋭い炸裂→深い轟き) */
         return SCENE_NONE;
+      }
     }
     if (g_loop_cd) g_loop_cd--;
     if (sfresh) { sfresh--; g_shake = 0; g_hitstop = 0; }   /* 出だしの誤揺れを抑止(上記) */
