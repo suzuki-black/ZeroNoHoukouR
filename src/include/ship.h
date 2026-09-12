@@ -32,7 +32,7 @@
 
 /* ship_render の引数退避(常駐→バンク)。banked_entry がこれを読んで描画する。 */
 typedef struct {
-    u8 kind, hull, bow_cnt;
+    u8 kind, hull, bow_cnt;   /* ★hull は bank19(gen_planes)呼び出し時は面番号の受け渡しにも使う */
     u16 bow_yb;
     u8 aag_tbl;
     const u8 *aagp, *ops, *ops2;

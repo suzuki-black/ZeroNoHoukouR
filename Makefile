@@ -14,6 +14,8 @@ endif
 #    未指定(通常ビルド)では -DDEBUG_FPS が付かず、FPS関連コードは #ifdef で完全に消える
 #    (=リリースはカウント負荷/スプライトslot予約ゼロ)。切替時は必ず make clean(フラグ変更は
 #    ソース不変=makeが再コンパイルを検知しないため)。
+#    ★演出(ラスタ分割・CPU弾幕・パレットエンジン)は実機確認済みのため常時オン＝フラグは持たない。
+#      ここに残すのは計測/切り分け用のスイッチだけ。
 DEFS =
 ifdef DEBUG_FPS
   DEFS += -DDEBUG_FPS
@@ -22,21 +24,6 @@ endif
 #    page1 のみRAM実行=旧挙動のROMを作り、page2 も足した版との差分を実機で測るためのスイッチ。
 ifdef NO_RAMX2
   DEFS += -DNO_RAMX2
-endif
-# ── ラスタ分割の疎通デモ(画面中央から下だけ海の色を変える): make clean && make DEBUG_RASTER=1
-#    R#19/FH の割込み基盤(raster.c)が実際に効いているかを目で確認するための一時デモ。
-ifdef DEBUG_RASTER
-  DEFS += -DDEBUG_RASTER
-endif
-# ── パレットエンジン(設計メモ §2-A: 被弾の赤染め/撃破の白フラッシュ/海のシマー):
-#    make clean && make DEBUG_PAL=1
-ifdef DEBUG_PAL
-  DEFS += -DDEBUG_PAL
-endif
-# ── スプライト分割の疎通デモ(下帯に32枚を追加表示=画面上の総数が32枚を超える):
-#    make clean && make DEBUG_SPRSPLIT=1
-ifdef DEBUG_SPRSPLIT
-  DEFS += -DDEBUG_SPRSPLIT
 endif
 # ── 実機µs計測(S1990タイマ自己診断): make clean && make DEBUG_PROF=1
 ifdef DEBUG_PROF
@@ -107,6 +94,7 @@ ROMPACK_BANKS = --bank 4 assets/cards.bin \
                 --bank 16 $(BUILD)/ship_render.ihx \
                 --bank 17 $(BUILD)/hot.bin \
                 --bank 18 $(BUILD)/ovl.bin \
+                --bank 19 $(BUILD)/gen_planes.ihx \
                 --asset 9 assets/title.yjk
 
 .PHONY: all rom clean run
@@ -202,6 +190,12 @@ $(BUILD)/ship_render.ihx: $(SRC)/banked/ship_render.c $(HDRS) $(BUILD)/bankhead.
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/ship_render.rel $(BUILD)/resident_syms.rel -o $@
 
+# 冷たい手続き生成(戦闘機8方向)を bank19 へ。常駐リクレイムのため sprites.c から移設。
+$(BUILD)/gen_planes.ihx: $(SRC)/banked/gen_planes.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/gen_planes.c -o $(BUILD)/gen_planes.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
+	     $(BUILD)/bankhead.rel $(BUILD)/gen_planes.rel $(BUILD)/resident_syms.rel -o $@
+
 # ── RAM実行モジュール(hot.c) ──
 # 常駐が予約した hot_ram[] の実番地(rom.noi の _hot_ram)へ --code-loc してリンク→ ihx→bin へ変換。
 # rompack は .bin を bank17 先頭から配置し、起動時 hot_load() が hot_ram[] へ転写する。
@@ -242,7 +236,7 @@ $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
 	 fi; \
 	 echo "  ovl.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"
 
-BANK_IHX = $(BUILD)/ovl.bin \
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 

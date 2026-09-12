@@ -11,6 +11,7 @@
 #include "scroll.h"
 #include "entity.h"   /* ent_player_hit: 被弾の共通処理 */
 #include "player.h"   /* g_player_x/y */
+#include "sprites.h"
 
 /* 画面外カリングの範囲(1/16 px)。16px ぶん外へ出たら捨てる。 */
 #define CB_XMIN (-16 * 16)
@@ -123,4 +124,36 @@ void ovl_curtain_collide(void) {
         ent_player_hit(px, py);
         return;
     }
+}
+
+/* ★戦艦フェーズの弾幕斉射: 生存中の主砲から定期的にリングを撒く(設計メモ §4-3
+   「ボスの発砲を CPU 弾で密度アップ」)。発生源をゲームの砲台に結び付けることで、
+   弾幕が飾りではなく戦闘の一部になる。海フェーズ(戦闘機が主役)では撒かない。 */
+#define CURTAIN_VOLLEY_IV 48   /* 斉射の間隔(フレーム)。30fps で約1.6秒に1回 */
+#define CURTAIN_RING_N    12   /* 1斉射あたりの弾数(32分割方向へ等間隔) */
+void ovl_curtain_volley(u8 active) {
+    static u8 vt, vang;
+    u8 k;
+    if (!active) return;
+    if (++vt < CURTAIN_VOLLEY_IV) return;
+    vt = 0;
+    for (k = 0; k < ENT_MAX; k++) {
+        Entity *e = ent_at(k);
+        if (!e->active || e->type != ET_TURRET || e->hidden) continue;
+        if (e->y < 8 || e->y > 180) continue;             /* 画面内に居る砲だけが撃つ */
+        ovl_curtain_ring((s16)(e->x + 8), (s16)(e->y + 8), CURTAIN_RING_N, 6, vang, 11);
+        vang = (u8)(vang + 5);                            /* 毎回少し回して単調さを避ける */
+        return;
+    }
+}
+
+/* ★予約slotへの流し込み。ent_draw_all が使い終えた次のslotから帯ごとに描く。
+   色表を直書きするので entity.c の色キャッシュを捨てること。 */
+void ovl_curtain_present(u8 nper, u8 line) {
+    u8 base = g_spr_used, n;
+    if (base >= 32) return;
+    n = (u8)(32 - base);
+    if (n > nper) n = nper;
+    ovl_curtain_draw(base, n, line);
+    ent_spr_cache_inval(base);
 }

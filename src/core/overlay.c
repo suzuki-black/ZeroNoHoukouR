@@ -72,3 +72,5 @@ void curtain_draw(u8 base, u8 nper, u8 line) __naked {
 void curtain_collide(void) __naked { __asm jp 0xA009 __endasm; }
 void pal_update(void) __naked      { __asm jp 0xA00C __endasm; }
 void pal_reset(void) __naked       { __asm jp 0xA00F __endasm; }
+void curtain_volley(u8 active) __naked { (void)active; __asm jp 0xA012 __endasm; }
+void curtain_present(u8 nper, u8 line) __naked { (void)nper; (void)line; __asm jp 0xA015 __endasm; }

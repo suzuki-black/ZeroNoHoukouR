@@ -37,6 +37,8 @@
 #define OVL_SLOT_CURTAIN_COLLIDE 3
 #define OVL_SLOT_PAL_UPDATE      4
 #define OVL_SLOT_PAL_RESET       5
+#define OVL_SLOT_CURTAIN_VOLLEY  6
+#define OVL_SLOT_CURTAIN_PRESENT 7
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -49,5 +51,7 @@ void overlay_load(u8 bank);
 /* ---- オーバレイ入口(ホット区間の中でのみ呼べる。g_ovl_ok も見ること) ---- */
 void pal_update(void);   /* パレットエンジン(設計メモ §2-A)。毎フレーム16色を計算して差分書き */
 void pal_reset(void);    /* 面開始/再開: 状態を捨て次フレームに全書き直し */
+void curtain_volley(u8 active);            /* 戦艦の主砲からの弾幕斉射(active=0 で何もしない) */
+void curtain_present(u8 nper, u8 line);    /* 予約slotへ帯ごとに流し込む */
 
 #endif /* OVERLAY_H */

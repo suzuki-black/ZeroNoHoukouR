@@ -22,14 +22,14 @@
 #include "raster.h"
 #include "curtain.h"
 #include "overlay.h"
-#ifdef DEBUG_PAL
 static u8 pal_need_reset;   /* 面開始/再開でパレット状態を捨てる(実際の reset はホット区間で) */
-#endif
-#ifdef DEBUG_SPRSPLIT
-#define SPRSPLIT_LINE 96   /* 分割行(この行から下がセットB) */
-#define SPRX_N 12          /* 1帯あたりの弾幕表示枚数。この数だけ g_spr_limit を下げて枠を予約する
-                              (2帯＝同時に最大24発。増やすほどゲーム本来のスプライトが減る) */
-#endif       /* ★§4-3: ramx_use_ram/use_cart(ホット区間だけ常駐24KB=page1+page2をRAM実行化) */
+
+/* ★演出の定数(ラスタ分割＋CPU弾幕)。 */
+#define CURTAIN_SPLIT_LINE 96   /* スプライト表の分割行(この行から下がセットB) */
+#define CURTAIN_SLOTS      12   /* 1帯あたりの弾幕表示枚数。この数だけ g_spr_limit を下げて枠を予約する
+                                   (2帯＝同時に最大24発。増やすほどゲーム本来のスプライトが減る) */
+#define CURTAIN_VOLLEY_IV  48   /* 斉射の間隔(フレーム)。30fps で約1.6秒に1回 */
+#define CURTAIN_RING_N     12   /* 1斉射あたりの弾数(32分割方向へ等間隔) */
 #ifdef DEBUG_PROF
 #include "prof.h"
 #define PROF_CALL(grp, call) do { PROF_T0(_pt); call; PROF_ADD(grp, _pt); } while (0)
@@ -368,19 +368,15 @@ static void stage_build(void) {
     sprites_load(curstage);   /* ★静的パターン＋この面の戦闘機8方向×3サイズを生成 */
     hud_init();  /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
     ent_reset();
-#ifdef DEBUG_SPRSPLIT
     /* ★ent_reset の後に置くこと: ent_reset が g_spr_limit を既定(32)へ戻すので、先に書くと消される。 */
     vdp_sprite_setb_init(11);   /* セットBの色表を用意し全枚を画面外へ(1回だけ) */
     g_spr_dual = 1;             /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない */
-    g_spr_limit = 32 - SPRX_N;  /* ★弾幕の枠を予約(これが無いと混雑時にゲーム側が使い切る) */
+    g_spr_limit = 32 - CURTAIN_SLOTS;  /* ★弾幕の枠を予約(これが無いと混雑時にゲーム側が使い切る) */
     curtain_reset();
-#endif
     overlay_load(OVL_BANK);     /* ★演出コードを seg5 上位8KB(=ホット区間の 0xA000)へ複製。
                                    page2 が cart のこの文脈でのみ実行できる(overlay.h の制約4)。
                                    ★ifdef の外: パレットエンジン等 分割を使わない演出もこれを要る。 */
-#ifdef DEBUG_PAL
     pal_need_reset = 1;         /* 実際の reset はホット区間の中で(オーバレイは 0xA000=RAM時のみ有効) */
-#endif
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
 
@@ -614,26 +610,11 @@ static u8 defeat_update(void) {
 static u8 vcnt;   /* 縦スクロール速度の位相(5コマ周期)。phase0=ゆっくり / phase1=高速(蛇行)。 */
 #define SEA0_DIV 3    /* phase0(海モード)で海うねりを塗る間隔(3=3フレームに1回)。実機turboRに合わせ微調整可。 */
 static u8 seatick;    /* phase0 海間引き用カウンタ。 */
-#ifdef DEBUG_SPRSPLIT
-/* ★CPU弾幕の描画: ent_draw_all が使い終えた次のslotから、帯ごとに弾を流し込む。
-   セットA には上帯、セットB には下帯。同じslot番号に別内容を置けるのは、どちらも
-   分割線をまたがない弾だけを選んでいるため(またぐと境界で化ける＝split guide の注意点)。
-   色表を直書きするので entity.c の色キャッシュを捨てること。 */
-static void curtain_present(void) {
-    u8 base = g_spr_used;
-    if (!g_ovl_ok || base >= 32) return;
-    { u8 n = (u8)(32 - base); if (n > SPRX_N) n = SPRX_N;
-      curtain_draw(base, n, SPRSPLIT_LINE); }
-    ent_spr_cache_inval(base);
-}
-#endif
-
 u8 stage_update(void) {
     u8 vstep;
     if (g_view) { g_view = 0; return SC_TITLE; }   /* ★ビューア表示(カード/結果)はstage_initで完結→タイトルへ戻る */
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
     if (sfresh) { sfresh--; g_shake = 0; g_hitstop = 0; }   /* 出だしの誤揺れを抑止(上記) */
-#ifdef DEBUG_PAL
     /* ★ヒットストップ中もパレットだけは動かす。凍結の間ホット区間ごと止めると、被弾の赤染めが
        凍結明け(実測で7フレーム後)にずれて出て、被弾と演出が繋がって見えない。
        凍結＋同時フラッシュが本来の手応え。オーバレイ呼び出しのため page2 を一瞬 RAM にする。 */
@@ -643,7 +624,6 @@ u8 stage_update(void) {
         pal_update();
         ramx_use_cart();
     }
-#endif
     if (g_hitstop) { g_hitstop--; return SCENE_NONE; }   /* ★ヒットストップ=数フレーム凍結(手応え) */
 #ifdef DEBUG_FPS
     /* ★デバッグ(FPSビルド): M(TRIGB)で有用なプリセットを巡回。各モードのFPSで海モードの重さの内訳を切り分ける。
@@ -661,7 +641,6 @@ u8 stage_update(void) {
        区間の出口(fire_draw後 と 全早期return経路)で必ず ramx_use_cart() に戻す。 */
     ramx_use_ram();
 
-#ifdef DEBUG_PAL
     /* ★パレットエンジン(設計メモ §2-A)。ホット区間の**先頭**で呼ぶ:
        パレット書換は即座に画面へ反映されるので、ラスタが画面上端に近いうちに書き終えたい
        (遅いと画面の途中から色が変わって継ぎ目が見える)。16色全書換でも実測単価から 0.32ms。 */
@@ -669,7 +648,6 @@ u8 stage_update(void) {
         if (pal_need_reset) { pal_need_reset = 0; pal_reset(); }
         pal_update();
     }
-#endif
 
     if (phase == 0) {
         /* 海のみ: ゆっくり前進。★毎フレーム1pxで動かす=停止フレームを作らない(整数スクロールで
@@ -734,30 +712,14 @@ u8 stage_update(void) {
        ラスタが既に上端を通過→R#23とズレて1px上下振動する(旧版で残っていた不具合)。 */
     hud_draw(g_score, g_lives);
 
-#ifdef DEBUG_SPRSPLIT
-    /* ★スプライト分割をゲームに統合: 行 SPRSPLIT_LINE で R#5 をセットBへ切替える。
+    /* ★スプライト分割をゲームに統合: 行 CURTAIN_SPLIT_LINE で R#5 をセットBへ切替える。
        両セットには ent_draw_all の内容が丸ごとミラーされている(g_spr_dual)ので、
        分割しても見た目は変わらない。その上で「余ったスロット」を帯ごとに別の弾で埋める(下の追加描画)。 */
     g_ras[0].line = 0;                 /* フレーム先頭=セットAへ戻す */
     g_ras[0].reg = 5; g_ras[0].val = SPR_R5_A; g_ras[0].pidx = RAS_NOPAL;
-    g_ras[1].line = SPRSPLIT_LINE;     /* ここから下=セットB */
+    g_ras[1].line = CURTAIN_SPLIT_LINE;     /* ここから下=セットB */
     g_ras[1].reg = 5; g_ras[1].val = SPR_R5_B; g_ras[1].pidx = RAS_NOPAL;
     raster_arm(2);
-#endif
-#ifdef DEBUG_RASTER
-    /* ★疎通デモ: 画面中央(行106)でパレット1(海の中間色)を赤に差し替える。
-       成功なら上下で海の色が変わって見える＝R#19/FH の割込み基盤が効いている証拠。
-       ・パレットは書き換えっぱなしだと次フレームまで赤が残るので、line=0(=VBLANK適用)で通常色へ戻す。
-         これで「1フレームに複数の分割を連鎖させる」経路も同時に検証できる。
-       ・R#23 確定(hud_draw の直前)の後に仕込むこと(分割行は VRAM 行 0 起点＝縦スクロール量を足すため)。 */
-    g_ras[0].line = 0;   /* 0=VBLANK中に適用＝フレーム先頭の状態 */
-    g_ras[0].reg  = RAS_NOREG;
-    g_ras[0].pidx = 1;  g_ras[0].pr = 1; g_ras[0].pg = 4; g_ras[0].pb = 5;   /* 通常の海(中) */
-    g_ras[1].line = 106;
-    g_ras[1].reg  = RAS_NOREG;
-    g_ras[1].pidx = 1;  g_ras[1].pr = 7; g_ras[1].pg = 0; g_ras[1].pb = 0;   /* 赤 */
-    raster_arm(2);
-#endif
 
     g_rage = (phase == 1 && ent_live_turrets() <= 1) ? 1 : 0;   /* ★最後の主砲=レイジ(全発砲が速射) */
 
@@ -786,18 +748,13 @@ u8 stage_update(void) {
       if (sea_on) sea_step();  if (DBG_ON(4)) PROF_CALL(PF_UPDATE, ent_update_all());
       if (sea_on) sea_step();  if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_update());
       if (sea_on) sea_step();  if (DBG_ON(4)) PROF_CALL(PF_UPDATE, special_update());
-#ifdef DEBUG_SPRSPLIT
-      /* ★CPU弾幕の更新。VDP に一切触れない純RAM演算なので、VDPコマンドの裏(§4-1)に置ける。
-         発生源は画面上部中央から16方向リングを定期的に撒くだけの仮実装(次段でボスの砲へ繋ぐ)。 */
+      /* ★CPU弾幕の更新＋斉射。VDP に一切触れない純RAM演算なので、VDPコマンドの裏(§4-1)に置ける。 */
       if (g_ovl_ok) {          /* ★オーバレイ未読込(g_ramx2_ok=0 の機械)では 0xA000 はスワップ窓＝呼ぶと暴走 */
           curtain_update();
-          { static u8 ct; if ((++ct & 15) == 0) curtain_ring(128, 24, 12, 6, (u8)(ct >> 4), 11); }
+          curtain_volley((u8)(phase == 1));   /* 戦艦フェーズのみ斉射 */
       }
-#endif
       if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
-#ifdef DEBUG_SPRSPLIT
       if (g_ovl_ok && DBG_ON(8)) curtain_collide();   /* ★CPU弾幕の被弾(常駐 ent_player_hit に集約) */
-#endif
       if (sea_on) { while (sea_step()) { } vdp_cmd_wait(); }   /* ★aa_collide(burn=VDPコマンド)前に海完全完了 */
       if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_collide());
     }
@@ -805,9 +762,7 @@ u8 stage_update(void) {
     { PROF_T0(_pd);
 #endif
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
-#ifdef DEBUG_SPRSPLIT
-    curtain_present();                   /* ★CPU弾幕を予約slotへ帯ごとに流し込む */
-#endif
+    curtain_present(CURTAIN_SLOTS, CURTAIN_SPLIT_LINE);   /* ★CPU弾幕を予約slotへ帯ごとに流し込む */
 #ifdef DEBUG_PROF
     PROF_ADD(PF_DRAW, _pd); }
 #endif
