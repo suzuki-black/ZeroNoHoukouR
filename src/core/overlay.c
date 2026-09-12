@@ -97,3 +97,4 @@ void clear_enemy_bullets(void) __naked { __asm jp 0xA01B __endasm; }
 void crush_wave_init(void) __naked { __asm jp 0xA01E __endasm; }
 void crush_wave(u8 step) __naked { (void)step; __asm jp 0xA021 __endasm; }
 void crush_wave_off(void) __naked { __asm jp 0xA024 __endasm; }
+s16 crush_wave_y(u8 step) __naked { (void)step; __asm jp 0xA027 __endasm; }

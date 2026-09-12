@@ -7,17 +7,15 @@
 #include "entity.h"   /* g_spr_base(エンティティ描画の開始スロット) */
 #include "gamestate.h" /* g_crush: メガクラッシュ残数 */
 
-void hud_init(void) {
-    u8 pat[32];
-    u8 d, r;
-    for (d = 0; d < 10; d++) {
-        const u8 *g = vdp_glyph((u8)('0' + d));   /* 自前フォントの数字グリフ */
-        for (r = 0; r < 8;  r++) pat[r] = g[r];   /* 左列 rows0-7 = 8x8 グリフ */
-        for (r = 8; r < 32; r++) pat[r] = 0;      /* 左列下半分＋右列は空 */
-        vdp_sprite_pattern(SPR_DIGIT0 + d * 4, pat);
-    }
-    /* 色は固定(位置だけ毎フレーム更新): スコア=白 / 残機アイコン=零戦の緑 / 残機数=黄 */
-    for (d = 0; d < 5; d++) vdp_sprite_color(d, 15);
+static void crush_pattern(u8 bars);
+
+/* HUD が VRAM に持っているもの(色表＋ボム棒のパターン)を置き直す。
+   ★hud_init だけでなく、**他の用途に奪われた後の復旧**にも呼ぶ: 津波は32枚すべての色表と
+     ボム棒のパターン枠(SPR_CRUSH=SPR_WAVE4)を自前の水で上書きする。 */
+void hud_colors(void) {
+    u8 d;
+    if (g_crush) crush_pattern((u8)(g_crush <= 3 ? g_crush : 1));   /* 棒のパターンを描き直す */
+    for (d = 0; d < 5; d++) vdp_sprite_color(d, 15);   /* スコア=白 */
     vdp_sprite_color(5, 3);    /* 残機アイコン=緑(零戦シルエット) */
     vdp_sprite_color(6, 11);   /* 残機数=黄 */
     /* ★ボム(メガクラッシュ)残数(画面下)。棒は**行別カラー**で「熱い棒」に見せる
@@ -29,6 +27,18 @@ void hud_init(void) {
 #ifdef DEBUG_FPS
     { u8 sl; for (sl = 9; sl < HUD_SLOTS; sl++) vdp_sprite_color(sl, 13); }   /* FPS2桁＋mask値2桁=ほぼ黒(視認性) */
 #endif
+}
+
+void hud_init(void) {
+    u8 pat[32];
+    u8 d, r;
+    for (d = 0; d < 10; d++) {
+        const u8 *g = vdp_glyph((u8)('0' + d));   /* 自前フォントの数字グリフ */
+        for (r = 0; r < 8;  r++) pat[r] = g[r];   /* 左列 rows0-7 = 8x8 グリフ */
+        for (r = 8; r < 32; r++) pat[r] = 0;      /* 左列下半分＋右列は空 */
+        vdp_sprite_pattern(SPR_DIGIT0 + d * 4, pat);
+    }
+    hud_colors();
     g_spr_base = HUD_SLOTS;   /* 以降エンティティは slot(HUD_SLOTS) から詰める */
 }
 

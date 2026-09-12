@@ -44,6 +44,7 @@
 #define OVL_SLOT_WAVE_INIT      10
 #define OVL_SLOT_WAVE           11
 #define OVL_SLOT_WAVE_OFF       12
+#define OVL_SLOT_WAVE_Y         13
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -63,5 +64,6 @@ void clear_enemy_bullets(void);            /* メガクラッシュ: 画面上�
 void crush_wave_init(void);                /* メガクラッシュ: 津波のコマと色をVRAMへ */
 void crush_wave(u8 step);                  /* メガクラッシュ: 津波を1フレームぶん置く */
 void crush_wave_off(void);                 /* メガクラッシュ: 津波スプライトを片付ける */
+s16  crush_wave_y(u8 step);                /* メガクラッシュ: その step の波頭 画面Y(等加速度) */
 
 #endif /* OVERLAY_H */

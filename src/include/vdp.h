@@ -80,6 +80,9 @@ void vdp_sprites(u8 on);                             /* スプライト機能ON/
 void vdp_sprite_pattern(u8 patnum, const u8 *d32);   /* 16x16=32B をパターン patnum へ(patnumは4の倍数) */
 void vdp_sprite_color(u8 slot, u8 color);            /* slot の色表16行を単色 color に */
 void vdp_sprite_color_tab(u8 slot, const u8 *tab16); /* slot の色表を行別に(陰影)。row0=上 */
+/* ★スプライト拡大(R#1 bit0=MAG)。16x16 と併せて 1枚32x32ドットになる=8枚で画面幅を覆える。
+   全スプライトに効くので、ONにする区間では他のスプライトを出さないこと(津波演出でのみ使用)。 */
+void vdp_sprite_mag(u8 on);
 void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum); /* slot の属性(Y=y-1,X,pattern)を更新 */
 void vdp_sprite_hide_from(u8 slot);                  /* slot に停止マーカ(Y=208)=以降非表示 */
 /* ★A6: SAT属性をRAM鏡へ溜め→一括バースト(ent_draw_all専用=ポートアクセス削減)。色表は別テーブルで従来通り。 */

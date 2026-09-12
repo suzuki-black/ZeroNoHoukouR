@@ -409,6 +409,21 @@ static void set_sprite16(void) {
     __endasm;
 }
 
+/* ★スプライト拡大(R#1 bit0=MAG)の ON/OFF。SI(16x16)と併せると **1枚32x32ドット** になる
+   (MSX2 Technical Handbook ch4: 「16x16 dots ＋ 2X 拡大 = 32x32」)。
+   ★これが「1走査線に8枚」の制限で画面幅を埋める唯一の手: 制限は**枚数**なので、
+     32px 幅なら 8枚 × 32 = 256px = 画面幅ちょうどを1走査線で覆える。
+     さらに段を32px間隔で積めば、どの走査線も常にちょうど8枚のまま全画面を水で埋められる。
+   ★★全スプライトに効く(画面の途中で R#1 を差し替える技は Grauw の split guide にも無く、
+     実機依存の地雷)。使う側は「その区間は他のスプライトを一切出さない」こと。
+   ★他ビット(画面ON/割込み許可/画面モード)を落とさないよう RG1SAV(0xF3E0) 経由で read-modify-write。 */
+void vdp_sprite_mag(u8 on) {
+    volatile u8 *rg1 = (volatile u8 *)0xF3E0;   /* RG1SAV(R#1 ミラー) */
+    u8 v = on ? (u8)(*rg1 | 0x01) : (u8)(*rg1 & 0xFE);
+    *rg1 = v;
+    vdp_wreg(1, v);
+}
+
 /* ★スプライト機能の一括ON/OFF(R#8 bit1=SPD)。on=0でスプライトを完全停止=VDPが
    スプライト用フェッチを止め、コマンド帯域が回復(HMMMで+約30%, Grauw)。Y=216で隠すだけでは
    帯域は戻らない点に注意。重い一括blit(艦バッファB生成/カード等=スプライト不要な区間)で off にする。

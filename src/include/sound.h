@@ -19,6 +19,7 @@ enum {
     SFX_PHIT,   /* 自機被弾: 低い下降の痛み音(tone A)       */
     SFX_EFIRE,  /* 敵発砲: 静かな短いノイズ "プッ"(noise C) */
     SFX_THUNDER,/* ★メガクラッシュの雷鳴: 鋭い炸裂→深い轟きへ、うねりながら長く減衰(noise C) */
+    SFX_RUMBLE, /* ★津波の地鳴り: 最も深いノイズ。音量は g_rumble_lv で演出側が制御(noise C) */
     SFX_COUNT
 };
 
@@ -26,6 +27,8 @@ enum {
 #define SND_CH 3
 
 void sound_init(void);        /* PSG初期化 + H.TIMI ISR 設置。boot時1回 */
+extern u8 g_rumble_lv;        /* ★SFX_RUMBLE の音量(0..15)。持続長から作ると打ち直しで音量が
+                                 振り出しに戻り「ゴゴゴゴ」が育たないので、演出側が直接入れる */
 void sfx(u8 ch, u8 type);     /* ch(0..2) に効果音 type をトリガ(同chは後勝ち。破壊音は保護) */
 
 /* ---- BGM(データバンクの曲データを ISR で再生) ---- */

@@ -21,6 +21,7 @@ extern u8  g_dbgmask; /* ★M(TRIGB)で0→7巡回。bit0=海停止/bit1=AI停�
 #endif
 
 void hud_init(void);                 /* 数字パターン投入＋HUD色＋g_spr_base 確保 */
+void hud_colors(void);               /* HUDスロットの色だけ置き直す(色表を他用途に使った後の復旧) */
 void hud_draw(u16 score, u8 lives);  /* スコア5桁＋残機を HUD スロットへ(毎フレーム) */
 
 #endif /* HUD_H */

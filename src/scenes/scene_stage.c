@@ -630,7 +630,22 @@ u8 stage_update(void) {
         if (g_crush_t == CRUSH_WIPE) curtain_reset();   /* CPU弾幕は別プール(常駐) */
         /* ★止めた曲を**続きから**再開する(bgm_play だと毎回イントロから鳴り直す)。 */
         if (g_crush_t == 0) bgm_resume();
-        hud_draw(g_score, g_lives);      /* 残数表示を止めない(発動直後に減った数を見せる) */
+        /* ★地鳴り「ゴゴゴゴゴーーー」: 低いノイズを打ち直し続け、画面(BG)を縦に揺らす。
+           揺れ幅は波が近づくほど大きくする(波の step から取る)。スプライトは g_vscroll 補正で
+           位置が打ち消されるので、揺れるのは海と艦＝「世界が鳴っている」絵になる。
+           ★R#23 はスプライトのY補正にも効くので、波を置く**前**に確定させること。 */
+        { u8 amp = 1;
+          g_rumble_lv = 3;                       /* 遠い地鳴り(稲妻の間) */
+          if (g_crush_t <= CRUSH_WAVE_T0) {      /* 波が来るほど強く・大きく */
+              u8 st = (u8)(CRUSH_WAVE_T0 - g_crush_t);
+              amp = (u8)(2 + (st >> 3)); if (amp > 6) amp = 6;
+              g_rumble_lv = (u8)(4 + st / 4);    if (g_rumble_lv > 15) g_rumble_lv = 15;
+          }
+          if ((g_crush_t & 15) == 0) sfx(2, SFX_RUMBLE);   /* 鳴り続けるよう定期的に打ち直す */
+          vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % (amp * 2 + 1)) - (s16)amp)); }
+        /* 残数表示は稲妻の間だけ出す(発動直後に減った数を見せる)。津波の間はスプライトが
+           拡大モードなので HUD を出すと巨大化して破綻する＝32枚すべてを波に明け渡す。 */
+        if (g_crush_t > CRUSH_WAVE_T0) hud_draw(g_score, g_lives);
         if (g_ovl_ok) {
             ramx_use_ram();
             if (pal_need_reset) { pal_need_reset = 0; pal_reset(); }
@@ -642,27 +657,25 @@ u8 stage_update(void) {
             if (g_crush_t == CRUSH_WIPE) clear_enemy_bullets();
             /* ★第1幕=稲妻を3回、別の形で走らせる(ガガガ)。描くたびに雷鳴を打ち直すので音も連打になる。
                描くフレームのパレットはわざと暗く(crush_lv=0)してあるので白い筋がはっきり出る。 */
-            if (g_crush_t == 88 || g_crush_t == 80 || g_crush_t == 72) {
+            if (g_crush_t == 72 || g_crush_t == 66 || g_crush_t == 60) {
                 crush_bolts(g_crush_t);
                 sfx(2, SFX_THUNDER);
             }
-            /* ★第2幕=津波。斜め一列のスプライト(slot16..31)が画面下から駆け上がる。
-               仕事は属性16枚の書換だけ＝ほぼ無料なので 1フレーム CRUSH_WAVE_DY px の
-               小刻みな動き(＝ドット単位で滑らか)にできる。 */
+            /* ★第2幕=津波。スプライト拡大(1枚32x32)で **8列×4段=32枚 = 画面幅256×厚み128px**
+               の水の壁が **加速しながら** 駆け上がる(ovl_crush.c)。
+               ★拡大は全スプライトに効くので、この区間は HUD も敵も出さない(32枚すべてを波が使う)。
+                 表示停止マーカ(Y=216)も残らない=波が途中で消えることも無い。 */
             if (g_crush_t <= CRUSH_WAVE_T0 && g_crush_t >= CRUSH_WAVE_T1) {
                 u8 step = (u8)(CRUSH_WAVE_T0 - g_crush_t);
-                if (step == 0) {
-                    crush_wave_init();
-                    sfx(2, SFX_THUNDER);   /* 波が立ち上がる轟き */
-                    /* ★表示停止マーカ(Y=216)が波より手前の slot に残っていると、VDP が
-                       そこで走査をやめて波が1枚も出ない。凍結中の敵で埋まっていない
-                       slot は「画面外へ置く」で埋めてマーカを消す。 */
-                    { u8 sl; for (sl = g_spr_used; sl < CRUSH_WAVE_SLOT; sl++)
-                          vdp_sprite_pos(sl, 0, 220, SPR_BLOCK); }
-                }
+                if (step == 0) crush_wave_init();
                 crush_wave(step);
             }
-            if (g_crush_t == 0) crush_wave_off();
+            if (g_crush_t == 0) {
+                g_rumble_lv = 0;         /* 地鳴りを止める */
+                crush_wave_off();        /* 拡大を戻し全枚を画面外へ */
+                hud_colors();            /* ★波が32枚ぶんの色表とボム棒の枠を奪ったので戻す */
+                ent_spr_cache_inval(0);  /* ★敵の色キャッシュも捨てる(VRAMの色表が変わっている) */
+            }
             /* ★描いた稲妻を消す: 表示リングを世界の正本(艦バッファB/海テンプレ)から引き直す。
                艦へ焼き込んだ炎は B 側にあるので消えない。津波はスプライトなので BG は汚れない。
                ★津波が始まる前(t=CRUSH_ERASE=58)に済ませる。150ms かかるので、波が動いている
