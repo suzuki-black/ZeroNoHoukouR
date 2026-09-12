@@ -62,8 +62,10 @@ void vdp_screen5(void) {
 void vdp_palette_game(void) {
     vdp_set_pal(0, 0, 0, 0);
     vdp_set_pal(1, 1, 4, 5);    /* 海(中) */
-    vdp_set_pal(2, 2, 5, 6);    /* 海(明) */
-    vdp_set_pal(7, 0, 1, 3);    /* 暗海 / 艦のドロップシャドウ(SHADOWC) */
+    vdp_set_pal(2, 2, 5, 6);    /* 海(明)。★海専用(scroll.c の斑点のみ)＝常時変調してよい唯一の色 */
+    vdp_set_pal(7, 0, 1, 3);    /* ★共用注意: 暗海の斑点 かつ 艦のドロップシャドウ(ship_render の SHADOWC)。
+                                   毎フレーム動かす演出(パレットエンジンのシマー等)で触ってはいけない
+                                   ＝艦の影の色が勝手に変わる。実際に一度やって実機で指摘された。 */
     vdp_set_pal(6, 6, 5, 3);    /* 木甲板 */
     vdp_set_pal(9, 3, 3, 1);    /* オリーブ(縦通材/舷側陰) */
     vdp_set_pal(12, 7, 4, 0);   /* 橙(甲板斑点/発砲) */

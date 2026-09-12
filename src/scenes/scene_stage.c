@@ -368,14 +368,12 @@ static void stage_build(void) {
     sprites_load(curstage);   /* ★静的パターン＋この面の戦闘機8方向×3サイズを生成 */
     hud_init();  /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
     ent_reset();
-    /* ★ent_reset の後に置くこと: ent_reset が g_spr_limit を既定(32)へ戻すので、先に書くと消される。 */
     vdp_sprite_setb_init(11);   /* セットBの色表を用意し全枚を画面外へ(1回だけ) */
     g_spr_dual = 1;             /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない */
-    g_spr_limit = 32 - CURTAIN_SLOTS;  /* ★弾幕の枠を予約(これが無いと混雑時にゲーム側が使い切る) */
     curtain_reset();
     overlay_load(OVL_BANK);     /* ★演出コードを seg5 上位8KB(=ホット区間の 0xA000)へ複製。
                                    page2 が cart のこの文脈でのみ実行できる(overlay.h の制約4)。
-                                   ★ifdef の外: パレットエンジン等 分割を使わない演出もこれを要る。 */
+                                   パレットエンジンも弾幕もこれを要る。 */
     pal_need_reset = 1;         /* 実際の reset はホット区間の中で(オーバレイは 0xA000=RAM時のみ有効) */
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
@@ -751,7 +749,10 @@ u8 stage_update(void) {
       /* ★CPU弾幕の更新＋斉射。VDP に一切触れない純RAM演算なので、VDPコマンドの裏(§4-1)に置ける。 */
       if (g_ovl_ok) {          /* ★オーバレイ未読込(g_ramx2_ok=0 の機械)では 0xA000 はスワップ窓＝呼ぶと暴走 */
           curtain_update();
-          curtain_volley((u8)(phase == 1));   /* 戦艦フェーズのみ斉射 */
+          /* ★弾幕は「最後の主砲1基になった＝レイジ」のときだけ。全砲台が撃つとスプライトが
+             1走査線8枚の壁に当たってちらつき、ベースの見た目も損なう(実機で指摘)。
+             最後の1基の悪あがき＝見せ場に絞ることで、密度も演出上の意味も両立する。 */
+          curtain_volley(g_rage);
       }
       if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
       if (g_ovl_ok && DBG_ON(8)) curtain_collide();   /* ★CPU弾幕の被弾(常駐 ent_player_hit に集約) */
@@ -761,8 +762,14 @@ u8 stage_update(void) {
 #ifdef DEBUG_PROF
     { PROF_T0(_pd);
 #endif
+    /* ★スプライトslotの予約は「弾幕が実際に出ている間だけ」。常に予約すると、最後に描かれる
+       最低優先のスプライト(落ち影・撃破点数)が混雑フレームで落ち、実機で「戦闘機の影が
+       付いたり消えたりする」という形で見えた(ベース表示の劣化)。弾幕が無いときは全32枚を
+       ゲームへ返す。 */
+    g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
-    curtain_present(CURTAIN_SLOTS, CURTAIN_SPLIT_LINE);   /* ★CPU弾幕を予約slotへ帯ごとに流し込む */
+    if (g_cbul_live) curtain_present(CURTAIN_SLOTS, CURTAIN_SPLIT_LINE);   /* ★弾が居るときだけ
+                                             (空振りでも色キャッシュを毎フレーム捨ててしまうため) */
 #ifdef DEBUG_PROF
     PROF_ADD(PF_DRAW, _pd); }
 #endif
@@ -776,6 +783,11 @@ u8 stage_update(void) {
        尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */
     if (g_miss) {
         g_miss = 0;
+        /* ★被弾フラッシュの途中で撃墜されるとホット区間を抜けたままになり、沈没演出のあいだ
+           ずっと画面が赤く染まったままになる(パレットエンジンはホット区間でしか回らないため)。
+           基準色へ戻してから演出へ入る。pal_need_reset で、再開時に全16色を書き直させる。 */
+        vdp_palette_game();
+        pal_need_reset = 1;
         play_death_banked(cam);         /* 沈没演出(bank16) */
         if (g_lives) g_lives--;
         if (g_lives == 0) {
