@@ -11,6 +11,9 @@
 
 #include "types.h"
 
+#define PROF_BANK 20   /* banked/prof_bank.c を置くROMバンク(自己診断画面と区間表示=冷たい側) */
+extern u8 g_prof_mode;  /* bank20 への用件: 0=自己診断 / 1=区間表示(引数を取れない bcall の代わり) */
+
 void prof_selftest(void);   /* 起動時1回: 自己診断を画面表示しトリガ押下で抜ける(main が scene_run 前に呼ぶ) */
 
 /* ===== 実行時 区間計測 =====

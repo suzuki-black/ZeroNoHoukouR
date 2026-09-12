@@ -18,6 +18,7 @@ enum {
     SFX_BOOM,   /* 破壊: 長い "ズガーン"(鋭→深→減衰)      */
     SFX_PHIT,   /* 自機被弾: 低い下降の痛み音(tone A)       */
     SFX_EFIRE,  /* 敵発砲: 静かな短いノイズ "プッ"(noise C) */
+    SFX_THUNDER,/* ★メガクラッシュの雷鳴: 鋭い炸裂→深い轟きへ、うねりながら長く減衰(noise C) */
     SFX_COUNT
 };
 

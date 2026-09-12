@@ -366,15 +366,24 @@ static void stage_build(void) {
     prerender_ship();     /* 艦をバッファB(オフスクリーン)へ。stage_begin_display の前に必須 */
     vdp_sprite_init();
     sprites_load(curstage);   /* ★静的パターン＋この面の戦闘機8方向×3サイズを生成 */
-    hud_init();  /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
-    ent_reset();
+    /* ★セットBの用意を hud_init の**前**に済ませ、g_spr_dual も先に立てる。
+       hud_init はスプライト色を書くので、後回しにするとセットB側が単色(赤)のまま残る。
+       分割行(CURTAIN_SPLIT_LINE=96)より下に出る HUD＝メガクラッシュ残数(slot7/8)は
+       セットBが見えるので、実際に「白のつもりが赤」になっていた。 */
     vdp_sprite_setb_init(11);   /* セットBの色表を用意し全枚を画面外へ(1回だけ) */
     g_spr_dual = 1;             /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない */
+    hud_init();  /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
+    ent_reset();
     curtain_reset();
     overlay_load(OVL_BANK);     /* ★演出コードを seg5 上位8KB(=ホット区間の 0xA000)へ複製。
                                    page2 が cart のこの文脈でのみ実行できる(overlay.h の制約4)。
                                    パレットエンジンも弾幕もこれを要る。 */
     pal_need_reset = 1;         /* 実際の reset はホット区間の中で(オーバレイは 0xA000=RAM時のみ有効) */
+    /* ★メガクラッシュ残数は1回の挑戦ごとに補充。演出の実体(雷光パレット/稲妻描画/敵弾消去)は
+       すべて RAM オーバレイ側なので、載らない機械では残数0＝表示も出さない(空撃ちでストックだけ
+       減る、という壊れ方を避ける)。**overlay_load の後**で判定すること。 */
+    g_crush = g_ovl_ok ? CRUSH_MAX : 0;
+    g_crush_t = 0;
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
 
@@ -612,6 +621,44 @@ u8 stage_update(void) {
     u8 vstep;
     if (g_view) { g_view = 0; return SC_TITLE; }   /* ★ビューア表示(カード/結果)はstage_initで完結→タイトルへ戻る */
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
+    /* ★メガクラッシュ(設計メモ §4-1「安い出力で最大の爽快」)。Bボタンで発動。
+       発動中はスクロールもAIもBGMも全部止め、画面全体を雷光が覆う。数瞬のち(CRUSH_WIPE)に
+       **画面上の敵弾だけ**を消し、止めた時間が明けたらBGMごと再開する。
+       出力はパレット16色の書換だけ＝VDP帯域ほぼゼロ(実測 0.32ms)。 */
+    if (g_crush_t) {
+        g_crush_t--;
+        if (g_crush_t == CRUSH_WIPE) curtain_reset();   /* CPU弾幕は別プール(常駐) */
+        if (g_crush_t == 0) bgm_play(phase ? stage_bgm[curstage] : BGM_SEA_INTRO);   /* 再開 */
+        hud_draw(g_score, g_lives);      /* 残数表示を止めない(発動直後に減った数を見せる) */
+        if (g_ovl_ok) {
+            ramx_use_ram();
+            if (pal_need_reset) { pal_need_reset = 0; pal_reset(); }
+            /* ★パレットを**先に**反映する。稲妻の描画には時間がかかるので、後回しにすると
+               描いている間ずっと前フレームの色が出たままになる(実際それで「真っ白で稲妻が見えない」
+               という結果になった)。 */
+            pal_update();
+            /* 敵弾の一括消去はオーバレイ側(常駐24KBの節約)。ホット区間の中で呼ぶ。 */
+            if (g_crush_t == CRUSH_WIPE) clear_enemy_bullets();
+            /* ★稲妻を3回、別の形で走らせる(ガガガ)。描くたびに雷鳴を打ち直すので音も連打になる。
+               描くフレームのパレットはわざと暗く(crush_lv=0)してあるので白い筋がはっきり出る。 */
+            if (g_crush_t == 22 || g_crush_t == 17 || g_crush_t == 12) {
+                crush_bolts(g_crush_t);
+                sfx(2, SFX_THUNDER);
+            }
+            /* ★描いた稲妻を消す: 表示リングを世界の正本(艦バッファB/海テンプレ)から引き直す。
+               艦へ焼き込んだ炎は B 側にあるので消えない。 */
+            if (g_crush_t == CRUSH_ERASE) scroll_repaint_all();
+            ramx_use_cart();
+        }
+        return SCENE_NONE;
+    }
+    if ((g_input_edge & INP_TRIGB) && g_crush) {
+        g_crush--;
+        g_crush_t = CRUSH_FRAMES;
+        bgm_stop();                      /* ★BGMを止めて雷鳴だけを聴かせる(バンキング=ホット区間の外) */
+        sfx(2, SFX_THUNDER);             /* noise C の雷鳴(鋭い炸裂→深い轟き) */
+        return SCENE_NONE;
+    }
     if (sfresh) { sfresh--; g_shake = 0; g_hitstop = 0; }   /* 出だしの誤揺れを抑止(上記) */
     /* ★ヒットストップ中もパレットだけは動かす。凍結の間ホット区間ごと止めると、被弾の赤染めが
        凍結明け(実測で7フレーム後)にずれて出て、被弾と演出が繋がって見えない。

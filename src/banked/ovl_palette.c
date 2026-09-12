@@ -25,6 +25,7 @@
 #include "types.h"
 #include "vdp.h"
 #include "entity.h"   /* g_playerhit / g_gun_kills: 演出のトリガに使う既存カウンタ */
+#include "gamestate.h" /* g_crush_t / CRUSH_FRAMES: メガクラッシュの雷光 */
 
 /* 基準パレット。vdp_palette_game() と同じ値を持つ(あちらは初期化、こちらは毎フレームの計算元)。
    ★二重持ちだが、オーバレイから常駐の static を覗くわけにいかないので許容する。
@@ -52,6 +53,16 @@ static u8 shimmer;          /* 海シマーの位相 */
 #define FX_HIT_FRAMES  10
 #define FX_KILL_FRAMES 5
 
+/* ★雷光の強さ(0..4)。index = g_crush_t(残りフレーム)。本物の雷のように不規則に瞬かせる
+   (一定に光らせると「白い板」になって雷に見えない)。 */
+static const u8 crush_lv[CRUSH_FRAMES + 1] = {
+/* t= 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 */
+     0, 0, 0, 0, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 0, 4, 0, 1, 0, 3, 1, 0, 4, 2
+};
+/* ★稲妻を描くフレーム(t=22/17/12)は必ず **0(素の画面)**。ここを明るくすると白い筋が背景に溶けて
+   何も見えない(実際に一度そうなった)。閃光はその**直後**のフレームに置き、
+   「暗い海に白い筋が走る → 次の瞬間に画面が白く飛ぶ」を繰り返して雷に見せる。 */
+
 /* base から target へ w/4 だけ寄せる(w=0..4)。0-7 の範囲に収まる。 */
 static u8 mix(u8 base, u8 target, u8 w) {
     s8 d = (s8)((s8)target - (s8)base);
@@ -65,7 +76,12 @@ void ovl_pal_update(void) {
     if (g_playerhit != last_hit) { last_hit = g_playerhit; fx_kind = FX_HIT;  fx_t = FX_HIT_FRAMES; }
     else if (g_gun_kills != last_gun) { last_gun = g_gun_kills; fx_kind = FX_KILL; fx_t = FX_KILL_FRAMES; }
 
-    if (fx_t) {
+    /* ★メガクラッシュの雷光は最優先(被弾/撃破フラッシュより上)。 */
+    if (g_crush_t) {
+        u8 lv = crush_lv[(g_crush_t <= CRUSH_FRAMES) ? g_crush_t : CRUSH_FRAMES];
+        fx_t = 0; fx_kind = FX_NONE;
+        w = lv; tr = 7; tg = 7; tb = 7;
+    } else if (fx_t) {
         fx_t--;
         if (fx_kind == FX_HIT) { tr = 7; tg = 0; tb = 0;   /* 赤へ */
             w = (u8)((fx_t * 4 + FX_HIT_FRAMES / 2) / FX_HIT_FRAMES); }

@@ -39,6 +39,7 @@ void sea_frame(void);
 
 void scroll_init(void);                 /* 表示page1へ＋開始窓を描画(艦はB既描画前提) */
 void scroll_to(u16 cam);                /* cam(世界Y)へ移動。露出行を流し R#23 更新 */
+void scroll_repaint_all(void);          /* メガクラッシュ専用: 可視行を全幅で引き直す(稲妻を消す) */
 void scroll_repaint_cols(s16 r0, s16 r1, u8 x0, u8 w); /* 炎専用: r0..r1 の [x0,x0+w) 帯だけをB→リングへ(部分幅=全幅256の約1/8)。 */
 
 extern u16 g_cam;

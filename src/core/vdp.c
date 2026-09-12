@@ -163,7 +163,7 @@ volatile u8 vdpcbuf[16];   /* R#32..46 の15レジスタ値を順に格納(RAM=O
    固定15本なのでエントリ計算不要のOUTI直打ちにでき、毎コマンド15×3T≒45T削減(コマンド多発フレームで約0.6ms)。
    ※A6(SATバッチ)追加で一度は常駐0xA000の壁でOTIRへ退避したが、スプライトパターンをbank16へ移設して
      常駐を~1KB空けたため復活。0x9B書込みはアドレスFFを使わず割込安全。di はR#17設定+OUTI群を短く囲う。 */
-static void vdp_cmd_flush(void) {
+void vdp_cmd_flush(void) {   /* ★ovl_crush(稲妻)も使うので公開 */
     __asm
         di
         ld   a, #32
@@ -201,7 +201,8 @@ void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color) {
     vdpcbuf[8]  = nx & 0xFF; vdpcbuf[9]  = (nx >> 8) & 0x01;   /* R#40/41 NX (9bit)  */
     vdpcbuf[10] = ny & 0xFF; vdpcbuf[11] = (ny >> 8) & 0x03;   /* R#42/43 NY (10bit) */
     vdpcbuf[12] = color;                                      /* R#44 CLR = 塗り色(LMMVはこれを使う) */
-    /* R#45 ARG(方向DIX/DIY)は常に0(BSS初期値のまま)=書かない。 */
+    vdpcbuf[13] = 0;    /* ★R#45 ARG は 0(左上→右下)。vdp_line が ARG を使うので残値を明示的に潰す
+                           (放置すると稲妻の直後の塗り/コピーが逆方向に走って下地を壊す) */
     vdpcbuf[14] = 0x80;                                        /* R#46 CMD = LMMV(論理IMP) */
     vdp_cmd_flush();
 }
@@ -215,7 +216,9 @@ static void vdp_lmmm(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny, u8 cmd) {
     vdpcbuf[6]  = dy & 0xFF;  vdpcbuf[7]  = (dy >> 8) & 0x03;   /* R#38/39 DY (10bit) */
     vdpcbuf[8]  = nx & 0xFF;  vdpcbuf[9]  = (nx >> 8) & 0x01;   /* R#40/41 NX (9bit)  */
     vdpcbuf[10] = ny & 0xFF;  vdpcbuf[11] = (ny >> 8) & 0x03;   /* R#42/43 NY (10bit) */
-    /* R#44 CLR は copy(HMMM/透過LMMM)が参照しない、R#45 ARG(方向)は常に0(BSS初期値のまま)=書かない。 */
+    /* R#44 CLR は copy(HMMM/透過LMMM)が参照しない。 */
+    vdpcbuf[13] = 0;    /* ★R#45 ARG=0(左上→右下)。vdp_line が ARG を使うので残値を明示的に潰す
+                           (放置すると稲妻の直後のコピーが逆方向に走って下地を壊す) */
     vdpcbuf[14] = cmd;                                        /* R#46 CMD */
     vdp_cmd_flush();
 }

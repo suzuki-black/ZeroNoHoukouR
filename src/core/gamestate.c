@@ -13,6 +13,8 @@ u16 g_hiscore;
 u8  g_lives;
 u8  g_php;
 u8  g_rage;
+u8  g_crush;      /* メガクラッシュ残数(stage_build で補充) */
+u8  g_crush_t;    /* メガクラッシュ発動中の残りフレーム(0=非発動) */
 
 /* 難易度で間隔をスケール(EASY=1.25倍遅い/NORMAL=等倍/HARD=0.75倍速い)。レイジ中は更に×2/3。下限1。 */
 u8 diff_interval(u8 base) {

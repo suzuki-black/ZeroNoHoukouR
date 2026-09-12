@@ -92,3 +92,5 @@ void pal_update(void) __naked      { __asm jp 0xA00C __endasm; }
 void pal_reset(void) __naked       { __asm jp 0xA00F __endasm; }
 void curtain_volley(u8 active) __naked { (void)active; __asm jp 0xA012 __endasm; }
 void curtain_present(u8 nper, u8 line) __naked { (void)nper; (void)line; __asm jp 0xA015 __endasm; }
+void crush_bolts(u8 seed) __naked { (void)seed; __asm jp 0xA018 __endasm; }
+void clear_enemy_bullets(void) __naked { __asm jp 0xA01B __endasm; }

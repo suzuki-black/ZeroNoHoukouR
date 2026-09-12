@@ -5,6 +5,7 @@
 #include "vdp.h"
 #include "sprites.h"
 #include "entity.h"   /* g_spr_base(エンティティ描画の開始スロット) */
+#include "gamestate.h" /* g_crush: メガクラッシュ残数 */
 
 void hud_init(void) {
     u8 pat[32];
@@ -19,6 +20,11 @@ void hud_init(void) {
     for (d = 0; d < 5; d++) vdp_sprite_color(d, 15);
     vdp_sprite_color(5, 3);    /* 残機アイコン=緑(零戦シルエット) */
     vdp_sprite_color(6, 11);   /* 残機数=黄 */
+    /* ★メガクラッシュ表示(画面下): アイコン=白 / 残数=白。海(青)の上で最も読みやすい。
+       アイコンは専用パターンを足さずマズルフラッシュ(SPR_FLASH)を流用する
+       (パターン表は 144-156 しか空きが無く、そこは DEBUG_FPS の "MASK" が使う)。 */
+    vdp_sprite_color(7, 15);
+    vdp_sprite_color(8, 15);
 #ifdef DEBUG_FPS
     /* "MASK" の文字スプライトを空きパターン144,148,152,156へ生成(数字と同じくグリフを16x16左上8x8へ) */
     { static const char msk[4] = { 'M', 'A', 'S', 'K' }; u8 c, rr, p[32];
@@ -28,7 +34,7 @@ void hud_init(void) {
           for (rr = 8; rr < 32; rr++) p[rr] = 0;
           vdp_sprite_pattern((u8)(144 + c * 4), p);
       } }
-    { u8 s; for (s = 7; s < 15; s++) vdp_sprite_color(s, 13); }   /* FPS2桁＋"MASK"4字＋mask値2桁=ほぼ黒(視認性) */
+    { u8 s; for (s = 9; s < 17; s++) vdp_sprite_color(s, 13); }   /* FPS2桁＋"MASK"4字＋mask値2桁=ほぼ黒(視認性) */
 #endif
     g_spr_base = HUD_SLOTS;   /* 以降エンティティは slot(HUD_SLOTS) から詰める */
 }
@@ -51,19 +57,28 @@ void hud_draw(u16 score, u8 lives) {
         vdp_sprite_pos(i, (u8)(8 + i * 8), 2, (u8)(SPR_DIGIT0 + dig[i] * 4));
     vdp_sprite_pos(5, 212, 1, SPR_ZERO);                          /* 残機=零戦シルエット */
     vdp_sprite_pos(6, 234, 2, (u8)(SPR_DIGIT0 + ldig * 4));       /* 予備機数(9頭打ち) */
+    /* ★メガクラッシュ残数を画面下(左)へ。残0のときは画面外へ退避して見せない。
+       ★Y=216 は停止マーカなので vdp_sprite_pos 側の spr_y が回避する(ここでは気にしなくてよい)。 */
+    if (g_crush) {
+        vdp_sprite_pos(7,  8, 192, SPR_FLASH);                          /* 稲妻アイコン(流用) */
+        vdp_sprite_pos(8, 24, 194, (u8)(SPR_DIGIT0 + (g_crush % 10) * 4));
+    } else {
+        vdp_sprite_pos(7,  0, 220, SPR_FLASH);                          /* 画面下端外へ(212ライン表示) */
+        vdp_sprite_pos(8,  0, 220, SPR_DIGIT0);
+    }
 #ifdef DEBUG_FPS
     /* ★デバッグROMのみ。左2桁=g_fps(JIFFY基準の参考値)、右4桁=フレームカウンタ(ストップウォッチ実測用の真値)。
        使い方: 右4桁を読む→スマホで正確に10秒→もう一度読む→(差)/10=実FPS。JIFFYの進み方に依存しない。 */
     /* ★1走査線8枚制限を守るため2行に分割: y=24にFPS2桁(slot7,8) / y=40に"MASK n"(slot9-13)。
        いずれも低slot=高優先なのでゲームスプライト(slot14+)より必ず表示される。 */
     { u8 f = (g_fps > 99) ? 99 : g_fps;
-      vdp_sprite_pos(7,  96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));   /* FPS十の位 */
-      vdp_sprite_pos(8, 104, 24, (u8)(SPR_DIGIT0 + (f % 10) * 4));   /* FPS一の位 */
-      vdp_sprite_pos(9,   72, 40, 144);   /* M */
-      vdp_sprite_pos(10,  80, 40, 148);   /* A */
-      vdp_sprite_pos(11,  88, 40, 152);   /* S */
-      vdp_sprite_pos(12,  96, 40, 156);   /* K */
-      vdp_sprite_pos(13, 112, 40, (u8)(SPR_DIGIT0 + (u8)((g_dbgmask / 10) % 10) * 4));   /* マスク十の位 */
-      vdp_sprite_pos(14, 120, 40, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask % 10) * 4)); }        /* マスク一の位 */
+      vdp_sprite_pos(9,  96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));   /* FPS十の位 */
+      vdp_sprite_pos(10, 104, 24, (u8)(SPR_DIGIT0 + (f % 10) * 4));   /* FPS一の位 */
+      vdp_sprite_pos(11,  72, 40, 144);   /* M */
+      vdp_sprite_pos(12,  80, 40, 148);   /* A */
+      vdp_sprite_pos(13,  88, 40, 152);   /* S */
+      vdp_sprite_pos(14,  96, 40, 156);   /* K */
+      vdp_sprite_pos(15, 112, 40, (u8)(SPR_DIGIT0 + (u8)((g_dbgmask / 10) % 10) * 4));   /* マスク十の位 */
+      vdp_sprite_pos(16, 120, 40, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask % 10) * 4)); }        /* マスク一の位 */
 #endif
 }

@@ -11,6 +11,8 @@
         .globl  _ovl_pal_reset
         .globl  _ovl_curtain_volley
         .globl  _ovl_curtain_present
+        .globl  _ovl_crush_bolts
+        .globl  _ovl_clear_enemy_bullets
         .area   _CODE
         jp      _ovl_curtain_update   ; slot0 (OVL_SLOT_CURTAIN_UPDATE)
         jp      _ovl_curtain_ring     ; slot1 (OVL_SLOT_CURTAIN_RING)
@@ -20,3 +22,5 @@
         jp      _ovl_pal_reset        ; slot5 (OVL_SLOT_PAL_RESET)
         jp      _ovl_curtain_volley   ; slot6 (OVL_SLOT_CURTAIN_VOLLEY)
         jp      _ovl_curtain_present  ; slot7 (OVL_SLOT_CURTAIN_PRESENT)
+        jp      _ovl_crush_bolts      ; slot8 (OVL_SLOT_CRUSH_BOLTS)
+        jp      _ovl_clear_enemy_bullets ; slot9 (OVL_SLOT_CLEAR_EBUL)

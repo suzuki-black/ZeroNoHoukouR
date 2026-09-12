@@ -39,6 +39,8 @@
 #define OVL_SLOT_PAL_RESET       5
 #define OVL_SLOT_CURTAIN_VOLLEY  6
 #define OVL_SLOT_CURTAIN_PRESENT 7
+#define OVL_SLOT_CRUSH_BOLTS     8
+#define OVL_SLOT_CLEAR_EBUL      9
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -53,5 +55,7 @@ void pal_update(void);   /* パレットエンジン(設計メモ §2-A)。毎�
 void pal_reset(void);    /* 面開始/再開: 状態を捨て次フレームに全書き直し */
 void curtain_volley(u8 active);            /* 戦艦の主砲からの弾幕斉射(active=0 で何もしない) */
 void curtain_present(u8 nper, u8 line);    /* 予約slotへ帯ごとに流し込む */
+void crush_bolts(u8 seed);                 /* メガクラッシュ: 稲妻を手続き生成して画面へ描く */
+void clear_enemy_bullets(void);            /* メガクラッシュ: 画面上の敵弾だけ消す */
 
 #endif /* OVERLAY_H */

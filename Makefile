@@ -54,6 +54,8 @@ GAMEVER := $(shell cat VERSION 2>/dev/null || echo 0.0.0)
 #    stale-object バグを踏む(実際に踏んだ)。小規模なので全再コンパイルで十分。
 HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h
 
+# ★ops.rel(run_ops)は現在どこからも呼ばれていない(艦OPSの解釈は bank16 の ship_render 内に独自実装が
+#   ある)。常駐24KBを197B無駄に食っていたのでリンクから外した。使うときはここへ戻すこと。
 # ── 常駐(bank0-2, <=24KB)にリンクするソース。crt0 は先頭に別途リンク。
 #    ここへ足すたびに常駐サイズが増える。冷たいものは足さず bcall バンクへ回すこと。
 RESIDENT_RELS = \
@@ -71,7 +73,6 @@ RESIDENT_RELS = \
   $(BUILD)/entity.rel \
   $(BUILD)/player.rel \
   $(BUILD)/fire.rel \
-  $(BUILD)/ops.rel \
   $(BUILD)/scroll.rel \
   $(BUILD)/ship_aag.rel \
   $(BUILD)/hotcode.rel \
@@ -208,6 +209,23 @@ $(BUILD)/gen_planes.ihx: $(SRC)/banked/gen_planes.c $(HDRS) $(BUILD)/bankhead.re
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/gen_planes.rel $(BUILD)/resident_syms.rel -o $@
 
+# DEBUG_PROF の冷たい側(自己診断画面・区間別µs表示)を bank20 へ。常駐リクレイムのため prof.c から移設。
+# 通常ビルドでは一切作らない(バンクも消費しない)。
+# ★-Wl-b_HOME: このバンクだけ u32 の乗除算(acc_us)を使うので SDCC の long ランタイム(_HOME 領域)が
+#   リンクされる。既定では _DATA(0xE000)の後ろに置かれ、バンク窓(0xA000-0xBFFF)の外へ落ちて
+#   rompack が「リンク範囲外」で弾く。窓の中の空き(0xBC00)へ明示配置し、_CODE がそこへ届いていないか
+#   リンク後に検証する。
+$(BUILD)/prof_bank.ihx: $(SRC)/banked/prof_bank.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/prof_bank.c -o $(BUILD)/prof_bank.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 -Wl-b_HOME=0xBC00 \
+	     $(BUILD)/bankhead.rel $(BUILD)/prof_bank.rel $(BUILD)/resident_syms.rel -o $@
+	@CE=$$(awk '/^_CODE  /{print $$2}' $(BUILD)/prof_bank.map | head -1); \
+	 SZ=$$(awk '/^_CODE  /{print $$3}' $(BUILD)/prof_bank.map | head -1); \
+	 END=$$((0x$$CE + 0x$$SZ)); \
+	 if [ "$$END" -gt $$((0xBC00)) ]; then \
+	   echo "ERROR: prof_bank の _CODE が 0xBC00(=_HOME の置き場)に達した。-Wl-b_HOME を上げるか中身を削れ。"; exit 3; \
+	 fi
+
 # ── RAM実行モジュール(hot.c) ──
 # 常駐が予約した hot_ram[] の実番地(rom.noi の _hot_ram)へ --code-loc してリンク→ ihx→bin へ変換。
 # rompack は .bin を bank17 先頭から配置し、起動時 hot_load() が hot_ram[] へ転写する。
@@ -233,11 +251,12 @@ $(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs $(SRC)/include/hotcode.h
 # page2 を RAM 化している間だけ見える seg5 上位8KB(=0xA000-0xBFFF)へ載せる。0xA000 リンク。
 # data-loc はバンクシーン(0xE000)と衝突しない高位フリー帯へ。rompack が bank OVL_BANK へ格納し、
 # シーン初期化で overlay_load() が seg5 上位へ複製する。
-OVL_SRCS = $(SRC)/banked/ovl_curtain.c $(SRC)/banked/ovl_palette.c
-OVL_RELS = $(BUILD)/ovl_curtain.rel $(BUILD)/ovl_palette.rel
+OVL_SRCS = $(SRC)/banked/ovl_curtain.c $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_crush.c
+OVL_RELS = $(BUILD)/ovl_curtain.rel $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel
 $(BUILD)/ovl.ihx: $(OVL_SRCS) $(HDRS) $(BUILD)/ovlhead.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_curtain.c -o $(BUILD)/ovl_curtain.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl_palette.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_crush.c -o $(BUILD)/ovl_crush.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead.rel $(OVL_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
@@ -251,6 +270,11 @@ $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
 BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
+
+ifdef DEBUG_PROF
+  BANK_IHX      += $(BUILD)/prof_bank.ihx
+  ROMPACK_BANKS += --bank 20 $(BUILD)/prof_bank.ihx
+endif
 
 GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk assets/cards.bin
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)
