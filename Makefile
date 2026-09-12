@@ -152,6 +152,18 @@ $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
 	   exit 2; \
 	 fi; \
 	 echo "  overlay_load=$$A (<0x6000 OK)"
+	@for SYM in _ras_apply _ras_rearm _ras_isr _sfx_update _bgm_update _snd_isr _sound_init; do \
+	   A=$$(awk -v n=$$SYM '$$2==n{print $$3}' $(BUILD)/rom.noi); \
+	   if [ -z "$$A" ]; then echo "ERROR: rom.noi に $$SYM が無い"; exit 2; fi; \
+	   if [ $$(printf '%d' $$A) -ge $$(printf '%d' 0x6000) ]; then \
+	     echo "ERROR: 割込み文脈のコード $$SYM=$$A が 0x6000 以降。overlay_load は複製中に"; \
+	     echo "       0x6000-0x7FFF 窓を演出バンクへ差し替えたまま**割込みを許可**します(8KB を di で"; \
+	     echo "       囲むと 223ms 固まるため)。ISR がその窓に居ると演出バンクのバイト列を実行して暴走します。"; \
+	     echo "       → ramexec/raster/sound を RESIDENT_RELS の先頭付近に置き 0x4000-0x5FFF に収めてください。"; \
+	     exit 2; \
+	   fi; \
+	 done; \
+	 echo "  割込み文脈コード: 全て <0x6000 OK (overlay_load 複製中の窓差替と非衝突)"
 	@H=$$(awk '/^DEF s__HEAP /{print $$3}' $(BUILD)/rom.noi); \
 	 if [ -z "$$H" ]; then echo "ERROR: rom.noi に s__HEAP が無い(常駐RAM末尾を判定できない)"; exit 2; fi; \
 	 if [ $$(printf '%d' $$H) -gt $$(printf '%d' 0xE000) ]; then \

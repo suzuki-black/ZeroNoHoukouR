@@ -7,17 +7,20 @@ u8 g_ovl_ok;
 
 /* ★0x4000-0x5FFF に居ること(overlay.h の制約)。Makefile がリンク後に検証する。 */
 void overlay_load(u8 bank) {
-    u16 k;
-    const volatile u8 *s;
-    volatile u8 *d;
-
     g_ovl_ok = 0;
     if (!g_ramx2_ok) return;   /* page2 を RAM 化できない機械ではオーバレイも使えない(安全側) */
 
+    /* ★複製中は割込みを止めない。8KB を di で囲んだら **223ms** 割込みが止まり、BGM ごと
+       画面が固まった(openMSX で実測。実機でも「BGMから何から一瞬固まる」として報告された)。
+       止めなくてよい根拠: この間 0x6000-0x7FFF は演出バンク・page2 は RAM になるが、
+         ・割込み文脈で走るコードは全て 0x6000 未満(snd_isr/sfx_update/bgm_update/ras_isr/
+           ras_apply/ras_rearm)。Makefile がリンク後に検証する。
+         ・それらは 0x6000-0xBFFF を読まない(BGM データは bgm_ram=page3 へ複写済み、
+           ラスタ ISR は VDP ポートと page3 のみ)。
+       窓を差し替える一瞬だけ di する。 */
     __asm di __endasm;
     *(volatile u8 *)0x6800 = bank;     /* 0x6000-0x7FFF 窓 ← 演出バンク(複製元) */
-    /* page2 → RAMスロット+seg5。★ei を挟みたくないので page2_use_ram() は使わず自前で。
-       ENASLT は AF/BC/DE/HL を壊すので前後で退避する(苦労と教訓 §5-1)。 */
+    /* page2 → RAMスロット+seg5。ENASLT は AF/BC/DE/HL を壊すので前後で退避(苦労と教訓 §5-1)。 */
     __asm
         push af
         push bc
@@ -32,11 +35,26 @@ void overlay_load(u8 bank) {
         pop  de
         pop  bc
         pop  af
+        ei
     __endasm;
-    s = (const volatile u8 *)0x6000;   /* 演出バンク(ROM) */
-    d = (volatile u8 *)OVL_ADDR;       /* seg5 の上位8KB(RAM) */
-    for (k = 0; k < OVL_CAP; k++) d[k] = s[k];
+    /* ★LDIR で複製(C のバイトループは同じ 8KB に 223ms 掛かっていた)。LDIR は割込みで中断・再開
+       できる命令で、ISR はレジスタを全退避するので割込み許可のままで安全。 */
     __asm
+        push af
+        push bc
+        push de
+        push hl
+        ld   hl, #0x6000
+        ld   de, #0xA000
+        ld   bc, #0x2000
+        ldir
+        pop  hl
+        pop  de
+        pop  bc
+        pop  af
+    __endasm;
+    __asm
+        di
         push af
         push bc
         push de
