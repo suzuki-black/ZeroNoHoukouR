@@ -13,6 +13,8 @@ u16 g_hiscore;
 u8  g_lives;
 u8  g_php;
 u8  g_rage;
+u8  g_loop_t;     /* 宙返り中の残りフレーム(0=通常) */
+u8  g_loop_cd;    /* 宙返りのクールダウン */
 u8  g_shock_t;    /* 衝撃波ディストーションの残りフレーム(0=なし) */
 u8  g_shock_y;    /* 衝撃波の震源の画面Y */
 u8  g_crush;      /* メガクラッシュ残数(stage_build で補充) */

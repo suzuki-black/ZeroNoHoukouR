@@ -100,6 +100,9 @@ static void scorepop_reset(void) { u8 i; for (i = 0; i < SPOP_MAX; i++) spop_t[i
      弾を消すのは呼び出し側の責任(弾の実体が系統ごとに違うため)。 */
 void ent_player_hit(s16 px, s16 py) {
     if (g_pinv != 0 || g_invinc) return;       /* 被弾直後の無敵中/設定無敵 は無傷 */
+    /* ★宙返り中は当たらない。ただし「無敵」ではなく「一瞬だけ面から外れて弾が下を抜ける」
+       という解釈(ROADMAP P2 項目9)。代償として回っている間は撃てない(player.c)。 */
+    if (g_loop_t) return;
     g_playerhit++;
     sfx(0, SFX_PHIT);                          /* 被弾の痛み音(tone A) */
     ent_spawn_explosion(px, py);

@@ -3,6 +3,7 @@
 #include "input.h"
 #include "sound.h"
 #include "sprites.h"
+#include "gamestate.h"  /* g_loop_t: 宙返り中は撃てない＆回転コマを使う */
 
 #define SCR_W 256
 #define SCR_H 212
@@ -23,9 +24,10 @@ void bh_player(Entity *e) {
     if (e->x < 0) e->x = 0; else if (e->x > (s16)(SCR_W - 16)) e->x = SCR_W - 16;
     if (e->y < 0) e->y = 0; else if (e->y > (s16)(SCR_H - 16)) e->y = SCR_H - 16;
 
-    /* 発砲(トリガ押下＋クールダウン) — 自機弾は上方向、TEAM_PLAYER */
+    /* 発砲(トリガ押下＋クールダウン) — 自機弾は上方向、TEAM_PLAYER
+       ★宙返り中は撃てない(「無敵で撃ち放題」にしないための代償。ROADMAP P2 項目9)。 */
     if (e->ftimer) e->ftimer--;
-    if ((in & INP_TRIG) && e->ftimer == 0) {
+    if ((in & INP_TRIG) && e->ftimer == 0 && !g_loop_t) {
         Entity *b = ent_spawn(ET_BULLET);
         if (b) {
             b->x = e->x; b->y = e->y - 10;
@@ -37,8 +39,18 @@ void bh_player(Entity *e) {
         sfx(0, SFX_SHOT);
     }
 
-    /* プロペラ回転: 先頭2行(細/太)を交互にしてブラー。被弾点滅中(hidden)は下で上書き。 */
-    { static u8 prop; prop++; e->pat = (prop & 2) ? SPR_ZERO2 : SPR_ZERO; }
+    /* ★宙返り中: 回転コマ(ovl_rot.c が SPR_ZERO2 の枠へ毎フレーム焼く)を使う。
+       行別カラー(zcol)は機体と一緒に回らないので、回っている間は単色の緑にする
+       (回転した機体に水平のハイライトが乗ると破綻して見える)。 */
+    if (g_loop_t) {
+        e->pat = SPR_ZERO2;
+        e->coltab = (const u8 *)0;
+        e->color = 3;                 /* 零戦の緑(単色) */
+    } else {
+        e->coltab = zcol;
+        /* プロペラ回転: 先頭2行(細/太)を交互にしてブラー。被弾点滅中(hidden)は下で上書き。 */
+        { static u8 prop; prop++; e->pat = (prop & 2) ? SPR_ZERO2 : SPR_ZERO; }
+    }
 
     /* 被弾直後の無敵: カウントを減らしつつ点滅(4フレーム周期で明滅) */
     if (g_pinv) { g_pinv--; e->hidden = (g_pinv & 4) ? 1 : 0; }

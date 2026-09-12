@@ -23,6 +23,7 @@
 #include "curtain.h"
 #include "overlay.h"
 static u8 pal_need_reset;   /* 面開始/再開でパレット状態を捨てる(実際の reset はホット区間で) */
+static u8 rot_ready;      /* 1=回転の元絵を取り込み済み(rot_init はホット区間の中でしか呼べない) */
 
 /* ★演出の定数(ラスタ分割＋CPU弾幕)。 */
 #define CURTAIN_SPLIT_LINE 96   /* スプライト表の分割行(この行から下がセットB) */
@@ -385,6 +386,7 @@ static void stage_build(void) {
     g_crush = g_ovl_ok ? CRUSH_MAX : 0;
     g_crush_t = 0;
     g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
+    g_loop_t = 0; g_loop_cd = 0; rot_ready = 0;   /* 宙返りも持ち越さない */
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
 
@@ -686,13 +688,24 @@ u8 stage_update(void) {
         }
         return SCENE_NONE;
     }
-    if ((g_input_edge & INP_TRIGB) && g_crush) {
+    /* ★宙返り(ROADMAP P2 項目9): **B＋上**で発動。上に引き起こす操作なので自然で、かつ
+       クラッシュ(B単押し)と排他にできる。回数制ではなくクールダウン制。 */
+    if ((g_input_edge & INP_TRIGB) && (g_input & INP_UP)) {
+        /* ★上を押しながらの B は**常に**宙返りの操作。クールダウン中で出せなくても、
+           ここで else へ落としてはいけない(落とすとクラッシュが暴発する。実際に踏んだ)。 */
+        if (!g_loop_t && !g_loop_cd) {
+            g_loop_t = LOOP_FRAMES;
+            g_loop_cd = LOOP_CD;
+            sfx(0, SFX_SHOT);          /* 引き起こしの合図(専用音は後で) */
+        }
+    } else if ((g_input_edge & INP_TRIGB) && g_crush) {
         g_crush--;
         g_crush_t = CRUSH_FRAMES;
         bgm_stop();                      /* ★BGMを止めて雷鳴だけを聴かせる(バンキング=ホット区間の外) */
         sfx(2, SFX_THUNDER);             /* noise C の雷鳴(鋭い炸裂→深い轟き) */
         return SCENE_NONE;
     }
+    if (g_loop_cd) g_loop_cd--;
     if (sfresh) { sfresh--; g_shake = 0; g_hitstop = 0; }   /* 出だしの誤揺れを抑止(上記) */
     /* ★ヒットストップ中もパレットだけは動かす。凍結の間ホット区間ごと止めると、被弾の赤染めが
        凍結明け(実測で7フレーム後)にずれて出て、被弾と演出が繋がって見えない。
@@ -855,6 +868,19 @@ u8 stage_update(void) {
        最低優先のスプライト(落ち影・撃破点数)が混雑フレームで落ち、実機で「戦闘機の影が
        付いたり消えたりする」という形で見えた(ベース表示の劣化)。弾幕が無いときは全32枚を
        ゲームへ返す。 */
+    /* ★宙返りの回転コマを焼く(ent_draw_all より前。SPR_ZERO2 の枠を使う)。
+       元絵の取り込み(rot_init)は VRAM にパターンが載った後＝ホット区間の中で1回だけ。 */
+    if (g_ovl_ok) {
+        if (!rot_ready) { rot_init(); rot_ready = 1; }
+        if (g_loop_t) {
+            rot_squash((u8)(LOOP_FRAMES - g_loop_t));   /* 0→15: 縦に潰れて真横→背面→戻る */
+            g_loop_t--;
+            if (g_loop_t == 0) {
+                rot_restore();                          /* 枠を返す */
+                shock_at((s16)g_player_y);              /* ★抜けに衝撃波リング(★B の資産) */
+            }
+        }
+    }
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
     if (g_cbul_live) curtain_present(CURTAIN_SLOTS, CURTAIN_SPLIT_LINE);   /* ★弾が居るときだけ

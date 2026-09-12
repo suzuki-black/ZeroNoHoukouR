@@ -18,6 +18,10 @@
         .globl  _ovl_crush_wave_off
         .globl  _ovl_crush_wave_y
         .globl  _ovl_shock_build
+        .globl  _ovl_rot_init
+        .globl  _ovl_rot_frame
+        .globl  _ovl_rot_restore
+        .globl  _ovl_rot_squash
         .area   _CODE
         jp      _ovl_curtain_update   ; slot0 (OVL_SLOT_CURTAIN_UPDATE)
         jp      _ovl_curtain_ring     ; slot1 (OVL_SLOT_CURTAIN_RING)
@@ -34,3 +38,7 @@
         jp      _ovl_crush_wave_off   ; slot12 (OVL_SLOT_WAVE_OFF)
         jp      _ovl_crush_wave_y     ; slot13 (OVL_SLOT_WAVE_Y)
         jp      _ovl_shock_build      ; slot14 (OVL_SLOT_SHOCK_BUILD)
+        jp      _ovl_rot_init         ; slot15 (OVL_SLOT_ROT_INIT)
+        jp      _ovl_rot_frame        ; slot16 (OVL_SLOT_ROT_FRAME)
+        jp      _ovl_rot_restore      ; slot17 (OVL_SLOT_ROT_RESTORE)
+        jp      _ovl_rot_squash       ; slot18 (OVL_SLOT_ROT_SQUASH)

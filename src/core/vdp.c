@@ -41,6 +41,18 @@ void vdp_data(u8 v) {
     VDP_DAT = v;
 }
 
+/* ★VRAM 読み出しアドレスの設定。書込みと違い**上位バイトの bit6 を立てない**(0x40=書込み)。
+   以降 VDP_DAT を読むと自動インクリメントで連続読みできる。
+   ★用途: 既に VRAM にあるスプライトパターンを RAM へ取り出す(アフィン回転の元絵)。
+     bank16 の const 配列を直接読むより、VRAM が正本なので確実(面別に差し替わる絵にも追随する)。 */
+void vdp_read_addr(u16 a) {
+    __asm di __endasm;
+    VDP_CTRL = (a >> 14) & 7;   VDP_CTRL = 0x80 | 14;
+    VDP_CTRL = a & 0xFF;        VDP_CTRL = ((a >> 8) & 0x3F);
+    __asm ei __endasm;
+}
+
+
 /* SCREEN5(GRAPHIC4)へ。BIOS ワーク(SCRMOD)を 5 にして CHGMOD。
    ★R#25 を明示的に 0 へ: BIOS CHGMOD は V9958 拡張レジスタ R#25 を管理しないため、
      SCREEN12(R#25 YJK=1)からの復帰で YJK ビットが残り、GRAPHIC4 の表示が壊れる(海が白化)。
@@ -449,6 +461,13 @@ void vdp_sprite_pattern(u8 patnum, const u8 *d32) {
     vdp_write_addr(SPR_PAT + (u16)patnum * 8);
     for (i = 0; i < 32; i++) VDP_DAT = d32[i];
 }
+/* スプライトパターン(32B=16x16 1枚)を VRAM から読み出す。 */
+void vdp_sprite_pattern_read(u8 patnum, u8 *d32) {
+    u8 i;
+    vdp_read_addr(SPR_PAT + (u16)patnum * 8);
+    for (i = 0; i < 32; i++) d32[i] = VDP_DAT;
+}
+
 
 /* ★色表も両セットへミラー。entity.c の slot_col/slot_ctab キャッシュが効いており、これらが呼ばれるのは
    実測 66フレームに1回程度＝ミラーしても追加コストは無視できる。 */
