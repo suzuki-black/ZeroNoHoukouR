@@ -37,8 +37,16 @@ def scatter(rows_fill, seed, base=None):
     return rows
 
 # ---- 波頭(crest): 上端は透明、そこから下は白い塊。輪郭の高さは左右端を row4 に揃える ----
-hA=[4,2,1,0,0,0,0,1,1,0,0,1,2,2,3,4]
-hB=[4,4,5,6,7,7,6,5,6,7,7,6,5,5,4,4]
+# ★斜めの壁にするので、**コマの中の波頭も同じ傾きで斜めに切る**。
+#   コマは列ごとに SHEAR(=16px 画面) ずつ下がる。拡大で 1 パターン行 = 画面2px なので、
+#   16px = パターン 8 行。パターン列 px の波頭行は px/2 が「直線」。
+#   継ぎ目: コマ c の px=15 は行7(画面+14px) / コマ c+1 の px=0 は行0 だが 16px 下 → 連続。
+#   その直線に、両端(px=0,15)では 0 になるうねりを足す。
+def slope(px): return px // 8   # SHEAR=4 画面px/列 = 2パターン行/コマ
+wob  = [0,1,2,3,3,3,2,1,1,2,3,3,2,1,1,0]   # 山(両端0)
+wob2 = [0,1,2,2,3,4,4,3,3,4,4,3,2,2,1,0]   # 谷(両端0)
+hA=[max(0, slope(c) + 4 - wob[c])  for c in range(16)]
+hB=[max(0, slope(c) + 4 + wob2[c]) for c in range(16)]
 def crest_mask(h):
     m=[0]*16
     for c in range(16):
@@ -83,7 +91,7 @@ C3=[ 1, 1, 1, 7,  1, 1, 7, 1,  7, 1, 7, 1,  7, 1, 7, 7]   # 裾: 海の地色と
 
 def preview(path):
     A,B,FACE,BODY,FOOT=build()
-    W,H=256,160
+    W,H=256,200
     im=Image.new('RGB',(W,H))
     px=im.load()
     rng=R(0xC0DE)
@@ -97,6 +105,11 @@ def preview(path):
     rowpat=[(A,B),(FACE,BODY),(BODY,FACE),(FOOT,FOOT)]
     rowcol=[C0,C1,C2,C3]
     top=16
+    SHEAR=4    # 列ごとに下げる画面px(斜めの角度)
+    # ★★傾きには上限がある: 段の間隔(32px)= SHEAR × 列数 のときだけ、32枚の y が
+    #   SHEAR px 間隔で**均等**に並び、どの32px窓にもちょうど8枚=制限ぴったりになる。
+    #   8列なら SHEAR=4。これより急にすると y が重複/偏って 1走査線8枚を超える。
+    #   コマ内の波頭も同じ傾き(2パターン行/コマ)で切らないと継ぎ目に段が出る。
     for rw in range(4):
         for col in range(8):
             pat = rowpat[rw][(col+rw)&1]
@@ -105,7 +118,7 @@ def preview(path):
                 for pc in range(16):
                     if pat[pr]&(0x8000>>pc):
                         c=rgb(colt[pr])
-                        X=col*32+pc*2; Y=top+rw*32+pr*2
+                        X=col*32+pc*2; Y=top+rw*32+col*SHEAR+pr*2
                         for dy in range(2):
                             for dx in range(2):
                                 if 0<=X+dx<W and 0<=Y+dy<H: px[X+dx,Y+dy]=c

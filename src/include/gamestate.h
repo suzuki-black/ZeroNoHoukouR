@@ -42,9 +42,13 @@ extern u8  g_rage;         /* 1=レイジ(ボス最後の砲台=速射の最終�
    ・**等加速度**で上がる(dist = step*step / CRUSH_WAVE_ACC)。一定速度だと板が平行移動する
      ようにしか見えない。出だしはほぼ止まって地鳴り、後半で一気に駆け上がる。 */
 #define CRUSH_WAVE_T0    46  /* 津波の開始 t(step=0) */
-#define CRUSH_WAVE_T1    1   /* 津波の終了 t(step=45)。dist=45*45/6=337px で画面を抜け切る */
+#define CRUSH_WAVE_T1    1   /* 津波の終了 t(step=45)。移動量は CRUSH_WAVE_ACC を参照 */
 #define CRUSH_WAVE_Y0    212 /* 波頭の開始 画面Y(画面下端=見えない位置から上がってくる) */
-#define CRUSH_WAVE_ACC   6   /* 加速度の逆数。小さいほど速く加速する */
+#define CRUSH_WAVE_ACC   5   /* 加速度の逆数。小さいほど速く加速する。
+                                ★必要な移動量 = 画面212px ＋ 壁の縦の広がり(4段128px＋傾き28px) = 368px。
+                                  step は 0..45 なので 45*45/5 = 405px で抜け切る。
+                                  大きすぎると画面の途中で止まり、小さすぎると早く抜けて残りが空振り */
+#define CRUSH_WAVE_SHEAR 4   /* 斜めの傾き(列ごとに下げる画面px)。★32/列数(8)=4 が上限(ovl_crush.c) */
 extern u8  g_crush;        /* 残り使用回数(画面下に表示) */
 extern u8  g_crush_t;      /* >0=発動中の残りフレーム。パレットエンジンが雷光の強さに使う */
 
