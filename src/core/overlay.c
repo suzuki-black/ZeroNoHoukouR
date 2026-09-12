@@ -98,3 +98,4 @@ void crush_wave_init(void) __naked { __asm jp 0xA01E __endasm; }
 void crush_wave(u8 step) __naked { (void)step; __asm jp 0xA021 __endasm; }
 void crush_wave_off(void) __naked { __asm jp 0xA024 __endasm; }
 s16 crush_wave_y(u8 step) __naked { (void)step; __asm jp 0xA027 __endasm; }
+u8  shock_build(u8 split_line) __naked { (void)split_line; __asm jp 0xA02A __endasm; }

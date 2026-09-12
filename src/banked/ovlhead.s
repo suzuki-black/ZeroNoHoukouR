@@ -17,6 +17,7 @@
         .globl  _ovl_crush_wave
         .globl  _ovl_crush_wave_off
         .globl  _ovl_crush_wave_y
+        .globl  _ovl_shock_build
         .area   _CODE
         jp      _ovl_curtain_update   ; slot0 (OVL_SLOT_CURTAIN_UPDATE)
         jp      _ovl_curtain_ring     ; slot1 (OVL_SLOT_CURTAIN_RING)
@@ -32,3 +33,4 @@
         jp      _ovl_crush_wave       ; slot11 (OVL_SLOT_WAVE)
         jp      _ovl_crush_wave_off   ; slot12 (OVL_SLOT_WAVE_OFF)
         jp      _ovl_crush_wave_y     ; slot13 (OVL_SLOT_WAVE_Y)
+        jp      _ovl_shock_build      ; slot14 (OVL_SLOT_SHOCK_BUILD)

@@ -104,6 +104,7 @@ void ent_player_hit(s16 px, s16 py) {
     sfx(0, SFX_PHIT);                          /* 被弾の痛み音(tone A) */
     ent_spawn_explosion(px, py);
     g_hitstop = 5; g_shake = 12;               /* 被弾=強い手応え(凍結＋大きめ揺れ) */
+    shock_at(py);                              /* ★衝撃波ディストーション(設計メモ §2-B) */
     if (g_php > 1) { g_php--; g_pinv = 90; }   /* 耐久残=生存(1.5秒無敵点滅) */
     else { g_php = 0; g_miss = 1; }            /* 耐久尽き=撃墜。残機/リスタートはシーンが処理 */
 }
@@ -163,7 +164,8 @@ void ent_resolve_collisions(void) {
                 if (--t->hp == 0) { t->hidden = 1; g_gun_kills++; g_lturret--; g_score += 60; ent_spawn_explosion(t->x, t->y);
                                     scorepop_add(t->x, t->y, 60);  /* ★破壊点数ポップアップ */
                                     sfx(2, SFX_BOOM);              /* ★主砲撃破の爆発音 */
-                                    g_hitstop = 4; g_shake = 8; }   /* 撃破=手応え(凍結＋揺れ)。activeは維持し炎上。★g_lturret--=生存砲台O(1) */
+                                    g_hitstop = 4; g_shake = 8;
+                                    shock_at(t->y); }   /* 撃破=手応え(凍結＋揺れ＋衝撃波)。activeは維持し炎上。★g_lturret--=生存砲台O(1) */
                 else { t->h = 6; ent_spawn_spark(b->x, b->y); }   /* 非撃破=砲身が白フラッシュ(h)＋火花 */
                 break;
             }

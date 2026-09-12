@@ -45,6 +45,7 @@
 #define OVL_SLOT_WAVE           11
 #define OVL_SLOT_WAVE_OFF       12
 #define OVL_SLOT_WAVE_Y         13
+#define OVL_SLOT_SHOCK_BUILD    14
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -65,5 +66,6 @@ void crush_wave_init(void);                /* メガクラッシュ: 津波の�
 void crush_wave(u8 step);                  /* メガクラッシュ: 津波を1フレームぶん置く */
 void crush_wave_off(void);                 /* メガクラッシュ: 津波スプライトを片付ける */
 s16  crush_wave_y(u8 step);                /* メガクラッシュ: その step の波頭 画面Y(等加速度) */
+u8   shock_build(u8 split_line);           /* 衝撃波: g_ras[] を組み立て分割数を返す(設計メモ §2-B) */
 
 #endif /* OVERLAY_H */

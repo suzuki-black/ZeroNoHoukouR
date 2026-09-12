@@ -10,11 +10,15 @@ __sfr __at(0x9A) RAS_PAL;    /* パレットデータ */
    その分だけ手前で割り込ませる。★実測で決める値(openMSX と実機で確認すること)。 */
 #define RAS_LINE_BIAS 2
 
-RasSplit g_ras[RAS_MAX];
+RasSplit __at(RAS_ADDR) g_ras[RAS_MAX];
 u8 g_ras_n;
 
 u8 g_ras_i;          /* 今フレームで次に処理する分割の添字。★asm から参照するので非static */
 static u8 s_armed;   /* 1=E1 を立てている(asm からは触らないので static でよい) */
+/* ★いま効いている R#23(縦スクロール)の値。次の分割行の R#19 を計算するのに使う。
+   分割で R#23 を動かすと「画面行→VRAM行」の対応が変わるので、g_vscroll では駄目
+   (raster.h の作法 3-b)。フレーム先頭で g_vscroll から仕切り直す。 */
+static u8 s_vs;
 
 /* R#0 の E1(bit4) を操作。BIOS の影(RG0SAV)と整合させる(作法 2)。 */
 static void set_e1(u8 on) {
@@ -33,15 +37,21 @@ void ras_apply(void) {   /* ★asm から CALL するので非static */
         RAS_CTRL = s->val;
         RAS_CTRL = (u8)(0x80 | s->reg);
     }
+    if (s->reg2 != RAS_NOREG) {
+        RAS_CTRL = s->val2;
+        RAS_CTRL = (u8)(0x80 | s->reg2);
+    }
     if (s->pidx != RAS_NOPAL) {
         RAS_CTRL = s->pidx;
         RAS_CTRL = 0x80 | 16;              /* R#16 = パレットポインタ */
         RAS_PAL  = (u8)((s->pr << 4) | s->pb);
         RAS_PAL  = s->pg;
     }
+    if (s->reg  == 23) s_vs = s->val;    /* ★表示起点が動いた=以降の R#19 はこれを基準に(作法3-b) */
+    if (s->reg2 == 23) s_vs = s->val2;
     g_ras_i++;
     if (g_ras_i < g_ras_n) {
-        u8 v = (u8)(g_ras[g_ras_i].line + g_vscroll - RAS_LINE_BIAS);
+        u8 v = (u8)(g_ras[g_ras_i].line + s_vs - RAS_LINE_BIAS);
         RAS_CTRL = v;
         RAS_CTRL = 0x80 | 19;
     }
@@ -54,13 +64,18 @@ void ras_apply(void) {   /* ★asm から CALL するので非static */
      必ず VBLANK 文脈で行うこと。 */
 void ras_rearm(void) {
     g_ras_i = 0;
+    s_vs = g_vscroll;          /* ★フレーム先頭の表示起点。以降 R#23 を動かすたびに ras_apply が追う */
     if (!g_ras_n) return;
+    /* ★先頭分割が R#23 を戻す役なら、値は**今の** g_vscroll にする。表を組んだフレームの値を
+       そのまま持っていると、その後スクロールや画面揺れで vscroll が動いたときに画面上端だけ
+       古い位置へ戻ってしまう(メガクラッシュ中は毎フレーム揺らしている)。 */
+    if (g_ras[0].reg2 == 23) g_ras[0].val2 = s_vs;
     /* ★line==0 は「フレーム先頭の状態」= VBLANK 中にここで適用する(分割では出せない)。
        割込み応答遅れのぶん、行2 などに置いた復帰用の分割は画面上端に数ライン取りこぼしが出る
        (実際にHUD帯が前フレームの色のまま残った)。フレーム先頭の確定は VBLANK でやること。
        ras_apply が「次の分割の R#19」まで面倒を見るので、ここでは呼ぶだけでよい。 */
     if (g_ras[0].line == 0) { ras_apply(); return; }
-    { u8 v = (u8)(g_ras[0].line + g_vscroll - RAS_LINE_BIAS);
+    { u8 v = (u8)(g_ras[0].line + s_vs - RAS_LINE_BIAS);
       RAS_CTRL = v;
       RAS_CTRL = 0x80 | 19; }
 }

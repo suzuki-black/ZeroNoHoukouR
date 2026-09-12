@@ -13,8 +13,18 @@ u16 g_hiscore;
 u8  g_lives;
 u8  g_php;
 u8  g_rage;
+u8  g_shock_t;    /* 衝撃波ディストーションの残りフレーム(0=なし) */
+u8  g_shock_y;    /* 衝撃波の震源の画面Y */
 u8  g_crush;      /* メガクラッシュ残数(stage_build で補充) */
 u8  g_crush_t;    /* メガクラッシュ発動中の残りフレーム(0=非発動) */
+
+/* ★衝撃波を起こす(震源の画面Y)。画面外なら起こさない。
+   エンティティの y は画面座標(砲塔は hot.c の bh_turret が ay-g_cam で毎フレーム入れている)。 */
+void shock_at(s16 sy) {
+    if (sy < 0 || sy > 211) return;
+    g_shock_y = (u8)sy;
+    g_shock_t = SHOCK_FRAMES;
+}
 
 /* 難易度で間隔をスケール(EASY=1.25倍遅い/NORMAL=等倍/HARD=0.75倍速い)。レイジ中は更に×2/3。下限1。 */
 u8 diff_interval(u8 base) {

@@ -384,6 +384,7 @@ static void stage_build(void) {
        減る、という壊れ方を避ける)。**overlay_load の後**で判定すること。 */
     g_crush = g_ovl_ok ? CRUSH_MAX : 0;
     g_crush_t = 0;
+    g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
 
@@ -793,11 +794,19 @@ u8 stage_update(void) {
     /* ★スプライト分割をゲームに統合: 行 CURTAIN_SPLIT_LINE で R#5 をセットBへ切替える。
        両セットには ent_draw_all の内容が丸ごとミラーされている(g_spr_dual)ので、
        分割しても見た目は変わらない。その上で「余ったスロット」を帯ごとに別の弾で埋める(下の追加描画)。 */
-    g_ras[0].line = 0;                 /* フレーム先頭=セットAへ戻す */
-    g_ras[0].reg = 5; g_ras[0].val = SPR_R5_A; g_ras[0].pidx = RAS_NOPAL;
-    g_ras[1].line = CURTAIN_SPLIT_LINE;     /* ここから下=セットB */
-    g_ras[1].reg = 5; g_ras[1].val = SPR_R5_B; g_ras[1].pidx = RAS_NOPAL;
-    raster_arm(2);
+    /* ★衝撃波ディストーション(設計メモ §2-B)も同じ分割表に相乗りさせる。
+       ovl_shock.c が「先頭=セットA＋表示起点リセット」「衝撃波リング(R#23)」「分割行=セットB」を
+       行順に組んで分割数を返す。衝撃波が出ていなければ従来どおりの2分割になる。 */
+    if (g_ovl_ok) {
+        raster_arm(shock_build(CURTAIN_SPLIT_LINE));
+    } else {
+        g_ras[0].line = 0;                 /* フレーム先頭=セットAへ戻す */
+        g_ras[0].reg = 5; g_ras[0].val = SPR_R5_A; g_ras[0].reg2 = RAS_NOREG; g_ras[0].pidx = RAS_NOPAL;
+        g_ras[1].line = CURTAIN_SPLIT_LINE;     /* ここから下=セットB */
+        g_ras[1].reg = 5; g_ras[1].val = SPR_R5_B; g_ras[1].reg2 = RAS_NOREG; g_ras[1].pidx = RAS_NOPAL;
+        raster_arm(2);
+    }
+    if (g_shock_t) g_shock_t--;   /* 衝撃波の寿命(リングはこれで広がり、振幅は減衰する) */
 
     g_rage = (phase == 1 && ent_live_turrets() <= 1) ? 1 : 0;   /* ★最後の主砲=レイジ(全発砲が速射) */
 
