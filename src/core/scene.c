@@ -9,6 +9,7 @@
 #include "vdp.h"
 #include "bank.h"
 #include "sound.h"
+#include "gamestate.h"  /* g_crush_t: メガクラッシュ中だけ 60fps へ上げる */
 #ifdef DEBUG_PROF
 #include "prof.h"
 #endif
@@ -127,20 +128,23 @@ void scene_run(u8 cur) {
        結果、ゲーム速度(=フレームレート依存の設計)が2倍になった。ステージは 2 VBLANK 待ちで意図した
        30fpsへ固定し、元の手触り(敵速/弾速/スクロール/spawn)を維持する。計算に余裕があるので"絶対に
        落ちない安定30fps"になる(従来の20〜30fps揺れの本質的解決)。他シーンは高速化対象外=従来通り1 VBLANK。
-       ★60fpsぬるぬる化(全速度定数を1/2へ再調整)へ進めたくなったら、この2回目のwaitを外す。 */
+       ★60fpsぬるぬる化(全速度定数を1/2へ再調整)へ進めたくなったら、この2回目のwaitを外す。
+       ★★メガクラッシュ中(g_crush_t)だけは 2回目の wait を外して 60fps で回す。ゲームは全部
+         止まっているのでフレームレート依存の速度定数に影響しない。津波スプライトのコマ送りが
+         倍細かくなって**ドット単位に滑らかに**見え、同時に演出の総尺も短くなる(実測 3.9秒→3秒台)。 */
 #ifdef DEBUG_PROF
         if (cur == SC_STAGE) {   /* ★計測はステージ(SCREEN5)中のみ。タイトル(SCREEN12)でpage切替すると壊れる */
             u16 comp = (u16)(prof_tick() - _pc);   /* 計算区間tick(cmd_wait含む) */
             g_prof_acc[PF_COMPUTE] += comp;
             vdp_wait_frame();                       /* 空き(PF_WAIT)は vdp_wait_frame 内で計上 */
-            vdp_wait_frame();                       /* ★2 VBLANK目=30fps固定 */
+            if (!g_crush_t) vdp_wait_frame();       /* ★2 VBLANK目=30fps固定(クラッシュ中は60fps) */
             prof_frame_end(comp);
         } else {
             vdp_wait_frame();
         }
 #else
         vdp_wait_frame();
-        if (cur == SC_STAGE) vdp_wait_frame();      /* ★2 VBLANK目=30fps固定 */
+        if (cur == SC_STAGE && !g_crush_t) vdp_wait_frame();   /* ★2 VBLANK目=30fps固定(クラッシュ中は60fps) */
 #endif
     }
 }

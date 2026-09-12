@@ -20,32 +20,46 @@ void hud_init(void) {
     for (d = 0; d < 5; d++) vdp_sprite_color(d, 15);
     vdp_sprite_color(5, 3);    /* 残機アイコン=緑(零戦シルエット) */
     vdp_sprite_color(6, 11);   /* 残機数=黄 */
-    /* ★メガクラッシュ表示(画面下): アイコン=白 / 残数=白。海(青)の上で最も読みやすい。
-       アイコンは専用パターンを足さずマズルフラッシュ(SPR_FLASH)を流用する
-       (パターン表は 144-156 しか空きが無く、そこは DEBUG_FPS の "MASK" が使う)。 */
-    vdp_sprite_color(7, 15);
+    /* ★ボム(メガクラッシュ)残数(画面下)。棒は**行別カラー**で「熱い棒」に見せる
+       (白い縁→橙→赤い芯→橙→白い縁)。単色の白い棒だと HUD の数字と区別がつかず、
+       ボムのストックに見えない。数字(4本目以降)は白。 */
+    { static const u8 crush_col[16] = { 15,15,15, 12,12,12, 11,11,11,11,11, 12,12,12, 15,15 };
+      vdp_sprite_color_tab(7, crush_col); }
     vdp_sprite_color(8, 15);
 #ifdef DEBUG_FPS
-    /* "MASK" の文字スプライトを空きパターン144,148,152,156へ生成(数字と同じくグリフを16x16左上8x8へ) */
-    { static const char msk[4] = { 'M', 'A', 'S', 'K' }; u8 c, rr, p[32];
-      for (c = 0; c < 4; c++) {
-          const u8 *g = vdp_glyph((u8)msk[c]);
-          for (rr = 0; rr < 8;  rr++) p[rr] = g[rr];
-          for (rr = 8; rr < 32; rr++) p[rr] = 0;
-          vdp_sprite_pattern((u8)(144 + c * 4), p);
-      } }
-    { u8 s; for (s = 9; s < 17; s++) vdp_sprite_color(s, 13); }   /* FPS2桁＋"MASK"4字＋mask値2桁=ほぼ黒(視認性) */
+    { u8 sl; for (sl = 9; sl < HUD_SLOTS; sl++) vdp_sprite_color(sl, 13); }   /* FPS2桁＋mask値2桁=ほぼ黒(視認性) */
 #endif
     g_spr_base = HUD_SLOTS;   /* 以降エンティティは slot(HUD_SLOTS) から詰める */
 }
 
 /* スコア5桁ゼロ詰め(slot0-4)＋残機=零戦アイコン(slot5)＋予備機数1桁(slot6, 右上)。
    HUDは低slot=高優先なので、8枚/走査線を超えても敵機(slot7+)が先に間引かれHUDは残る。 */
+/* ★ボム残数の「棒」パターンを描き直す(bars=1..3)。16x16 の左上から
+     幅4px の棒を 6px 間隔で bars 本 …… |  / | |  / | | |
+   3本が並ぶ最大の太さが 4px(4+2+4+2+4=16)。1本=小さすぎて見えない、を避けるため
+   高さは 14px(row1..14)まで伸ばす。
+   ★パターン番号を3つ確保する案は採れなかった(16x16の空き枠は SPR_CRUSH の1つだけ。
+     144-156 は津波 SPR_WAVE0 が使う)。残数が変わったときだけ 32B を書き換える
+     ＝1面で数回しか走らないので、VRAM 帯域から見れば無に等しい。 */
+static void crush_pattern(u8 bars) {
+    u8 pat[32], r, l = 0xF0, rt = 0x00;   /* 1本目: x0-3 */
+    if (bars >= 2) { l |= 0x03; rt |= 0xC0; }   /* 2本目: x6-9 (左2bit＋右2bit) */
+    if (bars >= 3) { rt |= 0x0F; }              /* 3本目: x12-15 */
+    for (r = 0; r < 16; r++) {
+        u8 on = (u8)(r >= 1 && r <= 14);
+        pat[r]      = on ? l  : 0;   /* 左半分(x0-7)  */
+        pat[16 + r] = on ? rt : 0;   /* 右半分(x8-15) */
+    }
+    vdp_sprite_pattern(SPR_CRUSH, pat);
+}
+
 void hud_draw(u16 score, u8 lives) {
     /* ★桁分解(除算×10)はスコア/残機が変化した時だけ=毎フレームの高価な除算を回避(Z80は除算がライブラリ呼び)。
        スプライト位置(vscroll補正で毎フレーム変わる)は毎回書く。 */
     static u16 last_score = 0xFFFF; static u8 dig[5] = { 0,0,0,0,0 };
     static u8  last_lives = 0xFF;   static u8 ldig = 0;
+    static u8  last_crush = 0xFF;   /* ボム残数: 変化時だけパターンを書き換える */
+    u8 crush_n = g_crush;
     u8 i;
     if (score != last_score) {
         static const u16 place[5] = { 10000, 1000, 100, 10, 1 };
@@ -57,28 +71,31 @@ void hud_draw(u16 score, u8 lives) {
         vdp_sprite_pos(i, (u8)(8 + i * 8), 2, (u8)(SPR_DIGIT0 + dig[i] * 4));
     vdp_sprite_pos(5, 212, 1, SPR_ZERO);                          /* 残機=零戦シルエット */
     vdp_sprite_pos(6, 234, 2, (u8)(SPR_DIGIT0 + ldig * 4));       /* 予備機数(9頭打ち) */
-    /* ★メガクラッシュ残数を画面下(左)へ。残0のときは画面外へ退避して見せない。
+    /* ★ボム残数を画面下(左)へ。1〜3 は棒の本数そのもの( | / | | / | | | )で数えずに読める。
+       4以上(コンフィグや将来のパワーアップ)は棒1本＋数字にする(棒を4本以上並べても読めない)。
+       残0のときは画面外へ退避して見せない。
        ★Y=216 は停止マーカなので vdp_sprite_pos 側の spr_y が回避する(ここでは気にしなくてよい)。 */
-    if (g_crush) {
-        vdp_sprite_pos(7,  8, 192, SPR_FLASH);                          /* 稲妻アイコン(流用) */
-        vdp_sprite_pos(8, 24, 194, (u8)(SPR_DIGIT0 + (g_crush % 10) * 4));
+    if (crush_n != last_crush) {
+        last_crush = crush_n;
+        if (crush_n) crush_pattern((u8)(crush_n <= 3 ? crush_n : 1));
+    }
+    if (crush_n) {
+        vdp_sprite_pos(7, 8, 190, SPR_CRUSH);
+        if (crush_n > 3) vdp_sprite_pos(8, 27, 192, (u8)(SPR_DIGIT0 + (crush_n % 10) * 4));
+        else             vdp_sprite_pos(8, 0, 220, SPR_DIGIT0);   /* 画面下端外へ */
     } else {
-        vdp_sprite_pos(7,  0, 220, SPR_FLASH);                          /* 画面下端外へ(212ライン表示) */
-        vdp_sprite_pos(8,  0, 220, SPR_DIGIT0);
+        vdp_sprite_pos(7, 0, 220, SPR_CRUSH);
+        vdp_sprite_pos(8, 0, 220, SPR_DIGIT0);
     }
 #ifdef DEBUG_FPS
     /* ★デバッグROMのみ。左2桁=g_fps(JIFFY基準の参考値)、右4桁=フレームカウンタ(ストップウォッチ実測用の真値)。
        使い方: 右4桁を読む→スマホで正確に10秒→もう一度読む→(差)/10=実FPS。JIFFYの進み方に依存しない。 */
-    /* ★1走査線8枚制限を守るため2行に分割: y=24にFPS2桁(slot7,8) / y=40に"MASK n"(slot9-13)。
-       いずれも低slot=高優先なのでゲームスプライト(slot14+)より必ず表示される。 */
+    /* ★y=24 に FPS2桁(slot9,10)＋mask値2桁(slot11,12)。低slot=高優先なのでゲームスプライトより必ず出る。
+       ★"MASK" の文字は廃止(16x16 パターンの空き枠4つを津波 SPR_WAVE0 へ譲った)。 */
     { u8 f = (g_fps > 99) ? 99 : g_fps;
-      vdp_sprite_pos(9,  96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));   /* FPS十の位 */
+      vdp_sprite_pos(9,   96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));   /* FPS十の位 */
       vdp_sprite_pos(10, 104, 24, (u8)(SPR_DIGIT0 + (f % 10) * 4));   /* FPS一の位 */
-      vdp_sprite_pos(11,  72, 40, 144);   /* M */
-      vdp_sprite_pos(12,  80, 40, 148);   /* A */
-      vdp_sprite_pos(13,  88, 40, 152);   /* S */
-      vdp_sprite_pos(14,  96, 40, 156);   /* K */
-      vdp_sprite_pos(15, 112, 40, (u8)(SPR_DIGIT0 + (u8)((g_dbgmask / 10) % 10) * 4));   /* マスク十の位 */
-      vdp_sprite_pos(16, 120, 40, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask % 10) * 4)); }        /* マスク一の位 */
+      vdp_sprite_pos(11, 120, 24, (u8)(SPR_DIGIT0 + (u8)((g_dbgmask / 10) % 10) * 4));   /* マスク十の位 */
+      vdp_sprite_pos(12, 128, 24, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask % 10) * 4)); }        /* マスク一の位 */
 #endif
 }

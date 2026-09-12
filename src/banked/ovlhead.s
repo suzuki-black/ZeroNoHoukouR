@@ -13,6 +13,9 @@
         .globl  _ovl_curtain_present
         .globl  _ovl_crush_bolts
         .globl  _ovl_clear_enemy_bullets
+        .globl  _ovl_crush_wave_init
+        .globl  _ovl_crush_wave
+        .globl  _ovl_crush_wave_off
         .area   _CODE
         jp      _ovl_curtain_update   ; slot0 (OVL_SLOT_CURTAIN_UPDATE)
         jp      _ovl_curtain_ring     ; slot1 (OVL_SLOT_CURTAIN_RING)
@@ -24,3 +27,6 @@
         jp      _ovl_curtain_present  ; slot7 (OVL_SLOT_CURTAIN_PRESENT)
         jp      _ovl_crush_bolts      ; slot8 (OVL_SLOT_CRUSH_BOLTS)
         jp      _ovl_clear_enemy_bullets ; slot9 (OVL_SLOT_CLEAR_EBUL)
+        jp      _ovl_crush_wave_init  ; slot10 (OVL_SLOT_WAVE_INIT)
+        jp      _ovl_crush_wave       ; slot11 (OVL_SLOT_WAVE)
+        jp      _ovl_crush_wave_off   ; slot12 (OVL_SLOT_WAVE_OFF)

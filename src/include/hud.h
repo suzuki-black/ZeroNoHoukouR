@@ -8,7 +8,9 @@
 #include "types.h"
 
 #ifdef DEBUG_FPS
-#define HUD_SLOTS 17  /* 通常9 ＋ FPS2桁(9,10) ＋ "MASK"4字(11-14) ＋ mask値2桁(15,16)。ent_draw_all は slot17 以降 */
+#define HUD_SLOTS 13  /* 通常9 ＋ FPS2桁(9,10) ＋ mask値2桁(11,12)。ent_draw_all は slot13 以降。
+                         ★"MASK" の文字スプライトは廃止した(16x16 パターンの空き枠4つを津波
+                           SPR_WAVE0 に譲ったため)。値だけ FPS の隣に出る。 */
 extern u8  g_fps;     /* JIFFY増分を校正して算出した実FPS */
 extern u16 g_frame;   /* ★JIFFY非依存: ループ毎+1のフレームカウンタ。ストップウォッチ検証用 */
 extern u8  g_dbgmask; /* ★M(TRIGB)で0→7巡回。bit0=海停止/bit1=AI停止/bit2=描画停止。切り分け用 */

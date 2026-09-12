@@ -628,25 +628,45 @@ u8 stage_update(void) {
     if (g_crush_t) {
         g_crush_t--;
         if (g_crush_t == CRUSH_WIPE) curtain_reset();   /* CPU弾幕は別プール(常駐) */
-        if (g_crush_t == 0) bgm_play(phase ? stage_bgm[curstage] : BGM_SEA_INTRO);   /* 再開 */
+        /* ★止めた曲を**続きから**再開する(bgm_play だと毎回イントロから鳴り直す)。 */
+        if (g_crush_t == 0) bgm_resume();
         hud_draw(g_score, g_lives);      /* 残数表示を止めない(発動直後に減った数を見せる) */
         if (g_ovl_ok) {
             ramx_use_ram();
             if (pal_need_reset) { pal_need_reset = 0; pal_reset(); }
-            /* ★パレットを**先に**反映する。稲妻の描画には時間がかかるので、後回しにすると
+            /* ★パレットを**先に**反映する。稲妻や津波の描画には時間がかかるので、後回しにすると
                描いている間ずっと前フレームの色が出たままになる(実際それで「真っ白で稲妻が見えない」
                という結果になった)。 */
             pal_update();
             /* 敵弾の一括消去はオーバレイ側(常駐24KBの節約)。ホット区間の中で呼ぶ。 */
             if (g_crush_t == CRUSH_WIPE) clear_enemy_bullets();
-            /* ★稲妻を3回、別の形で走らせる(ガガガ)。描くたびに雷鳴を打ち直すので音も連打になる。
+            /* ★第1幕=稲妻を3回、別の形で走らせる(ガガガ)。描くたびに雷鳴を打ち直すので音も連打になる。
                描くフレームのパレットはわざと暗く(crush_lv=0)してあるので白い筋がはっきり出る。 */
-            if (g_crush_t == 22 || g_crush_t == 17 || g_crush_t == 12) {
+            if (g_crush_t == 88 || g_crush_t == 80 || g_crush_t == 72) {
                 crush_bolts(g_crush_t);
                 sfx(2, SFX_THUNDER);
             }
+            /* ★第2幕=津波。斜め一列のスプライト(slot16..31)が画面下から駆け上がる。
+               仕事は属性16枚の書換だけ＝ほぼ無料なので 1フレーム CRUSH_WAVE_DY px の
+               小刻みな動き(＝ドット単位で滑らか)にできる。 */
+            if (g_crush_t <= CRUSH_WAVE_T0 && g_crush_t >= CRUSH_WAVE_T1) {
+                u8 step = (u8)(CRUSH_WAVE_T0 - g_crush_t);
+                if (step == 0) {
+                    crush_wave_init();
+                    sfx(2, SFX_THUNDER);   /* 波が立ち上がる轟き */
+                    /* ★表示停止マーカ(Y=216)が波より手前の slot に残っていると、VDP が
+                       そこで走査をやめて波が1枚も出ない。凍結中の敵で埋まっていない
+                       slot は「画面外へ置く」で埋めてマーカを消す。 */
+                    { u8 sl; for (sl = g_spr_used; sl < CRUSH_WAVE_SLOT; sl++)
+                          vdp_sprite_pos(sl, 0, 220, SPR_BLOCK); }
+                }
+                crush_wave(step);
+            }
+            if (g_crush_t == 0) crush_wave_off();
             /* ★描いた稲妻を消す: 表示リングを世界の正本(艦バッファB/海テンプレ)から引き直す。
-               艦へ焼き込んだ炎は B 側にあるので消えない。 */
+               艦へ焼き込んだ炎は B 側にあるので消えない。津波はスプライトなので BG は汚れない。
+               ★津波が始まる前(t=CRUSH_ERASE=58)に済ませる。150ms かかるので、波が動いている
+                 最中にやると1コマだけ引っかかって見える。 */
             if (g_crush_t == CRUSH_ERASE) scroll_repaint_all();
             ramx_use_cart();
         }

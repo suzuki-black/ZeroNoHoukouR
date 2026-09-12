@@ -108,6 +108,7 @@ static u8  mIdx, mTrem, mCl;    /* melody: index / 残フレーム / 発音長 *
 static u8  bIdx, bTrem, bCl;    /* bass */
 static u8  drmIdx, drmT, drmType, drmVol;
 static u8  bgmOn;
+static u8  bgmLoaded;   /* 1=bgm_ram に曲が載っている(bgm_resume の安全弁) */
 
 void bgm_play(u8 track) {
     u8 *p;
@@ -130,7 +131,17 @@ void bgm_play(u8 track) {
     mIdx = (u8)(nMel ? nMel - 1 : 0); mTrem = mCl = 0;
     bIdx = (u8)(nBas ? nBas - 1 : 0); bTrem = bCl = 0;
     drmIdx = 15; drmT = drmType = drmVol = 0;   /* 16手ドラムも最初の前進で 0 へ */
+    bgmLoaded = 1;
     bgmOn = 1;
+}
+
+/* ★止めた曲を**続きから**鳴らし直す(メガクラッシュの停止明け)。
+   bgm_stop() は bgmOn を落として消音するだけで、音符インデックス(mIdx/bIdx/drmIdx)も
+   bgm_ram の曲データもそのまま残る。そこへ bgmOn=1 を戻せば中断した小節から続く。
+   bgm_play() で再開すると毎回イントロから鳴り直してしまう(実機で指摘された)。
+   ★一度も bgm_play していない場合は mel_n 等が未設定なので何もしない。 */
+void bgm_resume(void) {
+    if (bgmLoaded) bgmOn = 1;
 }
 
 void bgm_stop(void) {

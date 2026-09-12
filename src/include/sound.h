@@ -30,7 +30,8 @@ void sfx(u8 ch, u8 type);     /* ch(0..2) に効果音 type をトリガ(同ch�
 
 /* ---- BGM(データバンクの曲データを ISR で再生) ---- */
 void bgm_play(u8 track);      /* track(0..) をバンクから RAM へ読み再生開始。★常駐からのみ呼ぶ */
-void bgm_stop(void);          /* BGM停止＋melody/bass 消音(SFX/noiseは不干渉) */
+void bgm_stop(void);          /* BGM停止＋melody/bass 消音(SFX/noiseは不干渉)。曲/位置は保持する */
+void bgm_resume(void);        /* bgm_stop で止めた曲を**続きから**再開(頭出ししない)。★常駐からのみ */
 void play_fanfare(void);      /* 勝ちどきファンファーレ(前景同期・BGM停止)。撃破演出用。終了まで戻らない */
 void play_sink(void);         /* 沈没音(下降。自機撃墜/ゲームオーバー)。前景同期。終了まで戻らない */
 void play_fanfare_open(void); /* 開始ファンファーレ(前景同期・BGM停止)。ステージ開始カード用。終了まで戻らない */
