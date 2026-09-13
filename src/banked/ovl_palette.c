@@ -27,15 +27,21 @@
 #include "entity.h"   /* g_playerhit / g_gun_kills: 演出のトリガに使う既存カウンタ */
 #include "gamestate.h" /* g_crush_t / CRUSH_FRAMES: メガクラッシュの雷光 */
 
-/* 基準パレット。vdp_palette_game() と同じ値を持つ(あちらは初期化、こちらは毎フレームの計算元)。
-   ★二重持ちだが、オーバレイから常駐の static を覗くわけにいかないので許容する。
-     vdp_palette_game を変えたらここも合わせること。 */
-static const u8 pal_base[16][3] = {
-    { 0, 0, 0 }, { 1, 4, 5 }, { 2, 5, 6 }, { 1, 3, 1 },
-    { 3, 3, 3 }, { 2, 2, 2 }, { 6, 5, 3 }, { 0, 1, 3 },
-    { 2, 5, 2 }, { 3, 3, 1 }, { 4, 6, 4 }, { 7, 1, 1 },
-    { 7, 4, 0 }, { 1, 1, 1 }, { 4, 4, 5 }, { 7, 7, 7 },
-};
+/* ★面ごとの時間帯・天候の基準パレット(1面=昼 / 2面=夕焼け / 3面=荒天 / 4面=朝霧 / 5面=夜戦)。
+   tools/gen_grade.py が生成する。1面(昼)の値は vdp_palette_game() と同じ(あちらは初期化、こちらは毎フレームの計算元)。
+   ★色調はパレットだけで変える＝VDP 帯域ほぼゼロで面の印象が変わる。弾/爆発/数字(11,12,15)は全面で同じ明るさ。 */
+#include "aa_hot.h"   /* curstage / rnd */
+#include "sound.h"    /* sfx(雷鳴) */
+#ifdef OVL_FINAL
+/* ★最終面のオーバレイは枠が狭い(残り数十B)ので、昼の 1 面分だけ持つ(最終面は昼) */
+static const u8 pal_stage[1][16][3] = {
+    { {0,0,0},{1,4,5},{2,5,6},{1,3,1},{3,3,3},{2,2,2},{6,5,3},{0,1,3},
+      {2,5,2},{3,3,1},{4,6,4},{7,1,1},{7,4,0},{1,1,1},{4,4,5},{7,7,7} } };
+#define PAL_STAGE_IDX 0
+#else
+#include "stage_grade.h"
+#define PAL_STAGE_IDX ((curstage < 5) ? curstage : 0)
+#endif
 
 /* 直前に書いた値。差分のあるエントリだけ書く(全書換でも安いが、無駄は無いほうがよい)。 */
 static u8 pal_cur[16][3];
@@ -46,6 +52,7 @@ static u8 fx_kind;          /* 0=なし / 1=被弾(赤) / 2=撃破(白) */
 static u8 fx_t;             /* 残りフレーム(大きいほど濃い) */
 static u8 last_hit, last_gun;
 static u8 shimmer;          /* 海シマーの位相 */
+static u8 storm_t, storm_f; /* 3面の稲光: 次までのフレーム / 光っている残り */
 
 #define FX_NONE 0
 #define FX_HIT  1
@@ -102,9 +109,18 @@ void ovl_pal_update(void) {
     }
 
     shimmer++;
+    /* ★3面(荒天): ときどき稲光。数秒おきに「白→少し戻る→また光る→消える」を 4 フレームで。 */
+#ifndef OVL_FINAL
+    if (curstage == 2 && !w) {
+        if (storm_t) storm_t--;
+        else { storm_t = (u8)(90 + (rnd() & 127)); storm_f = 4; sfx(2, SFX_THUNDER); }
+        if (storm_f) { static const u8 flash[5] = { 0, 2, 1, 3, 4 }; w = flash[storm_f]; tr = tg = tb = 7; storm_f--; }
+    }
+#endif
 
     for (i = 0; i < 16; i++) {
-        u8 r = pal_base[i][0], g = pal_base[i][1], b = pal_base[i][2];
+        const u8 *pb = pal_stage[PAL_STAGE_IDX][i];
+        u8 r = pb[0], g = pb[1], b = pb[2];
         /* ★海の明斑点(色2)だけ。色7は艦のドロップシャドウと共用なので絶対に触らない(上の調査)。 */
         if (i == 2) {
             u8 ph = (u8)(shimmer & 31);
@@ -123,6 +139,6 @@ void ovl_pal_update(void) {
 
 /* 面開始/再開で呼ぶ: 状態を捨てて次フレームに全エントリを書き直させる。 */
 void ovl_pal_reset(void) {
-    pal_valid = 0; fx_kind = FX_NONE; fx_t = 0; shimmer = 0;
+    pal_valid = 0; fx_kind = FX_NONE; fx_t = 0; shimmer = 0; storm_t = 120; storm_f = 0;
     last_hit = g_playerhit; last_gun = g_gun_kills;
 }

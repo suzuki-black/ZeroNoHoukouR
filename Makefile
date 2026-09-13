@@ -52,7 +52,7 @@ GAMEVER := $(shell cat VERSION 2>/dev/null || echo 0.0.0)
 #    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
 #    「新旧で構造体レイアウトが食い違うオブジェクトが混在→メモリ破損」という
 #    stale-object バグを踏む(実際に踏んだ)。小規模なので全再コンパイルで十分。
-HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)/boss_frames.h
+HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)/boss_frames.h $(BUILD)/stage_grade.h
 
 # ★ops.rel(run_ops)は現在どこからも呼ばれていない(艦OPSの解釈は bank16 の ship_render 内に独自実装が
 #   ある)。常駐24KBを197B無駄に食っていたのでリンクから外した。使うときはここへ戻すこと。
@@ -271,6 +271,9 @@ $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
 
 # ── 最終面(巨大機 XB-19) ──
 # コマは tools/gen_boss.py が三面図のシルエット(assets/xb19_mask.png)から生成する(約30秒)。
+# 面ごとの時間帯・天候のパレット(パレットエンジンが持つ表)
+$(BUILD)/stage_grade.h: tools/gen_grade.py | $(BUILD)
+	python3 tools/gen_grade.py h $@
 $(BUILD)/boss_frames.h: tools/gen_boss.py assets/xb19_mask.png | $(BUILD)
 	python3 tools/gen_boss.py bin $(BUILD)/boss_vram.bin $(BUILD)/boss_vram0.bin $(BUILD)/boss_misc.bin $@
 $(BUILD)/boss_vram.bin $(BUILD)/boss_vram0.bin $(BUILD)/boss_misc.bin: $(BUILD)/boss_frames.h
@@ -279,7 +282,7 @@ $(BUILD)/boss_vram.bin $(BUILD)/boss_vram0.bin $(BUILD)/boss_misc.bin: $(BUILD)/
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
 OVL6_RELS = $(BUILD)/ovl6_palette.rel $(BUILD)/ovl6_rot.rel $(BUILD)/ovl_final.rel
 $(BUILD)/ovl6.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_final.c $(HDRS) $(BUILD)/boss_frames.h $(BUILD)/ovlhead6.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl6_palette.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl6_palette.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl6_rot.rel
 	sdcc -m$(TARGET) -c $(OPT) --opt-code-size $(DEFS) $(INC) $(SRC)/banked/ovl_final.c -o $(BUILD)/ovl_final.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
