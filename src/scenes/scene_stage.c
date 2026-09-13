@@ -23,7 +23,6 @@
 #include "curtain.h"
 #include "overlay.h"
 static u8 pal_need_reset;   /* 面開始/再開でパレット状態を捨てる(実際の reset はホット区間で) */
-static u8 rot_ready;      /* 1=回転の元絵を取り込み済み(rot_init はホット区間の中でしか呼べない) */
 
 /* ★演出の定数(ラスタ分割＋CPU弾幕)。 */
 #define CURTAIN_SPLIT_LINE 96   /* スプライト表の分割行(この行から下がセットB) */
@@ -386,7 +385,7 @@ static void stage_build(void) {
     g_crush = g_ovl_ok ? CRUSH_MAX : 0;
     g_crush_t = 0;
     g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
-    g_loop_t = 0; g_loop_cd = 0; rot_ready = 0;   /* 宙返りも持ち越さない */
+    g_loop_t = 0; g_loop_cd = 0; g_loop_alt = 0;   /* 宙返りも持ち越さない */
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
 
@@ -874,19 +873,20 @@ u8 stage_update(void) {
        最低優先のスプライト(落ち影・撃破点数)が混雑フレームで落ち、実機で「戦闘機の影が
        付いたり消えたりする」という形で見えた(ベース表示の劣化)。弾幕が無いときは全32枚を
        ゲームへ返す。 */
-    /* ★宙返りの回転コマを焼く(ent_draw_all より前。SPR_ZERO2 の枠を使う)。
-       元絵の取り込み(rot_init)は VRAM にパターンが載った後＝ホット区間の中で1回だけ。 */
+    /* ★宙返り: 焼いておいたコマ(bank19)を HUD 直後の4 slot へ 2×2 合成で出す(ovl_rot.c)。
+       その間エンティティは4つ後ろから詰める(g_spr_base をずらす)。 */
     if (g_ovl_ok) {
-        if (!rot_ready) { rot_init(); rot_ready = 1; }
         if (g_loop_t) {
-            rot_squash((u8)(LOOP_FRAMES - g_loop_t));   /* 0→15: 縦に潰れて真横→背面→戻る */
+            rot_zoom((u8)(LOOP_FRAMES - g_loop_t));   /* 0→15: 大きく上がって背面→戻る */
             g_loop_t--;
             if (g_loop_t == 0) {
-                rot_restore();                          /* 枠を返す */
+                g_loop_alt = 0;
+                ent_spr_cache_inval(HUD_SLOTS);         /* 合成が色表を直書きした slot のキャッシュを捨てる */
                 shock_at((s16)g_player_y);              /* ★抜けに衝撃波リング(★B の資産) */
             }
         }
     }
+    g_spr_base = (u8)(g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
     if (g_cbul_live) curtain_present(CURTAIN_SLOTS, CURTAIN_SPLIT_LINE);   /* ★弾が居るときだけ

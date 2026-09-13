@@ -326,8 +326,11 @@ static u8 draw1(u8 slot, const Entity *e) __naked {
 #define SHADOW_DX 5
 #define SHADOW_DY 6
 static u8 draw_shadow(u8 slot, const Entity *e) {
+    /* ★宙返り中の自機は高度ぶん影を離す。本体は拡大されて手前に出るので、影が同じ位置だと
+       本体の下に隠れて「上がっている」感じが出ない。影は海面に残して離すのが一番効く。 */
+    u8 off = (e->type == ET_PLAYER) ? g_loop_alt : 0;
     spr_col1(slot, 13);   /* ほぼ黒(1,1,1)。単色=差分書換 */
-    vdp_sat_pos(slot, (u8)(e->x + SHADOW_DX), (u8)(e->y + SHADOW_DY), e->pat);   /* ★A6: シャドウへ */
+    vdp_sat_pos(slot, (u8)(e->x + SHADOW_DX + off), (u8)(e->y + SHADOW_DY + off), e->pat);   /* ★A6: シャドウへ */
     return (u8)(slot + 1);
 }
 /* ★プール全走査を1回に統合(従来は自機探索/可視収集/合体弾/影 で4回走査していた=各エンティティの
@@ -353,7 +356,8 @@ void ent_draw_all(void) {
         if (e->shadow) sh[nsh++] = e;                           /* 影(自機/敵機。可視かつshadow) */
     }
     /* 自機を固定最優先スロット(g_spr_base)へ */
-    if (player) slot = draw1(slot, player);
+    /* ★宙返り中は本体を描かない(2×2 合成が HUD 直後の4 slot に描いている)。影は下の影パスで描く。 */
+    if (player && !g_loop_t) slot = draw1(slot, player);
     /* 収集集合内で開始位置を毎フレーム回転させて割当(9枚/走査線超の欠落をちらつきへ均等分散)。
        ★D2(§D2 逆順SAT): 交互フレームで割当て順を"正順/逆順"に反転する。SATは低slot=高優先(1走査線8枚まで)
          なので、順を反転すると混雑ラインで"表示される8枚"が前半⇔後半で交互に入れ替わる=消える弾が

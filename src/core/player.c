@@ -39,18 +39,9 @@ void bh_player(Entity *e) {
         sfx(0, SFX_SHOT);
     }
 
-    /* ★宙返り中: 回転コマ(ovl_rot.c が SPR_ZERO2 の枠へ毎フレーム焼く)を使う。
-       行別カラー(zcol)は機体と一緒に回らないので、回っている間は単色の緑にする
-       (回転した機体に水平のハイライトが乗ると破綻して見える)。 */
-    if (g_loop_t) {
-        e->pat = SPR_ZERO2;
-        e->coltab = (const u8 *)0;
-        e->color = 3;                 /* 零戦の緑(単色) */
-    } else {
-        e->coltab = zcol;
-        /* プロペラ回転: 先頭2行(細/太)を交互にしてブラー。被弾点滅中(hidden)は下で上書き。 */
-        { static u8 prop; prop++; e->pat = (prop & 2) ? SPR_ZERO2 : SPR_ZERO; }
-    }
+    /* プロペラ回転: 先頭2行(細/太)を交互にしてブラー。被弾点滅中(hidden)は下で上書き。
+       ★宙返り中の本体は ovl_rot_zoom の2×2合成が描く(entity.c が本体を描かない)。影はこの pat を使う。 */
+    { static u8 prop; prop++; e->pat = (prop & 2) ? SPR_ZERO2 : SPR_ZERO; }
 
     /* 被弾直後の無敵: カウントを減らしつつ点滅(4フレーム周期で明滅) */
     if (g_pinv) { g_pinv--; e->hidden = (g_pinv & 4) ? 1 : 0; }

@@ -46,10 +46,7 @@
 #define OVL_SLOT_WAVE_OFF       12
 #define OVL_SLOT_WAVE_Y         13
 #define OVL_SLOT_SHOCK_BUILD    14
-#define OVL_SLOT_ROT_INIT       15
-#define OVL_SLOT_ROT_FRAME      16
-#define OVL_SLOT_ROT_RESTORE    17
-#define OVL_SLOT_ROT_SQUASH     18
+#define OVL_SLOT_ROT_ZOOM       15
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -71,10 +68,6 @@ void crush_wave(u8 step);                  /* メガクラッシュ: 津波を1�
 void crush_wave_off(void);                 /* メガクラッシュ: 津波スプライトを片付ける */
 s16  crush_wave_y(u8 step);                /* メガクラッシュ: その step の波頭 画面Y(等加速度) */
 u8   shock_build(u8 split_line);           /* 衝撃波: g_ras[] を組み立て分割数を返す(設計メモ §2-B) */
-void rot_init(void);                       /* アフィン回転: 元絵をVRAMから取り込む(面開始で1回) */
-void rot_frame(u8 a);                      /* アフィン回転(面内): 角度a(0..15)。★16x16では中間角が
-                                              崩れるので自機には使わない。大型機用に残してある */
-void rot_squash(u8 a);                     /* 宙返り: 縦の圧縮＋背面反転(=拡大縮小のアフィン)。自機はこちら */
-void rot_restore(void);                    /* アフィン回転: 奪った SPR_ZERO2 の枠を元に戻す */
+void rot_zoom(u8 k);                       /* 宙返り: 焼いたコマ(bank19)をHMMMでパターン表へ＋2×2合成(k=0..15) */
 
 #endif /* OVERLAY_H */
