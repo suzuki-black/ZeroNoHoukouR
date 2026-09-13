@@ -82,6 +82,24 @@ static char cur_sunk[16];   /* 現在面の「[艦名] SUNK」(NUL終端) */
 /* 主砲塔(破壊可能)を艦上の世界座標に配置。艦中心 x=120(sprite左上→中心128)。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。
    hp=5(旧版準拠): 抑え込み(肉薄で撃たせない)で安全に連射しないと落としにくい=「ゼロ距離抑え込み=最速撃破」を要求。
    撃破後は active維持のまま hidden(砲身消失)＝scene が炎上残骸をBGへ焼付ける(burn_new_turrets)。 */
+/* ★衝撃波を止め、分割表を「スプライト表の切替だけ」の平の2本に組み直して表示起点も戻す。
+   ★★分割表は stage_update が毎フレーム組み直す前提で作ってある。**毎フレームの組み直しが止まる区間**
+     (撃破演出 defeat_update / ミスの沈没演出 / メガクラッシュ)へ入るとき、衝撃波の帯(R#23 を
+     書き換える分割)が残っていると、**古い表のまま割込みが走り続けて表示が縦にずれる**。
+     実際に「最後に主砲を壊して撃破 → 結果画面の下に page0 の212行以降(宙返りの焼き置きと
+     スプライト表の中身)が見える」という形で踏んだ(最後が対空砲だと衝撃波が出ないので起きない)。
+     分割表を止めた/組み直した後、R#23 は割込みが最後に書いた値のままなので、今の g_vscroll を
+     書き直して表示起点も揃える。 */
+static void arm_plain_split(void) {
+    g_shock_t = 0;
+    g_ras[0].line = 0;                 /* フレーム先頭=セットAへ戻す＋表示起点を基準へ */
+    g_ras[0].reg = 5; g_ras[0].val = SPR_R5_A; g_ras[0].reg2 = 23; g_ras[0].val2 = g_vscroll; g_ras[0].pidx = RAS_NOPAL;
+    g_ras[1].line = CURTAIN_SPLIT_LINE;     /* ここから下=セットB */
+    g_ras[1].reg = 5; g_ras[1].val = SPR_R5_B; g_ras[1].reg2 = RAS_NOREG; g_ras[1].pidx = RAS_NOPAL;
+    raster_arm(2);
+    vdp_set_vscroll(g_vscroll);
+}
+
 static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
     Entity *e = ent_spawn(ET_TURRET);
     if (e) {
@@ -458,6 +476,7 @@ static void draw_stage_card(void) {
     while (nm[n]) n++;                       /* 艦名の長さ(中央寄せ用) */
 
     bgm_stop();                              /* カード中は無音(タイトル/前面のBGMを止める) */
+    raster_off();                            /* ★page0 全面の画面。分割表を走らせない(次面で stage_update が張り直す) */
     vdp_set_vscroll(0);                      /* 縦スクロール解除(page0のズレ防止) */
     vdp_sprite_hide_from(0);                 /* スプライト全消し */
     vdp_set_display_page(0);
@@ -552,6 +571,7 @@ static void blit_panel_t(u16 dstx, u16 dsty, u8 oncol) {
 /* 撃破結果画面(page0)＋勝ちどきファンファーレ(前景・ブロッキング)。終わりにトリガ待ち。 */
 static void results_and_fanfare(void) {
     u8 f;
+    raster_off();                       /* ★page0 全面の画面。分割表(特に R#23 の帯)を走らせない */
     vdp_set_vscroll(0);                 /* 縦スクロール解除(page0テキストのズレ＋上端ゴミを防ぐ) */
     vdp_set_hscroll(0, 0);              /* ★横スクロール(蛇行weaveX)も解除=残ると画面全体が右に寄る */
     vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
@@ -705,6 +725,7 @@ u8 stage_update(void) {
       } else if (g_crush) {                    /* B単押し = メガクラッシュ */
         g_crush--;
         g_crush_t = CRUSH_FRAMES;
+        arm_plain_split();               /* ★クラッシュ中は分割表を組み直さない(揺れと古い帯が干渉する) */
         bgm_stop();                      /* ★BGMを止めて雷鳴だけを聴かせる(バンキング=ホット区間の外) */
         sfx(2, SFX_THUNDER);             /* noise C の雷鳴(鋭い炸裂→深い轟き) */
         return SCENE_NONE;
@@ -818,11 +839,7 @@ u8 stage_update(void) {
     if (g_ovl_ok) {
         raster_arm(shock_build(CURTAIN_SPLIT_LINE));
     } else {
-        g_ras[0].line = 0;                 /* フレーム先頭=セットAへ戻す */
-        g_ras[0].reg = 5; g_ras[0].val = SPR_R5_A; g_ras[0].reg2 = RAS_NOREG; g_ras[0].pidx = RAS_NOPAL;
-        g_ras[1].line = CURTAIN_SPLIT_LINE;     /* ここから下=セットB */
-        g_ras[1].reg = 5; g_ras[1].val = SPR_R5_B; g_ras[1].reg2 = RAS_NOREG; g_ras[1].pidx = RAS_NOPAL;
-        raster_arm(2);
+        arm_plain_split();
     }
     if (g_shock_t) g_shock_t--;   /* 衝撃波の寿命(リングはこれで広がり、振幅は減衰する) */
 
@@ -909,6 +926,7 @@ u8 stage_update(void) {
            基準色へ戻してから演出へ入る。pal_need_reset で、再開時に全16色を書き直させる。 */
         vdp_palette_game();
         pal_need_reset = 1;
+        arm_plain_split();              /* ★被弾の衝撃波の帯を残したまま演出に入らない */
         play_death_banked(cam);         /* 沈没演出(bank16) */
         if (g_lives) g_lives--;
         if (g_lives == 0) {
@@ -922,6 +940,7 @@ u8 stage_update(void) {
     /* 全エンプレ(主砲＋対空砲)撃破でクリア → 撃破演出へ(炎上→撃破!!→スコア→ファンファーレ→エンディング) */
     if (phase == 1 && ent_live_turrets() == 0 && aa_alive() == 0) {
         dmode = 1; dtimer = 150;   /* 約2.5秒の炎上スペクタクル */
+        arm_plain_split();         /* ★ここから分割表の組み直しが止まる。衝撃波の帯を残さない */
         vdp_set_hscroll(0, 0);     /* 蛇行(横HW)を0に=火球のX基準を艦アートへ揃える(旧版準拠) */
         /* ★艦全体を炎に包む(旧版): 全撃破エンプレ27基に加え散布火球18枚を追加登録。fire_draw が2コマ描画。
            撃破時に一度だけ(毎フレーム散布=もっさりの主因は回避)。 */
