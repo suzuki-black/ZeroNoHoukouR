@@ -2,8 +2,9 @@
 """gen_boss.py — 最終面ボス(Douglas XB-19)のスプライトコマを生成する。
 
   python3 tools/gen_boss.py preview out.png   … 全コマを海の上に並べたシート(各コマの枚数と1走査線の最大枚数つき)
-  python3 tools/gen_boss.py bin vram.bin misc.bin frames.h
-      vram.bin  … VRAM(page2, y=528〜)へ焼くコマ。1コマ=パターン 6 行(24枚×32B)＋色表 3 行(24枚×16B)
+  python3 tools/gen_boss.py bin vram_a.bin vram_b.bin misc.bin frames.h
+      vram_a.bin … VRAM page2/3 (y=528〜)へ焼くコマ。1コマ=パターン 6 行＋色表 3 行＋位置情報 1 行
+      vram_b.bin … 入り切らない残りのコマ(page0 y=32〜。表示が page1 に切り替わってから焼く)
       misc.bin  … 開始カードの絵(64x48, 1536B)
       frames.h  … オーバレイが持つ各コマの枚数/モード/スプライト位置
 
@@ -32,13 +33,15 @@ PER_LINE = 8
 # 登場: 高空から旋回しながら降りてくる(等倍で大きくなる → MAG に切り替えてさらに大きく)
 # ★最大は M72(表示 144x96)。画面は上から HUD 帯(〜20行)/ボス帯/壁(16行)/自機帯。ボス帯に 96 行が入る大きさ。
 # ★拡大コマ(死亡以外)はスプライトの縦を 3 段(=96 ライン)までに制限する: ボス帯は HUD 帯と壁の間の 104 ライン。
-ENTRY = [('N', 16, 120), ('N', 22, 95), ('N', 28, 72), ('N', 36, 52), ('N', 44, 34),
-         ('N', 52, 20), ('N', 60, 9), ('M', 32, 4, 3), ('M', 40, 0, 3), ('M', 48, 0, 3),
-         ('M', 56, 0, 3), ('M', 64, 0, 3), ('M', 72, 0, 3)]
-BANK = [('M', 72, -10, 3), ('M', 72, 10, 3)]  # 左右移動の傾き
-DEATH = [('M', 72, 25), ('M', 64, 55), ('M', 56, 90), ('M', 48, 125), ('M', 40, 160),
-         ('M', 32, 195), ('N', 56, 230), ('N', 48, 265), ('N', 40, 300), ('N', 32, 335),
-         ('N', 24, 370), ('N', 16, 405)]
+def lerp(a, b, t): return a + (b - a) * t
+NN, NM, ND = 13, 13, 24
+ENTRY = ([('N', round(lerp(16, 60, (i / (NN - 1)) ** 0.9)), round(lerp(120, 9, i / (NN - 1)))) for i in range(NN)] +
+         [('M', round(lerp(32, 72, i / (NM - 1))), round(lerp(4, 0, i / (NM - 1))), 3) for i in range(NM)])
+# 左右移動の傾き(片側 3 段階。間を補間しながら替える)。並び: 左1,左2,左3,右1,右2,右3
+BANK = [('M', 72, -4, 3), ('M', 72, -7, 3), ('M', 72, -10, 3), ('M', 72, 4, 3), ('M', 72, 7, 3), ('M', 72, 10, 3)]
+# 撃墜: きりもみしながら縮む(前半 12 コマは MAG、後半 12 コマは等倍)
+DEATH = ([('M', round(lerp(72, 32, i / 11)), round(lerp(25, 200, i / 11))) for i in range(12)] +
+         [('N', round(lerp(56, 16, i / 11)), round(lerp(215, 405, i / 11))) for i in range(12)])
 FRAMES = ENTRY + BANK + DEATH
 
 # ---- 元絵(シルエット)と機体の部位 ----
@@ -229,10 +232,33 @@ def allocate(img, max_rows=None):
                                  rowmax=max(rowcnt.values()))
     return best_plan
 
-def build_frame(mode, width, angle, max_rows=None):
-    img = render(width, angle)
+# ★被弾で光るコマ: 明るい灰で陰影を残す(暗い色ほど暗い灰へ)。色の組は灰だけで作り直す。
+GLOW_MAP = {13: 5, 3: 4, 9: 14, 6: 15, 5: 4, 4: 14, 7: 5, 14: 15, 15: 15}
+GLOW_COLS = {4, 5, 14, 15}
+GSINGLES = [(a,) for a in sorted(GLOW_COLS)]
+GPAIRS = [(a, b, a | b) for a in sorted(GLOW_COLS) for b in sorted(GLOW_COLS) if a < b and (a | b) in GLOW_COLS]
+
+def recolor_plan(img, plan):
+    """置き方(タイルと 2 枚重ねの位置)はそのまま、色だけ光る版の色から選び直す＝スプライト位置が同じ。"""
+    info = {}
+    for key, pix in plan['tiles'].items():
+        rs = {}; rp = {}; byrow = {}
+        for (x, y) in pix: byrow.setdefault(y, []).append(img[y][x])
+        for y, cs in byrow.items():
+            rs[y] = best(cs, GSINGLES)[1]; rp[y] = best(cs, GPAIRS)[1]
+        info[key] = (0, 0, rs, rp)
+    q = dict(plan); q['info'] = info
+    return q
+
+def build_frame(mode, width, angle, max_rows=None, glow_of=None):
+    if glow_of is not None:
+        base = glow_of
+        img = [[None if k is None else GLOW_MAP.get(k, k) for k in row] for row in base['raw']]
+        plan = recolor_plan(img, base['plan'])
+    else:
+        img = render(width, angle)
+        plan = allocate(img, max_rows)
     H, W = len(img), len(img[0])
-    plan = allocate(img, max_rows)
     if plan is None:
         raise SystemExit(f'frame {mode}{width}@{angle}: 制約内に置けない')
     sprites = []   # (dx, dy, pattern32, colors16) dx,dy は絵の中心からの絵ドット
@@ -260,7 +286,7 @@ def build_frame(mode, width, angle, max_rows=None):
         dx, dy = x0 - W // 2, y0 - H // 2
         sprites.append((dx, dy, pa, ca, tx, ty))
         if paired: sprites.append((dx, dy, pb, cb, tx, ty))
-    return dict(mode=mode, width=width, angle=angle, W=W, H=H, sprites=sprites, img=out,
+    return dict(mode=mode, width=width, angle=angle, W=W, H=H, sprites=sprites, img=out, raw=img, plan=plan,
                 fox=-plan['ox'] - W // 2, foy=-plan['oy'] - H // 2,
                 total=plan['total'], rowmax=plan['rowmax'])
 
@@ -316,77 +342,129 @@ def card_image():
         for x in range(0, 64, 2): out.append((row[x] << 4) | row[x + 1])
     return bytes(out)
 
-def write_bin(frames, vram_path, misc_path, h_path):
+SHADOW_FULL = 84     # 戦闘中の影の離れ(ライン)。影の大きさ 16px ＝ 本体 144px の 1/9 の高度差
+VRAM_A_FRAMES = 48   # page2/3(y=528〜1007)に入るコマ数(1コマ10行。1008〜1023 は2組目のパターン表)。残りは page0(y=32〜)へ
+
+def shadow_patterns():
+    """ボスの影(海面に落ちる小さな影 16x16)と、最終面の自機の影(遠い小さな影)。"""
+    # ★本体用の render は小さいと部位を太らせる(ナセル/プロペラ)ので、16px では塊になった(実機で指摘)。
+    #   影はシルエットをそのまま面積平均で縮めて、4 割以上覆う画素だけを残す。
+    W = 16; H = round(W * MH / MW)
+    sm = MASK.resize((W, H), Image.BOX).load()
+    rows = [0] * 16
+    oy = (16 - H) // 2
+    for y in range(H):
+        for x in range(W):
+            if sm[x, y] > 60: rows[y + oy] |= 0x8000 >> x
+    boss = pat_bytes(rows)
+    small = ['..XX..', 'XXXXXX', '..XX..', '.XXXX.']
+    rows = [0] * 16
+    for y, line in enumerate(small):
+        for x, ch in enumerate(line):
+            if ch == 'X': rows[6 + y] |= 0x8000 >> (5 + x)
+    return boss, pat_bytes(rows)
+
+def s8b(v): return v & 0xFF
+
+def rotated_silhouette(angle, span, cell):
+    """シルエットを span ドット幅の大きさで angle 回し、cell×cell の枠の中央へ置いた 16 行のビット列。"""
+    m = MASK.rotate(-angle, expand=True, resample=Image.BILINEAR)   # ★render と同じ向き(PIL は反時計回りが正)
+    sc = span / MW
+    w, h = max(1, round(m.width * sc)), max(1, round(m.height * sc))
+    sm = m.resize((w, h), Image.BOX).load()
+    rows = [0] * 16
+    o = (16 - cell) // 2
+    for y in range(h):
+        for x in range(w):
+            yy, xx = y - (h - cell) // 2 + o, x - (w - cell) // 2 + o
+            if sm[x, y] > 60 and o <= yy < o + cell and o <= xx < o + cell:
+                rows[yy] |= 0x8000 >> xx
+    return rows
+
+def meta_bytes(f):
+    """コマの位置情報 128B(VRAM の 10 行目)。オーバレイはコマを替えるときにここだけ読む
+    (位置表をオーバレイに持つと 8KB 枠に入らなかった)。
+    [0]=枚数 [1]=MAG [2]=原点x [3]=原点y [4]=上端 [5]=下端 [6]=左端 [7]=右端 [8..31]=各枚の格子(列<<4|段)
+    [32..63]=海面の影 16px(等倍で出す) [64..95]=同じ影の半分の解像度(拡大の帯で出すと 16px)
+    [96]=影を本体から離す量(ライン)＝高度。★コマの順に一定の割合で変える(登場は海面すれすれ 0 → 戦闘の高さ、
+          墜落は戦闘の高さ → 着水 0)。大きさから計算すると墜落の前半で距離がほとんど縮まらなかった(実機で指摘)。"""
+    sp = f['sprites']
+    m = [len(sp), 1 if f['mode'] == 'M' else 0, s8b(f['fox']), s8b(f['foy']),
+         s8b(min((q[1] for q in sp), default=0)), s8b(max((q[1] + 16 for q in sp), default=0)),
+         s8b(min((q[0] for q in sp), default=0)), s8b(max((q[0] + 16 for q in sp), default=0))]
+    m += [(q[4] << 4) | q[5] for q in sp] + [0] * (24 - len(sp))
+    m += list(pat_bytes(rotated_silhouette(f['angle'], 16, 16)))
+    m += list(pat_bytes(rotated_silhouette(f['angle'], 8, 8)))
+    m += [f['shadow_off']]
+    return bytes(m) + bytes(128 - len(m))
+
+def write_bin(frames, nbase, glow_src, vram_a_path, vram_b_path, misc_path, h_path):
     vram = bytearray()
-    for f in frames:
+    for i, f in enumerate(frames):
         pats = bytearray(); cols = bytearray()
         for (dx, dy, pat, col, tx, ty) in f['sprites']:
             pats += pat_bytes(pat); cols += bytes(col)
         pats += bytes(24 * 32 - len(pats)); cols += bytes(24 * 16 - len(cols))
-        vram += pats + cols
-    # ★被弾で光らせる色表(戦闘中のコマ=通常/左傾き/右傾き の 3 つだけ)。コマの後ろに 3 行ずつ。
-    #   OR 色の組は崩さない: 色を 15(白)に、縁の 13 だけ 14(淡灰)にして形を残す。CC ビットはそのまま。
-    ne = len(ENTRY)
-    for fi in (ne - 1, ne, ne + 1):
-        cols = bytearray()
-        for sp in frames[fi]['sprites']:
-            for c in sp[3]:
-                k = c & 0x0F
-                cols.append((c & 0x40) | (0 if k == 0 else (14 if k == 13 else 15)))
-        cols += bytes(24 * 16 - len(cols))
-        vram += cols
-    open(vram_path, 'wb').write(vram)
+        vram += pats + cols + meta_bytes(f)
+    FB = 1280
+    na = min(VRAM_A_FRAMES, len(frames))
+    open(vram_a_path, 'wb').write(vram[:na * FB])
+    open(vram_b_path, 'wb').write(vram[na * FB:])
     open(misc_path, 'wb').write(card_image())
     ne, nb = len(ENTRY), len(BANK)
+    bshadow, pshadow = shadow_patterns()
+    L3, R3 = frames[ne + 2], frames[ne + 5]
     L = []
-    L.append('/* frames.h — tools/gen_boss.py が生成(手で直さない)。最終面ボス XB-19 のコマ表。 */')
-    L.append(f'#define BOSS_NF {len(frames)}')
-    L.append(f'#define BOSS_F_ENTRY0 0')
+    L.append('/* boss_frames.h — tools/gen_boss.py が生成(手で直さない)。最終面ボス XB-19 のコマ表。 */')
+    L.append('/* 1コマ=VRAM 10行: パターン6行(24枚×32B) / 色表3行(24枚×16B) / 位置情報1行(ovl_final.c の meta) */')
+    L.append(f'#define BOSS_NF {len(frames)}        /* 全コマ(光るコマを含む) */')
+    L.append(f'#define BOSS_NBASE {nbase}')
+    L.append(f'#define BOSS_NN {NN}         /* 登場の等倍コマ数 */')
+    L.append(f'#define BOSS_NM {NM}         /* 登場の拡大コマ数 */')
+    L.append(f'#define BOSS_F_FIRSTMAG {NN}')
     L.append(f'#define BOSS_F_FULL {ne - 1}          /* 登場の最後=通常時のコマ */')
-    L.append(f'#define BOSS_F_BANKL {ne}')
-    L.append(f'#define BOSS_F_BANKR {ne + 1}')
+    L.append(f'#define BOSS_F_BANK0 {ne}         /* 傾き: 左1,左2,左3,右1,右2,右3 */')
     L.append(f'#define BOSS_F_DEATH0 {ne + nb}')
-    first_m = next(i for i, f in enumerate(frames) if f['mode'] == 'M')
-    L.append(f'#define BOSS_F_FIRSTMAG {first_m}   /* 登場でここから上の帯を MAG にする */')
-    L.append(f'#define BOSS_VRAM_Y 528   /* page2。1コマ=9行(パターン6＋色表3) */')
-    L.append(f'#define BOSS_VRAM_LEN {len(vram)}')
-    L.append(f'#define BOSS_GLOW_Y {528 + len(frames) * 9}   /* 光る色表(通常/左/右)。各3行 */')
-    L.append('#ifdef BOSS_FRAME_TABLES   /* 表はオーバレイ(ovl_final.c)だけが持つ。常駐は長さの定数だけ使う */')
-    L.append('static const u8 boss_fmag[BOSS_NF] = { ' + ','.join('1' if f['mode'] == 'M' else '0' for f in frames) + ' };')
-    L.append('static const u8 boss_fn[BOSS_NF] = { ' + ','.join(str(len(f['sprites'])) for f in frames) + ' };')
-    L.append('/* 各コマのスプライト位置: 格子の原点(絵の中心からの絵ドット) ＋ 各枚の格子座標(上位4bit=列/下位4bit=段)。')
-    L.append('   左上 = 中心 + (原点 + 列*16) * 倍率。MAG コマは倍率 2。 */')
-    L.append('static const s8 boss_fox[BOSS_NF] = { ' + ','.join(str(f['fox']) for f in frames) + ' };')
-    L.append('static const s8 boss_foy[BOSS_NF] = { ' + ','.join(str(f['foy']) for f in frames) + ' };')
-    L.append('static const u8 boss_ftile[BOSS_NF][24] = {')
-    for f in frames:
-        tl = [str((sp[4] << 4) | sp[5]) for sp in f['sprites']] + ['0'] * (24 - len(f['sprites']))
-        L.append('  { ' + ','.join(tl) + ' },')
-    L.append('};')
-    L.append('/* 各コマのスプライトの縦の範囲(絵ドット, 中心から)。★1走査線8枚は「スプライトの 16 行ぶん全部」で数えるので、')
-    L.append('   絵の端ではなくスプライトの端が壁の行に掛かると壁が欠ける(一度そうなった)。位置のクランプはこちらで行う */')
-    L.append('static const s8 boss_ftop[BOSS_NF] = { ' + ','.join(str(min((sp[1] for sp in f['sprites']), default=0)) for f in frames) + ' };')
-    L.append('static const s8 boss_fbot[BOSS_NF] = { ' + ','.join(str(max((sp[1] + 16 for sp in f['sprites']), default=0)) for f in frames) + ' };')
-    L.append('/* 各コマのスプライトの横の範囲(絵ドット, 中心から)。★X は負にできない(EC ビット不使用)ので、')
-    L.append('   左端のスプライトが画面外に出る位置へは行かせない(隠すと翼が消える。一度そうなった) */')
-    L.append('static const s8 boss_fleft[BOSS_NF] = { ' + ','.join(str(min((sp[0] for sp in f['sprites']), default=0)) for f in frames) + ' };')
-    L.append('static const s8 boss_fright[BOSS_NF] = { ' + ','.join(str(max((sp[0] + 16 for sp in f['sprites']), default=0)) for f in frames) + ' };')
+    L.append(f'#define BOSS_ND {ND}')
+    L.append(f'#define BOSS_F_GLOW0 {nbase}      /* 光るコマ: 通常,左1,左2,左3,右1,右2,右3 の順 */')
+    L.append(f'#define BOSS_VRAM_A_N {na}     /* page2/3 (y=528〜) に置くコマ数。以降は page0 (y=32〜) */')
+    L.append('#define BOSS_VRAM_Y 528')
+    L.append('#define BOSS_VRAM0_Y 32')
+    L.append(f'#define BOSS_VRAM_LEN {na * FB}')
+    L.append(f'#define BOSS_VRAM0_LEN {len(vram) - na * FB}')
+    L.append(f'#define BOSS_XL3 {-min(q[0] for q in L3["sprites"]) * 2}   /* 左3 のコマで左端が画面内に入る中心 X の下限 */')
+    L.append(f'#define BOSS_XR3 {256 - max(q[0] + 16 for q in R3["sprites"]) * 2}   /* 右3 のコマの上限 */')
+    L.append('#ifdef BOSS_FRAME_TABLES')
+    L.append('/* 海面の影: ボス(16x16 のシルエット)と、最終面の自機(遠い小さな影) */')
+    L.append('static const u8 player_far_shadow_pat[32] = { ' + ','.join(str(b) for b in pshadow) + ' };')
     L.append('#endif')
     open(h_path, 'w').write('\n'.join(L) + '\n')
-    print(f'vram {len(vram)}B, misc {len(card_image())}B, {len(frames)} frames', file=sys.stderr)
+    print(f'vram {len(vram)}B (A {na} frames / B {len(frames)-na}), {len(frames)} frames', file=sys.stderr)
 
 def main():
     if len(sys.argv) < 3: raise SystemExit(__doc__)
     frames = []
-    for spec in FRAMES:
-        f = build_frame(*spec); frames.append(f)
-        m, w, a = spec[:3]
-        print(f"{len(frames)-1:2d} {m}{w:3d} {a:4d}deg  {f['W']}x{f['H']}  sprites={f['total']:2d}  max/line={f['rowmax']}",
+    def log(f, tag):
+        print(f"{len(frames)-1:2d} {tag:10s} {f['mode']}{f['width']:3d} {f['angle']:4d}deg  {f['W']}x{f['H']}  sprites={f['total']:2d}  max/line={f['rowmax']}",
               file=sys.stderr)
+    ne_all, nb_all = len(ENTRY), len(BANK)
+    for k, spec in enumerate(FRAMES):
+        f = build_frame(*spec)
+        if k < ne_all:            f['shadow_off'] = round(SHADOW_FULL * k / (ne_all - 1))              # 登場: 昇っていく
+        elif k < ne_all + nb_all: f['shadow_off'] = SHADOW_FULL                                       # 戦闘の高さ
+        else:                     f['shadow_off'] = round(SHADOW_FULL * (1 - (k - ne_all - nb_all + 1) / len(DEATH)))   # 墜落: 着水で 0
+        frames.append(f); log(f, 'base')
+    nbase = len(frames)
+    ne = len(ENTRY)
+    glow_src = [ne - 1] + list(range(ne, ne + len(BANK)))
+    for gi in glow_src:
+        b = frames[gi]
+        f = build_frame(b['mode'], b['width'], b['angle'], glow_of=b); f['shadow_off'] = b['shadow_off']
+        frames.append(f); log(f, 'glow')
     if sys.argv[1] == 'preview':
         preview(frames, sys.argv[2])
     elif sys.argv[1] == 'bin':
-        write_bin(frames, sys.argv[2], sys.argv[3], sys.argv[4])
+        write_bin(frames, nbase, glow_src, sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
 
 if __name__ == '__main__':
     main()

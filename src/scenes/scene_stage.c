@@ -463,7 +463,10 @@ static u8 sfresh;
 /* 地形リングを表示(page1)＝ここでゲーム画面が現れる。scroll_init は prerender 済みが前提。 */
 static void stage_begin_display(void) {
     scroll_init();               /* display=page1(以降 page0 は非表示=火球ベイク用に空く) */
-    bake_fireballs();            /* 破壊エンプレ炎上用の火球6枚を page0(非表示域)へ事前ベイク */
+    if (curstage != STAGE_FINAL) bake_fireballs();   /* 破壊エンプレ炎上用の火球6枚を page0(非表示域)へ事前ベイク。
+                                                          ★最終面はそこを2組目のスプライト表に使う */
+    if (curstage == STAGE_FINAL)  /* ★ボスの残りのコマを page0(y=32〜)へ。カード(page0)を消した後でないと焼けない */
+        vdp_blit_bank_vram(BOSS_VRAM0_BANK, BOSS_VRAM0_LEN, 0, (u16)(BOSS_VRAM0_Y * 128));
     sea_init(curstage);          /* 艦種別の海コラム帯を選択 */
     vdp_set_hscroll(0, 0);
     g_shake = 0; g_hitstop = 0; sfresh = SFRESH_HOLD;   /* ★出だしの誤揺れ抑止(stage_update冒頭でも数フレーム強制0) */

@@ -15,7 +15,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
-const ROM_SIZE    = 0x40000;   // 256KB(32バンク)。title.yjk が bank9-15、冷たいコードを bank16+ へ置く余地を確保。
+const ROM_SIZE    = 0x80000;   // 512KB(64バンク)。title.yjk が bank9-15、最終面ボスのコマが bank32〜。
 const BANK_SIZE   = 0x2000;    // 8KB
 const CODE_BASE   = 0x4000;    // 常駐コードのリンク基準アドレス
 const CODE_LIMIT  = 0x6000;    // 常駐コード ROM オフセット上限(=24KB=bank0-2)。bank3 はスワップ窓に温存

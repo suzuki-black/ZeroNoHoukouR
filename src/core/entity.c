@@ -328,9 +328,11 @@ static u8 draw1(u8 slot, const Entity *e) __naked {
 static u8 draw_shadow(u8 slot, const Entity *e) {
     /* ★宙返り中の自機は高度ぶん影を離す。本体は拡大されて手前に出るので、影が同じ位置だと
        本体の下に隠れて「上がっている」感じが出ない。影は海面に残して離すのが一番効く。 */
-    u8 off = (e->type == ET_PLAYER) ? g_loop_alt : 0;
+    u8 off = (e->type == ET_PLAYER) ? g_loop_alt : 0, pat = e->pat;
+    /* ★最終面(g_py_min!=0)の自機は高空＝海面の影は遠くて小さい(パターン60=小さな影、右下へ大きく離す) */
+    if (off == 0 && g_py_min && e->type == ET_PLAYER) { pat = 60; off = 14; }
     spr_col1(slot, 13);   /* ほぼ黒(1,1,1)。単色=差分書換 */
-    vdp_sat_pos(slot, (u8)(e->x + SHADOW_DX + off), (u8)(e->y + SHADOW_DY + off), e->pat);   /* ★A6: シャドウへ */
+    vdp_sat_pos(slot, (u8)(e->x + SHADOW_DX + off), (u8)(e->y + SHADOW_DY + off), pat);   /* ★A6: シャドウへ */
     return (u8)(slot + 1);
 }
 /* ★プール全走査を1回に統合(従来は自機探索/可視収集/合体弾/影 で4回走査していた=各エンティティの

@@ -19,8 +19,9 @@
 #define FINAL_WALL_LINE  144    /* 壁の下端＝ボス帯の終わり。自機はこの行より上へ行けない */
 #define FINAL_BGM        8      /* イントロ(576f)→本編ループ */
 
-#define BOSS_VRAM_BANK   22     /* コマ(31KB)を bank22.. に連続で置き、面の準備で VRAM page2 へ流す */
-#define BOSS_MISC_BANK   26     /* 開始カードの絵 */
+#define BOSS_VRAM_BANK   32     /* コマ(page2/3 分, 約63KB)を bank32.. に連続で置き、面の準備で VRAM へ流す */
+#define BOSS_VRAM0_BANK  40     /* 入り切らない残りのコマ(page0 分)。表示が page1 に切り替わってから流す */
+#define BOSS_MISC_BANK   43     /* 開始カードの絵 */
 #define OVL6_BANK        27     /* 最終面用の RAM オーバレイ */
 
 /* ---- オーバレイ入口(ホット区間の中でのみ。overlay.h の制約に従う) ---- */

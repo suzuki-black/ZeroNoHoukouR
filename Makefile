@@ -272,15 +272,16 @@ $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
 # ── 最終面(巨大機 XB-19) ──
 # コマは tools/gen_boss.py が三面図のシルエット(assets/xb19_mask.png)から生成する(約30秒)。
 $(BUILD)/boss_frames.h: tools/gen_boss.py assets/xb19_mask.png | $(BUILD)
-	python3 tools/gen_boss.py bin $(BUILD)/boss_vram.bin $(BUILD)/boss_misc.bin $@
-$(BUILD)/boss_vram.bin $(BUILD)/boss_misc.bin: $(BUILD)/boss_frames.h
+	python3 tools/gen_boss.py bin $(BUILD)/boss_vram.bin $(BUILD)/boss_vram0.bin $(BUILD)/boss_misc.bin $@
+$(BUILD)/boss_vram.bin $(BUILD)/boss_vram0.bin $(BUILD)/boss_misc.bin: $(BUILD)/boss_frames.h
 # 最終面のオーバレイ: パレット/宙返りは通常面と同じソースを別名で入れ、弾幕/クラッシュ/衝撃波は入れない。
-# ★ovl_final.c は 0xB800〜(海の写し 2KB)を RAM として使う＝コードは 0x1800 以内。
+# ★ovl_final.c は 0xB800〜(海の写し 2KB)を RAM として使う＝コードは 0x1800 以内。位置情報/背景弾は 0xEC00〜(弾幕の固定帯)。
+# ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
 OVL6_RELS = $(BUILD)/ovl6_palette.rel $(BUILD)/ovl6_rot.rel $(BUILD)/ovl_final.rel
 $(BUILD)/ovl6.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_final.c $(HDRS) $(BUILD)/boss_frames.h $(BUILD)/ovlhead6.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl6_palette.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl6_rot.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_final.c -o $(BUILD)/ovl_final.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl6_rot.rel
+	sdcc -m$(TARGET) -c $(OPT) --opt-code-size $(DEFS) $(INC) $(SRC)/banked/ovl_final.c -o $(BUILD)/ovl_final.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead6.rel $(OVL6_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead6.rel: $(SRC)/banked/ovlhead6.s | $(BUILD)
@@ -291,8 +292,10 @@ $(BUILD)/ovl6.bin: $(BUILD)/ovl6.ihx tools/ihx2bin.mjs
 	 if [ "$$SZ" -gt 6144 ]; then \
 	   echo "ERROR: ovl6.bin=$${SZ}B が 6144B(0xA000-0xB7FF)を超過。0xB800〜は海の写しの RAM。"; exit 3; \
 	 fi; \
-	 echo "  ovl6.bin=$${SZ}B / 6144B (残り$$((6144-SZ))B)"
-ROMPACK_BANKS += --asset 22 $(BUILD)/boss_vram.bin --bank 26 $(BUILD)/boss_misc.bin --bank 27 $(BUILD)/ovl6.bin
+	 echo "  ovl6.bin=$${SZ}B / 6144B (残り$$((6144-SZ))B)"; \
+	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl6.map | head -1); \
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl6 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
+ROMPACK_BANKS += --asset 32 $(BUILD)/boss_vram.bin --asset 40 $(BUILD)/boss_vram0.bin --bank 43 $(BUILD)/boss_misc.bin --bank 27 $(BUILD)/ovl6.bin
 
 BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \

@@ -15,4 +15,4 @@ OPT_RELEASE = --opt-code-size --max-allocs-per-node 9000
 #   bank0-2 : 常駐コード(0x4010-0x9FFF, 上限 24KB)          ← rompack が超過をビルドエラーに
 #   bank3   : 0xA000-0xBFFF スワップ窓(データ先読み/バンクコール用。ROMは既定 0xFF)
 #   bank4-15: 冷たいコード(bcall)＋データ(艦/発砲/BGM/文字列/スプライト)
-ROM_SIZE   = 0x20000    # 128KB
+ROM_SIZE   = 0x80000    # 512KB(実体は tools/rompack.mjs の ROM_SIZE)

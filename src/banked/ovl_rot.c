@@ -26,6 +26,9 @@ void ovl_rot_zoom(u8 k) {
     u8  u = zmap[k & 15], w = zw[u], i;
     s16 px, py;
     vdp_copy(0, (u16)(LOOP_VRAM_Y + u), 0, SPR_PAT_LINE, 256, 1);   /* 128B=4枚ぶんのパターンを一括 */
+#ifdef OVL_FINAL
+    vdp_copy(0, (u16)(LOOP_VRAM_Y + u), 0, (u16)(SPR_PAT_LINE + 768), 256, 1);   /* ★最終面はパターン表が2組(0x1F800 側=1017行) */
+#endif
     /* 合成を自機の 16x16 の中心へ。X は負にできない(EC ビット不使用)ので 0..224 に収める。
        Y は小さな負なら MSX の負Y で上端クリップされる。 */
     px = (s16)g_player_x - 8; if (px < 0) px = 0; else if (px > 224) px = 224;
