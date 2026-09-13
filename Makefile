@@ -275,7 +275,7 @@ $(BUILD)/boss_frames.h: tools/gen_boss.py assets/xb19_mask.png | $(BUILD)
 	python3 tools/gen_boss.py bin $(BUILD)/boss_vram.bin $(BUILD)/boss_misc.bin $@
 $(BUILD)/boss_vram.bin $(BUILD)/boss_misc.bin: $(BUILD)/boss_frames.h
 # 最終面のオーバレイ: パレット/宙返りは通常面と同じソースを別名で入れ、弾幕/クラッシュ/衝撃波は入れない。
-# ★ovl_final.c は 0xB700〜(海の写し 2KB)と 0xBF00〜(背景弾の前回位置)を RAM として使う＝コードは 0x1700 以内。
+# ★ovl_final.c は 0xB800〜(海の写し 2KB)を RAM として使う＝コードは 0x1800 以内。
 OVL6_RELS = $(BUILD)/ovl6_palette.rel $(BUILD)/ovl6_rot.rel $(BUILD)/ovl_final.rel
 $(BUILD)/ovl6.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_final.c $(HDRS) $(BUILD)/boss_frames.h $(BUILD)/ovlhead6.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl6_palette.rel
@@ -288,10 +288,10 @@ $(BUILD)/ovlhead6.rel: $(SRC)/banked/ovlhead6.s | $(BUILD)
 $(BUILD)/ovl6.bin: $(BUILD)/ovl6.ihx tools/ihx2bin.mjs
 	@node tools/ihx2bin.mjs $(BUILD)/ovl6.ihx 0xA000 $@; \
 	 SZ=$$(wc -c < $@ | tr -d ' '); \
-	 if [ "$$SZ" -gt 5888 ]; then \
-	   echo "ERROR: ovl6.bin=$${SZ}B が 5888B(0xA000-0xB6FF)を超過。0xB700〜は海の写しの RAM。"; exit 3; \
+	 if [ "$$SZ" -gt 6144 ]; then \
+	   echo "ERROR: ovl6.bin=$${SZ}B が 6144B(0xA000-0xB7FF)を超過。0xB800〜は海の写しの RAM。"; exit 3; \
 	 fi; \
-	 echo "  ovl6.bin=$${SZ}B / 5888B (残り$$((5888-SZ))B)"
+	 echo "  ovl6.bin=$${SZ}B / 6144B (残り$$((6144-SZ))B)"
 ROMPACK_BANKS += --asset 22 $(BUILD)/boss_vram.bin --bank 26 $(BUILD)/boss_misc.bin --bank 27 $(BUILD)/ovl6.bin
 
 BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \

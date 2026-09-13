@@ -21,7 +21,9 @@
 __sfr __at(0x98) FV_DAT;
 __sfr __at(0x99) FV_CTRL;
 
-#define SEA_RAM   ((u8 *)0xB700)   /* 海テンプレ 256x16 の写し(128B×16行)。オーバレイ枠の末尾側 */
+static u8 prev_rect[30 * 4];   /* 背景弾の前回の矩形(pool の添字ごと)。オーバレイの static(0xEE00〜) */
+#define PREV prev_rect
+#define SEA_RAM   ((u8 *)0xB800)   /* 海テンプレ 256x16 の写し(128B×16行)。オーバレイ枠の末尾 2KB */
 #define RG1SAV    ((volatile u8 *)0xF3E0)
 #define SET_B_COL 0x7000           /* 表 B: 色表 / 属性表 */
 #define SET_B_ATR 0x7200
@@ -44,10 +46,14 @@ enum { ST_WAIT, ST_ENTRY, ST_FIGHT, ST_DEATH, ST_DONE };
 static u8  st;
 static u16 t0;          /* 曲の頭(snd_ticks)。登場はイントロ(576f)に合わせる */
 static u8  fr, shown;   /* 出したいコマ / VRAM に載っているコマ */
+static u8  glow, shown_glow, glow_t;   /* 1=被弾で全体を光らせる(色表を光る版に差し替え) */
 static s16 cx, cy;      /* ボス中心(画面座標) */
 static s16 tx;          /* 横移動の目標 */
 static u8  tick, dtick;
 static u8  r1n;         /* MAG を落とした R#1 */
+static u8  wall_bits;   /* 組み上がった壁の枚(bit=左から) */
+/* 壁を組む順(外側から内側へ)。1 枚ごとに「ガッ」と揺らす */
+static const u8 wall_order[8] = { 0, 7, 1, 6, 2, 5, 3, 4 };
 static Entity *wp[6];   /* 弱点(エンジン4＋銃座2)。当たり判定は既存の砲台と同じ仕組み */
 
 /* 弱点の位置(通常コマ M72=表示 144x96 の中心から) */
@@ -66,9 +72,12 @@ static const u8 wall_col[8] = { 15, 14, 4, 14, 4, 5, 13, 5 };
 
 static u8 boss_mag(void) { return boss_fmag[fr]; }
 
-/* ボスのスプライトが HUD 帯にも壁の行にも掛からない中心 Y の範囲へ収める */
+/* ボスのスプライトが HUD 帯にも壁の行にも掛からず、左端が画面外へ出ない範囲へ収める */
 static void clamp_cy(void) {
     u8 z = boss_mag() ? 2 : 1;
+    s16 xl = (s16)(-(s16)boss_fleft[fr] * z), xr = (s16)(256 - (s16)boss_fright[fr] * z);
+    if (cx < xl) cx = xl;
+    if (cx > xr) cx = xr;
     s16 lo = (s16)(FINAL_TOP_LINE + 4 - (s16)boss_ftop[fr] * z);
     s16 hi = (s16)(FINAL_WALL_LINE - 16 - (s16)boss_fbot[fr] * z);
     if (cy > hi) cy = hi;
@@ -77,10 +86,13 @@ static void clamp_cy(void) {
 
 /* コマを VRAM からパターン表と表 B の色表へ(HMMM 2 本。VDP が CPU と並行に流す) */
 static void load_frame(void) {
-    u16 y = (u16)(BOSS_VRAM_Y + (u16)fr * 9);
-    if (fr == shown) return;
-    vdp_copy(0, y, 0, 250, 256, 6);            /* パターン 24 枚 → 0x7D00(250〜255行) */
-    vdp_copy(0, (u16)(y + 6), 0, 224, 256, 3); /* 色表 24 枚 → 0x7000(224〜226行) */
+    u16 y = (u16)(BOSS_VRAM_Y + (u16)fr * 9), cy6 = (u16)(y + 6);
+    u8 g = 0;
+    if (glow && fr >= BOSS_F_FULL && fr <= BOSS_F_BANKR) { g = 1; cy6 = (u16)(BOSS_GLOW_Y + (u16)(fr - BOSS_F_FULL) * 3); }
+    if (fr == shown && g == shown_glow) return;
+    if (fr != shown) vdp_copy(0, y, 0, 250, 256, 6);   /* パターン 24 枚 → 0x7D00(250〜255行) */
+    vdp_copy(0, cy6, 0, 224, 256, 3);                   /* 色表 24 枚 → 0x7000(224〜226行)。光る版もここで差し替え */
+    shown_glow = g;
     vdp_cmd_wait();   /* ★コピーが終わる前に位置を書くと、古い絵を新しい位置に出して崩れる(一度そうなった) */
     shown = fr;
 }
@@ -100,8 +112,9 @@ static void put_sprites(u8 blink) {
         if (yy == 216) yy = 215;
         FV_DAT = yy; FV_DAT = (u8)x; FV_DAT = (u8)(BOSS_PAT0 + (i << 2)); FV_DAT = 0;
     }
-    for (i = 0; i < 8; i++) {                  /* 壁: 拡大コマのときだけ出す(8 枚×32px=画面幅) */
-        u8 yy = (u8)((z == 2 && st < ST_DEATH ? (FINAL_WALL_LINE - 16) : HIDE_Y) + vs - 1);   /* 撃墜で壁は崩れる */
+    for (i = 0; i < 8; i++) {                  /* 壁: 組み上がった枚だけ出す(8 枚×32px=画面幅)。撃墜で崩れる */
+        u8 on = (u8)(z == 2 && st < ST_DEATH && (wall_bits & (u8)(1 << i)));
+        u8 yy = (u8)((on ? (FINAL_WALL_LINE - 16) : HIDE_Y) + vs - 1);
         if (yy == 216) yy = 215;
         FV_DAT = yy; FV_DAT = (u8)(i << 5); FV_DAT = WALL_PAT; FV_DAT = 0;
     }
@@ -169,11 +182,11 @@ void ovl_final_init(void) {
 
     r1n = (u8)(*RG1SAV & 0xFE);
     for (i = 0; i < SHIP_NAAG; i++) aa_dead[i] = 1;   /* 対空砲は無い(クリア判定を砲台だけにする) */
-    st = ST_WAIT; t0 = 0; fr = 0; shown = 0xFF;
+    st = ST_WAIT; t0 = 0; fr = 0; shown = 0xFF; glow = 0; shown_glow = 0; glow_t = 0; wall_bits = 0;
     cx = 208; cy = 44; tx = 128; tick = 0; dtick = 0;
     for (i = 0; i < 6; i++) wp[i] = (Entity *)0;
     g_py_min = FINAL_WALL_LINE;
-    { u8 *q = (u8 *)0xBF00; for (i = 0; i < ENT_MAX * 4; i++) *q++ = 0; }   /* 背景弾の前回位置 */
+    { u8 *q = PREV; for (i = 0; i < ENT_MAX * 4; i++) *q++ = 0; }   /* 背景弾の前回位置 */
 }
 
 u8 ovl_final_frame(void) {
@@ -201,12 +214,25 @@ u8 ovl_final_frame(void) {
         if (p > 480) p = 480;
         cx = (s16)(208 - (s16)(p / 6));               /* 208 → 128 */
         cy = (s16)(44 + (s16)(p / 15));               /* 44 → 76 */
-        if (el >= 384 && el < 390) { g_shake = 6; sfx(2, SFX_BOOM); }   /* 拡大＋壁がせり上がる瞬間 */
+        /* ★壁の構築: 拡大に切り替わる瞬間(小節頭 384f)から 6f ごとに 1 枚、外側から内側へ組む。
+           音は最も深いノイズを 1 フレームおきに強弱させて「ががががが」(イントロに重ねてよい) */
+        if (el >= 384) {
+            u8 k = (u8)((el - 384) / 6);
+            if (k < 8) {
+                u8 b = (u8)(1 << wall_order[k]);
+                if (!(wall_bits & b)) { wall_bits |= b; g_shake = 3; }
+                if (!(tick & 15)) sfx(2, SFX_RUMBLE);
+                g_rumble_lv = (tick & 1) ? 15 : 5;
+            } else if (wall_bits != 0xFF) { wall_bits = 0xFF; g_rumble_lv = 0; }
+            else g_rumble_lv = 0;
+        }
         if (el >= 576) { st = ST_FIGHT; spawn_weakpoints(); tx = 128; }
     } else if (st == ST_FIGHT) {
         u8 i, hit = 0;
         /* 横移動。傾きは「目標まで 12px 以上ある間」だけ(着く直前に水平へ戻す＝コマの替え過ぎを防ぐ) */
-        if (cx == tx) { if ((tick & 63) == 0) tx = (s16)(72 + (rnd() % 113)); }
+        if (cx == tx) { if ((tick & 63) == 0) {
+            s16 xl = (s16)(-(s16)boss_fleft[BOSS_F_BANKL] * 2), xr = (s16)(256 - (s16)boss_fright[BOSS_F_BANKR] * 2);
+            tx = (s16)(xl + (s16)(rnd() % (u8)(xr - xl + 1))); } }
         else if (cx < tx) cx++;
         else cx--;
         { s16 d = (s16)(tx - cx);
@@ -214,9 +240,11 @@ u8 ovl_final_frame(void) {
         { u8 b = (u8)((tick >> 3) & 7); cy = (s16)(74 + ((b < 4) ? b : (7 - b)) + 1); }
         place_weakpoints();
         for (i = 0; i < 6; i++) if (wp[i] && wp[i]->active && wp[i]->h) hit = 1;
-        if (hit && (tick & 3) == 0) blink = 1;        /* 被弾で点滅(4フレームに1回だけ消す＝ちらつき過ぎない) */
+        if (hit) glow_t = 8;                           /* ★被弾中は全体を光らせる(点滅はちらつきに見える)。 */
+        else if (glow_t) glow_t--;                     /*   連射の間に消えないよう少し持たせる=光りっぱなしに見える */
+        glow = (u8)(glow_t != 0);
         if ((tick % 150) == 75) ring_volley();
-        if (g_lturret == 0) { st = ST_DEATH; dtick = 0; fr = BOSS_F_DEATH0; sfx(2, SFX_BOOM); }
+        if (g_lturret == 0) { st = ST_DEATH; dtick = 0; fr = BOSS_F_DEATH0; glow = 0; sfx(2, SFX_BOOM); }
     } else if (st == ST_DEATH) {
         dtick++;
         fr = (u8)(BOSS_F_DEATH0 + dtick / 6);
@@ -240,13 +268,13 @@ u8 ovl_final_frame(void) {
    弾を背景に描く
    ===================================================================== */
 /* 前回描いた矩形(pool の添字ごと): [0]=リング行 [1]=先頭バイト [2]=バイト数 [3]=行数(0=無し) */
-#define PREV ((u8 *)0xBF00)
 
-/* 形: 幅4以下/高さ8以下。行ごとのドットマスク(左から bit3..0)と色(外側/芯) */
-typedef struct { u8 ox, oy, w, h; u8 m[8]; u8 c_edge, c_core; } Shape;
-static const Shape sh_bullet = { 6, 6, 4, 4, { 0x6, 0xF, 0xF, 0x6, 0, 0, 0, 0 }, 12, 15 };
-static const Shape sh_pbul   = { 7, 4, 2, 8, { 0xC, 0xC, 0xC, 0xC, 0xC, 0xC, 0xC, 0xC }, 11, 15 };   /* ★マスクは左端が bit3 */
-static const Shape sh_shell  = { 6, 4, 4, 8, { 0x6, 0xF, 0xF, 0xF, 0xF, 0xF, 0xF, 0x6 }, 12, 15 };
+
+/* 形: 5面までのスプライトと同じドット(sprites のパターンをそのまま写した)。行ごとのマスクは左端が bit5、色は e->color の単色 */
+typedef struct { u8 ox, oy, w, h; u8 m[12]; } Shape;
+static const Shape sh_bullet = { 5, 5, 6, 6,  { 0x3F,0x3F,0x3F,0x3F,0x3F,0x3F } };                                /* SPR_BULLET 6x6 */
+static const Shape sh_pbul   = { 7, 4, 2, 8,  { 0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30 } };                      /* SPR_PBULLET 2x8 */
+static const Shape sh_shell  = { 6, 2, 4, 12, { 0x0C,0x1E,0x1E,0x1E,0x1E,0x1E,0x1E,0x1E,0x1E,0x1E,0x1E,0x0C } };   /* SPR_EBSHELL 4x12 */
 
 static void erase_one(u8 *pv) {
     u8 r, rr = pv[0], b0 = pv[1], nb = pv[2], h = pv[3];
@@ -262,29 +290,24 @@ static void erase_one(u8 *pv) {
 static void draw_one(Entity *e, u8 *pv) {
     const Shape *s = (e->pat == SPR_PBULLET) ? &sh_pbul : (e->pat == SPR_EBSHELL) ? &sh_shell : &sh_bullet;
     s16 x0 = (s16)(e->x + s->ox), y0 = (s16)(e->y + s->oy);
-    u8 r, b0, nb, rr0, first = 1, rows = 0;
-    u8 buf[3];
-    if (x0 < 0 || x0 > (s16)(255 - s->w)) return;
+    u8 r, b0, nb, rr0 = 0, first = 1, rows = 0, col = (u8)(e->color & 15);
+    u8 buf[4];
+    if (x0 < 0 || x0 > (s16)(256 - s->w)) return;
     b0 = (u8)(x0 >> 1);
     nb = (u8)(((x0 + s->w - 1) >> 1) - b0 + 1);
-    rr0 = 0;
     for (r = 0; r < s->h; r++) {
         s16 y = (s16)(y0 + r);
-        u8 rr, k, c, bit;
+        u8 rr, k, c, m = s->m[r];
         if (y < 0 || y >= 212) { if (!first) break; continue; }
         rr = (u8)(y + g_vscroll);
         if (first) { rr0 = rr; first = 0; }
         { const u8 *src = &SEA_RAM[((u16)(rr & 15) << 7) + b0]; for (k = 0; k < nb; k++) buf[k] = src[k]; }
         for (c = 0; c < s->w; c++) {
-            if (!(s->m[r] & (u8)(8 >> c))) continue;
-            {   u8 edge = (c == 0 || c == s->w - 1 || r == 0 || r == s->h - 1 ||
-                           !(s->m[r] & (u8)(8 >> (c - 1))) || !(s->m[r] & (u8)(8 >> (c + 1))));
+            if (m & (u8)(0x20 >> c)) {
                 u16 px = (u16)(x0 + c);
                 u8 bi = (u8)((px >> 1) - b0);
-                bit = (u8)(edge ? s->c_edge : s->c_core);
-                if (s->w == 2) bit = (c == 0) ? s->c_edge : s->c_core;   /* 自機弾=赤の縁＋白の芯 */
-                if (px & 1) buf[bi] = (u8)((buf[bi] & 0xF0) | bit);
-                else        buf[bi] = (u8)((buf[bi] & 0x0F) | (u8)(bit << 4));
+                if (px & 1) buf[bi] = (u8)((buf[bi] & 0xF0) | col);
+                else        buf[bi] = (u8)((buf[bi] & 0x0F) | (u8)(col << 4));
             }
         }
         wr_addr((u16)(0x8000 + ((u16)rr << 7) + b0));

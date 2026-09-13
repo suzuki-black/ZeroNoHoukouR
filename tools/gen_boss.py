@@ -324,6 +324,17 @@ def write_bin(frames, vram_path, misc_path, h_path):
             pats += pat_bytes(pat); cols += bytes(col)
         pats += bytes(24 * 32 - len(pats)); cols += bytes(24 * 16 - len(cols))
         vram += pats + cols
+    # ★被弾で光らせる色表(戦闘中のコマ=通常/左傾き/右傾き の 3 つだけ)。コマの後ろに 3 行ずつ。
+    #   OR 色の組は崩さない: 色を 15(白)に、縁の 13 だけ 14(淡灰)にして形を残す。CC ビットはそのまま。
+    ne = len(ENTRY)
+    for fi in (ne - 1, ne, ne + 1):
+        cols = bytearray()
+        for sp in frames[fi]['sprites']:
+            for c in sp[3]:
+                k = c & 0x0F
+                cols.append((c & 0x40) | (0 if k == 0 else (14 if k == 13 else 15)))
+        cols += bytes(24 * 16 - len(cols))
+        vram += cols
     open(vram_path, 'wb').write(vram)
     open(misc_path, 'wb').write(card_image())
     ne, nb = len(ENTRY), len(BANK)
@@ -339,6 +350,7 @@ def write_bin(frames, vram_path, misc_path, h_path):
     L.append(f'#define BOSS_F_FIRSTMAG {first_m}   /* 登場でここから上の帯を MAG にする */')
     L.append(f'#define BOSS_VRAM_Y 528   /* page2。1コマ=9行(パターン6＋色表3) */')
     L.append(f'#define BOSS_VRAM_LEN {len(vram)}')
+    L.append(f'#define BOSS_GLOW_Y {528 + len(frames) * 9}   /* 光る色表(通常/左/右)。各3行 */')
     L.append('#ifdef BOSS_FRAME_TABLES   /* 表はオーバレイ(ovl_final.c)だけが持つ。常駐は長さの定数だけ使う */')
     L.append('static const u8 boss_fmag[BOSS_NF] = { ' + ','.join('1' if f['mode'] == 'M' else '0' for f in frames) + ' };')
     L.append('static const u8 boss_fn[BOSS_NF] = { ' + ','.join(str(len(f['sprites'])) for f in frames) + ' };')
@@ -355,6 +367,10 @@ def write_bin(frames, vram_path, misc_path, h_path):
     L.append('   絵の端ではなくスプライトの端が壁の行に掛かると壁が欠ける(一度そうなった)。位置のクランプはこちらで行う */')
     L.append('static const s8 boss_ftop[BOSS_NF] = { ' + ','.join(str(min((sp[1] for sp in f['sprites']), default=0)) for f in frames) + ' };')
     L.append('static const s8 boss_fbot[BOSS_NF] = { ' + ','.join(str(max((sp[1] + 16 for sp in f['sprites']), default=0)) for f in frames) + ' };')
+    L.append('/* 各コマのスプライトの横の範囲(絵ドット, 中心から)。★X は負にできない(EC ビット不使用)ので、')
+    L.append('   左端のスプライトが画面外に出る位置へは行かせない(隠すと翼が消える。一度そうなった) */')
+    L.append('static const s8 boss_fleft[BOSS_NF] = { ' + ','.join(str(min((sp[0] for sp in f['sprites']), default=0)) for f in frames) + ' };')
+    L.append('static const s8 boss_fright[BOSS_NF] = { ' + ','.join(str(max((sp[0] + 16 for sp in f['sprites']), default=0)) for f in frames) + ' };')
     L.append('#endif')
     open(h_path, 'w').write('\n'.join(L) + '\n')
     print(f'vram {len(vram)}B, misc {len(card_image())}B, {len(frames)} frames', file=sys.stderr)
