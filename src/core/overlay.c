@@ -2,6 +2,7 @@
 #include "overlay.h"
 #include "ramexec.h"
 #include "curtain.h"
+#include "final.h"
 
 u8 g_ovl_ok;
 
@@ -100,3 +101,7 @@ void crush_wave_off(void) __naked { __asm jp 0xA024 __endasm; }
 s16 crush_wave_y(u8 step) __naked { (void)step; __asm jp 0xA027 __endasm; }
 u8  shock_build(u8 split_line) __naked { (void)split_line; __asm jp 0xA02A __endasm; }
 void rot_zoom(u8 k) __naked { (void)k; __asm jp 0xA02D __endasm; }
+/* ---- 最終面のオーバレイ(OVL6_BANK)だけが持つ入口 ---- */
+void final_init(void) __naked  { __asm jp 0xA030 __endasm; }
+u8   final_frame(void) __naked { __asm jp 0xA033 __endasm; }
+void final_bgbul(void) __naked { __asm jp 0xA036 __endasm; }

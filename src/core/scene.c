@@ -48,7 +48,7 @@ static void scene_video_enter(u8 cur) {
     g_vmode = want;
     if (want == 12) {
         vdp_screen12();
-        vdp_blit_bank_vram(TITLE_BANK, TITLE_YJK_LEN);
+        vdp_blit_bank_vram(TITLE_BANK, TITLE_YJK_LEN, 0, 0);
     } else {
         vdp_screen5();
         vdp_palette_game();

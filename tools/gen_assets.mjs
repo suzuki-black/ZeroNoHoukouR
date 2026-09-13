@@ -3,8 +3,9 @@
 //         build/bgm_data.h   … 常駐Cが読む定数(音階periodテーブル/曲オフセット/長さ)
 //
 //   トラック1本のバイト列(バンクに置き、再生時に data_read で RAM へコピー):
-//     [ nMel, nBas, basStep, melPeak, melSus, melVib, basPeak, basSus, drumOn,
+//     [ nMel, nBas, basStep, melPeak, melSus, melVib, basPeak, basSus, drumOn, sweep, melLoop, basLoop,
 //       melNote(nMel), melLen(nMel), basNote(nBas) ]
+//       melLoop/basLoop = 末尾から戻る位置(0=先頭)。ループ位置付きの曲はドラムを本編から鳴らす。
 //       melNote/basNote = 音階index(0=C2..47=B5) or 255=休符
 //       melLen  = 各音符のフレーム数(60Hz)。bass は固定 basStep。
 //       envelope: 発音開始 peak → 毎フレーム-1 → sustain 保持、末尾2フレーム無音。
@@ -96,6 +97,14 @@ const TRACKS = [
     mln: [48,32,32,64,32, 48,32,32,48,32,64,32, 64,48,96,48],
     bas: [14,21,14,255, 14,26,21,255],   // D3 A3 D3 (休) / D3 D4 A3 (休)=間のある渋いシンセドラム(刻みすぎ回避)
     basStep:16, melPeak:14, melSus:11, melVib:1, basPeak:14, basSus:0, drum:0, bassSweep:1,
+  },  { // 8: 最終面 XB-19(壮大。イントロ1回→本編だけループ。ニ短調, 四分=24f)
+    //     イントロ(576f=9.6秒)= ボスの登場演出と同じ長さ。低音の8分連打(D→Bb→C→A)の上でホルンの呼びかけ。
+    //     本編(1536f)= Dm|Bb|C|A|Dm|Bb|Gm|A を2周。ドラムは本編から(style4, 1小節=96f に合わせてテンポ6)。
+    mel: [26,28,29,33,34,33,31,29,31,33,34,33,37,40,38,33,38,41,40,38,38,36,34,29,31,33,34,36,40,36,37,40,45,41,40,38,33,38,41,43,41,38,43,41,38,34,33,37,40,45,255,45,41,38,41,38,34,38,40,41,43,40,37,33,38,40,41,43,45,46,45,41,43,41,40,37,33,40,37],
+    mln: [72,12,12,96,72,12,12,96,48,24,24,48,24,24,24,12,12,24,12,12,36,12,24,24,12,12,12,12,24,24,48,24,24,24,12,12,24,24,36,12,24,24,24,24,24,24,24,24,24,12,12,48,24,24,24,24,24,24,36,12,24,24,72,24,12,12,12,12,48,48,24,24,24,24,24,24,48,24,24],
+    bas: [2,2,14,2,2,2,14,2,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,10,10,22,10,10,10,22,10,12,12,24,12,12,12,24,12,9,9,9,9,9,9,21,21,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,12,12,24,12,12,12,24,12,9,9,21,9,9,9,21,9,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,7,7,19,7,7,7,19,7,9,9,21,9,9,9,21,9,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,12,12,24,12,12,12,24,12,9,9,21,9,9,9,21,9,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,7,7,19,7,7,7,19,7,9,9,21,9,9,9,21,9],
+    melLoop:14, basLoop:48,
+    basStep:12, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:4,
   },
 ];
 
@@ -106,6 +115,7 @@ function packTrack(t) {
     t.mel.length, t.bas.length, t.basStep,
     t.melPeak, t.melSus, t.melVib, t.basPeak, t.basSus, t.drum,
     t.bassSweep ?? 0,   /* 1=chBをシンセドラム(ピッチ急降下＋打撃減衰) */
+    t.melLoop ?? 0, t.basLoop ?? 0,   /* ★ループ開始位置(0=先頭から)。最終面の「イントロ→本編ループ」用 */
     ...t.mel, ...t.mln, ...t.bas,
   ]);
 }
@@ -280,6 +290,7 @@ const DRUM_STYLES = [
   { pat:[1,3,2,3, 1,3,2,3, 1,3,2,3, 1,2,2,3], v0:[0,14,13,6], tempo:8 },  // 1 標準マーチ
   { pat:[1,3,2,3, 1,1,2,3, 1,3,2,3, 2,2,1,3], v0:[0,15,15,8], tempo:8 },  // 2 重い戦闘(空母)
   { pat:[1,2,1,2, 1,2,1,2, 1,2,1,2, 1,2,2,2], v0:[0,10, 9,4], tempo:6 },  // 3 激しい刻み(フッド/アイオワ)
+  { pat:[1,3,3,1, 2,3,1,3, 1,3,3,1, 2,3,2,2], v0:[0,15,13,5], tempo:6 },  // 4 最終面(重いキック＋小節末のスネア連打)
 ];
 // 各style を 32B ストライドにパディング(オフセット計算を *21→<<5 にして常駐のmul回避)。
 const drumBlob = Buffer.from(DRUM_STYLES.flatMap((s) => {
@@ -290,8 +301,8 @@ const drumBlob = Buffer.from(DRUM_STYLES.flatMap((s) => {
 
 // ---- 面名/撃沈メッセージを常駐から追い出す: 各16Bスロット(NUL終端)でデータバンクへ。 ----
 // stagename=開始カード用, sunk_msg=結果画面用(旧版 g_L[10..14])。stage_build で当該面をRAMへ。
-const STAGE_NAMES = ['BISMARCK', 'CARRIER', 'HOOD', 'TWINS', 'IOWA'];
-const SUNK_MSGS   = ['BISMARCK SUNK', 'ESSEX SUNK', 'HMS HOOD SUNK', 'SISTERS SUNK', 'USS IOWA SUNK'];
+const STAGE_NAMES = ['BISMARCK', 'CARRIER', 'HOOD', 'TWINS', 'IOWA', 'XB-19'];   // ★6番目=最終面(艦ではなく巨大機)
+const SUNK_MSGS   = ['BISMARCK SUNK', 'ESSEX SUNK', 'HMS HOOD SUNK', 'SISTERS SUNK', 'USS IOWA SUNK', 'XB-19 DOWN'];
 function str16(arr) {
   const b = Buffer.alloc(arr.length * 16);   // 0埋め=NUL終端
   arr.forEach((s, i) => b.write(s, i * 16, 'ascii'));
@@ -306,14 +317,15 @@ const FIGHTER_CTAB = [
   [ 9, 3, 9, 9, 9, 9,10,10,10,10, 9, 9, 9, 9, 9, 9],  // Spitfire 英
   [14,14,13,14,14,14,15,15,14,14,14,14,13,14,13,14],  // Fw190 独灰
   [11,11,11,11,11,11,12,15,12,11,11,11,11,11,11,11],  // Hellcat 米赤
+  [ 9, 9, 9, 9, 9, 9, 6, 6, 9, 9, 9, 9, 9, 9, 9, 9],  // 最終面(戦闘機は出さないが表の長さを面数に揃える)
 ];
 const fctabBlob = Buffer.from(FIGHTER_CTAB.flat());
 
 // ---- 主砲4基の艦内(x,y)を常駐から追い出す: 面別 [x0..3(u8), y0..3(u16 LE)] = 12B×5 をバンクへ ----
-const GUN_X = [[128,128,128,128],[95,161,95,161],[128,128,128,128],[76,76,180,180],[128,128,128,128]];
-const GUN_Y = [[64,104,322,362],[100,100,300,300],[70,108,372,410],[80,360,80,360],[72,108,330,372]];
-const gunBlob = Buffer.alloc(5 * 12);
-{ let o = 0; for (let s = 0; s < 5; s++) { for (const x of GUN_X[s]) gunBlob[o++] = x;
+const GUN_X = [[128,128,128,128],[95,161,95,161],[128,128,128,128],[76,76,180,180],[128,128,128,128],[128,128,128,128]];   // 6番目=最終面(砲は使わない)
+const GUN_Y = [[64,104,322,362],[100,100,300,300],[70,108,372,410],[80,360,80,360],[72,108,330,372],[0,0,0,0]];
+const gunBlob = Buffer.alloc(GUN_X.length * 12);
+{ let o = 0; for (let s = 0; s < GUN_X.length; s++) { for (const x of GUN_X[s]) gunBlob[o++] = x;
     for (const y of GUN_Y[s]) { gunBlob.writeUInt16LE(y, o); o += 2; } } }
 
 // ---- 撃破!! パネル(1bpp)を常駐から追い出す: 既存ヘッダのバイト列を読み、データバンクへ ----
@@ -349,6 +361,7 @@ if (bin.length > 0x2000) throw new Error(`assets ${bin.length}B > 8KB bank`);
 writeFileSync(binOut, bin);
 
 const bgmRamMax = Math.max(...bgmBlobs.map((b) => b.length));
+if (bgmRamMax > 1536) throw new Error(`BGM 1曲 ${bgmRamMax}B が曲RAM(0xE100, 1536B)を超過`);
 const shipRamMax = Math.max(...shipBlobs.map((b) => b.length));
 const h = [
   '/* 自動生成(tools/gen_assets.mjs)。手で編集しない。BGM＋各面の艦体OPS をデータバンクへ。 */',
@@ -390,7 +403,7 @@ const h = [
   `static const unsigned int drum_off = ${drumOff};`,
   '/* --- 面名(開始カード)/撃沈メッセージ(結果画面)。各16Bスロット。stage_build で当該面をRAMへ。 --- */',
   `static const unsigned int stagename_off = ${strOff};`,
-  `static const unsigned int sunk_off = ${strOff + 5 * 16};`,
+  `static const unsigned int sunk_off = ${strOff + STAGE_NAMES.length * 16};`,
   `static const unsigned int fighter_ctab_off = ${fctabOff};`,
   `static const unsigned int gun_off = ${gunOff};`,   /* 面別 [x0-3(u8),y0-3(u16)] = 12B */
   '/* --- 開始カードの事前ベイク艦画像(64x48=48行x32byte)。bank4(旧demo跡)に5艦連結(assets/cards.bin)。 --- */',

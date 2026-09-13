@@ -34,8 +34,8 @@ void vdp_text_s(u8 px, u8 py, u8 fg, u8 bg, u8 scale, const char *s);
 /* SCREEN12(GRAPHIC7 + YJK 自然画, 256x212)へ切替。タイトルYJK画の表示に使う。 */
 void vdp_screen12(void);
 
-/* first_bank から連続バンクの生データ total バイトを現行スクリーンVRAM先頭へ流す(常駐のみ)。 */
-void vdp_blit_bank_vram(u8 first_bank, u16 total);
+/* first_bank から連続バンクの生データ total バイトを VRAM (hi<<16|lo) 番地から流す(常駐のみ)。 */
+void vdp_blit_bank_vram(u8 first_bank, u16 total, u8 hi, u16 lo);
 
 /* VDPコマンド完了待ち(CE ポーリング)。 */
 void vdp_cmd_wait(void);

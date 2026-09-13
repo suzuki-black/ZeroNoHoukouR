@@ -5,6 +5,7 @@
 #define PAGE1_Y   256           /* 表示リング(page1)の基準Y */
 
 u16 g_cam;
+u8  g_sea_only;    /* ★1=最終面: 艦バッファB(=ボスのコマ置き場)を海の行として描かない。全行を海テンプレから */
 s16 g_scroll_dy;   /* このフレームのスクロール量(new-old, px)。敵弾の艦追従に使う */
 static s16 drawn_top, drawn_bot;
 
@@ -23,7 +24,7 @@ void scroll_build_sea(void) {
 /* 世界行 r を page1 リングの該当16pxスロットへ。艦行=バッファB, それ以外=海テンプレ。 */
 static void draw_row(s16 r) {
     u16 dy = (u16)(PAGE1_Y + (u8)((u16)r << 4));
-    if (r >= SC_SHIP_R0 && r < SC_SHIP_R1)
+    if (!g_sea_only && r >= SC_SHIP_R0 && r < SC_SHIP_R1)
         vdp_copy(0, (u16)(SC_SHIPBUF_Y + (u16)(r - SC_SHIP_R0) * 16), 0, dy, 256, 16);
     else
         vdp_copy(0, SC_SEATMPL_Y, 0, dy, 256, 16);
@@ -147,6 +148,15 @@ void scroll_init(void) {
     /* 最後に page1 を出す。R#23→R#2 の順=両者の隙間(数μs)にフレーム境界が来ても、
        その間見えるのは page0(カード)側だけ。旧ステージの page1 は決して露出しない。 */
     vdp_set_display_page(1);          /* 完成済み page1 を表示=ここでゲーム画面が現れる */
+}
+
+/* ★最終面: 世界の縦座標を add(16の倍数)だけずらす。表示リングは 256px 周期、世界行 r のスロットは
+   (u8)(r<<4) なので、512 ずらしてもリング上の位置は同じ＝**描き直しゼロ**でカメラを巻き戻せる。
+   海しか無い面でだけ使う(艦の行があると世界の中身が変わる)。 */
+void scroll_rebase(u16 add) {
+    g_cam = (u16)(g_cam + add);
+    drawn_top = (s16)(drawn_top + (s16)(add >> 4));
+    drawn_bot = (s16)(drawn_bot + (s16)(add >> 4));
 }
 
 void scroll_to(u16 cam) {

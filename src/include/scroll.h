@@ -43,6 +43,8 @@ void scroll_repaint_all(void);          /* メガクラッシュ専用: 可視�
 void scroll_repaint_cols(s16 r0, s16 r1, u8 x0, u8 w); /* 炎専用: r0..r1 の [x0,x0+w) 帯だけをB→リングへ(部分幅=全幅256の約1/8)。 */
 
 extern u16 g_cam;
+extern u8  g_sea_only;                  /* 1=全行を海テンプレから描く(最終面。艦バッファBをボスのコマに使う) */
+void scroll_rebase(u16 add);            /* 最終面: カメラを add(512等)ずらす。リング上の位置は不変＝描き直し無し */
 extern s16 g_scroll_dy;   /* スクロール差分(敵弾が艦と一緒に流れる) */
 
 #endif /* SCROLL_H */

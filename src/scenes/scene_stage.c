@@ -22,6 +22,8 @@
 #include "raster.h"
 #include "curtain.h"
 #include "overlay.h"
+#include "final.h"
+#include "boss_frames.h"   /* BOSS_VRAM_LEN(表そのものはオーバレイだけが持つ) */
 static u8 pal_need_reset;   /* 面開始/再開でパレット状態を捨てる(実際の reset はホット区間で) */
 
 /* ★演出の定数(ラスタ分割＋CPU弾幕)。 */
@@ -144,7 +146,16 @@ static void load_stage_data(void) {
       for (k = 0; k < 4; k++) { cur_gun_x[k] = g[k]; cur_gun_y[k] = (u16)(g[4 + k * 2] | ((u16)g[5 + k * 2] << 8)); } }
 }
 static void prerender_ship(void) {
+    g_sea_only = (u8)(curstage == STAGE_FINAL);   /* ★最終面は艦バッファBをボスのコマ置き場にする */
     if (rendered_stage == (s8)curstage) return;   /* 既に描画済み=再生成不要 */
+    if (curstage == STAGE_FINAL) {             /* 海テンプレ＋ボスのコマ(31KB)を page2(0x10800〜)へ */
+        vdp_sprites(0);
+        scroll_build_sea();
+        vdp_blit_bank_vram(BOSS_VRAM_BANK, BOSS_VRAM_LEN, 1, 0x0800);
+        vdp_sprites(1);
+        rendered_stage = (s8)curstage;
+        return;
+    }
     vdp_sprites(0);                            /* ★数千の一括塗り中はスプライトOFF=VDP帯域回復(生成が高速化)。
                                                   カード表示中でスプライトは元々不要。 */
     scroll_build_sea();                        /* 海テンプレート(512) */
@@ -159,7 +170,8 @@ static void prerender_ship(void) {
 /* 開始カードの艦画像: 事前ベイク 64x48 を バンク→常駐RAM(g_card_ram)へ読み、2倍拡大(重いループ)は
    冷たいバンク(draw_card_banked)で page0 中央窓へ展開(常駐節約)。data_read は常駐で先に済ませる。 */
 static void draw_card_ship(void) {
-    data_read(SHIP_CARD_BANK, ship_card_off[curstage], g_card_ram, SHIP_CARD_LEN);
+    if (curstage == STAGE_FINAL) data_read(BOSS_MISC_BANK, 0, g_card_ram, SHIP_CARD_LEN);
+    else data_read(SHIP_CARD_BANK, ship_card_off[curstage], g_card_ram, SHIP_CARD_LEN);
     draw_card_banked();
 }
 
@@ -174,6 +186,7 @@ static s8  wdir;
 static u8  dmode;     /* 撃破演出モード(0=通常 / 1=炎上スペクタクル中) */
 static u8  dtimer;    /* 撃破演出の残フレーム */
 static u8  raided;    /* 1=戦艦出現時に空襲(戦闘機/敵弾)を一掃済み */
+static u8  final_over;   /* 1=最終面のボスが落ちきった(結果画面へ) */
 #ifdef DEBUG_FPS
 u8 g_dbgmask;   /* ★デバッグ: bit1=海/bit2=AA/bit4=更新/bit8=衝突/bit16=描画 を個別停止。M(TRIGB)でプリセット巡回。hud_drawが値表示 */
 #define DBG_ON(bit) (!(g_dbgmask & (bit)))
@@ -389,18 +402,20 @@ static void stage_build(void) {
        分割行(CURTAIN_SPLIT_LINE=96)より下に出る HUD＝メガクラッシュ残数(slot7/8)は
        セットBが見えるので、実際に「白のつもりが赤」になっていた。 */
     vdp_sprite_setb_init(11);   /* セットBの色表を用意し全枚を画面外へ(1回だけ) */
-    g_spr_dual = 1;             /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない */
+    /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない。
+       ★最終面はミラーしない: 表Bはボス帯(ボス＋壁)専用で、ゲームのスプライトは表Aだけに書く。 */
+    g_spr_dual = (u8)(curstage != STAGE_FINAL);
     hud_init();  /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
     ent_reset();
     curtain_reset();
-    overlay_load(OVL_BANK);     /* ★演出コードを seg5 上位8KB(=ホット区間の 0xA000)へ複製。
+    overlay_load((curstage == STAGE_FINAL) ? OVL6_BANK : OVL_BANK);     /* ★演出コードを seg5 上位8KB(=ホット区間の 0xA000)へ複製。
                                    page2 が cart のこの文脈でのみ実行できる(overlay.h の制約4)。
                                    パレットエンジンも弾幕もこれを要る。 */
     pal_need_reset = 1;         /* 実際の reset はホット区間の中で(オーバレイは 0xA000=RAM時のみ有効) */
     /* ★メガクラッシュ残数は1回の挑戦ごとに補充。演出の実体(雷光パレット/稲妻描画/敵弾消去)は
        すべて RAM オーバレイ側なので、載らない機械では残数0＝表示も出さない(空撃ちでストックだけ
        減る、という壊れ方を避ける)。**overlay_load の後**で判定すること。 */
-    g_crush = g_ovl_ok ? CRUSH_MAX : 0;
+    g_crush = (g_ovl_ok && curstage != STAGE_FINAL) ? CRUSH_MAX : 0;   /* ★最終面は津波(全画面MAG)がボス帯と両立しないので無し */
     g_crush_t = 0;
     g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
     g_loop_t = 0; g_loop_cd = 0; g_loop_alt = 0;   /* 宙返りも持ち越さない */
@@ -413,7 +428,7 @@ static void stage_build(void) {
     g_php = g_durability ? g_durability : 1;   /* 1機あたりの耐久HP(設定) */
     g_pinv = 0;
     g_miss = 0;
-    dmode = 0; dtimer = 0; raided = 0;
+    dmode = 0; dtimer = 0; raided = 0; final_over = 0;
 
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
@@ -422,6 +437,11 @@ static void stage_build(void) {
     aa_reset();            /* 対空砲の発射タイマ初期化 */
     nburn = 0;             /* 炎上サイト表クリア(面リスタートで炎を消す) */
     special_reset();       /* 艦種別固有兵装のタイマ初期化 */
+    g_py_min = 0;
+    if (curstage == STAGE_FINAL) {         /* ★ボス/壁/分割/弱点はオーバレイ側。呼べるのはページ2がRAMの間だけ */
+        if (g_ovl_ok) { ramx_use_ram(); final_init(); ramx_use_cart(); }
+        return;
+    }
     spawn_turret(cur_gun_x[0], cur_gun_y[0], 30);
     spawn_turret(cur_gun_x[1], cur_gun_y[1], 45);
     spawn_turret(cur_gun_x[2], cur_gun_y[2], 60);
@@ -452,7 +472,7 @@ static void stage_begin_display(void) {
 /* ミス再挑戦: 開始カード/ファンファーレ無しで即再構築。海(phase0)から再開なので海イントロ共通BGMへ戻す。 */
 static void stage_setup(void) {
     stage_build();
-    bgm_play(BGM_SEA_INTRO);
+    bgm_play((curstage == STAGE_FINAL) ? FINAL_BGM : BGM_SEA_INTRO);
     stage_begin_display();
 }
 
@@ -499,7 +519,7 @@ static void stage_intro(void) {
     stage_build();                          /* ★カードの裏でゲーム本体の艦をバッファBへ生成(重い) */
     play_fanfare_open();                    /* 開始ファンファーレ(BGM無音でこれだけ鳴る) */
     for (f = 0; f < 40; f++) vdp_wait_frame();     /* 少し余韻(旧版と同じ40フレーム) */
-    bgm_play(BGM_SEA_INTRO);                 /* まず海イントロ共通BGM(敵艦が見えたら面別へ切替) */
+    bgm_play((curstage == STAGE_FINAL) ? FINAL_BGM : BGM_SEA_INTRO);   /* まず海イントロ共通BGM(敵艦が見えたら面別へ切替)。最終面はイントロ付きの専用曲 */
     stage_begin_display();                   /* 地形を表示=ゲーム開始 */
 }
 
@@ -521,7 +541,7 @@ void stage_init(void) {
     g_score = 0;
     g_kills = 0; g_playerhit = 0;
     g_lives = lives_init();
-    curstage = (g_stage_sel < STAGE_COUNT) ? g_stage_sel : 0;
+    curstage = (g_stage_sel < STAGE_TOTAL) ? g_stage_sel : 0;
     /* ★VRAMキャッシュ無効化(リセット漏れ対策): タイトル(SCREEN12)→ゲーム(SCREEN5)入場で scene_video_enter が
        CHGMOD を実行し、実機turboR BIOSはこれで海テンプレ/艦バッファB領域(VRAM 0x10000〜=page2/3)まで消す。
        同一面をやり直すと rendered_stage==curstage で prerender_ship(=scroll_build_sea+艦描画)がスキップされ、
@@ -626,7 +646,7 @@ static u8 defeat_update(void) {
     if (dtimer) dtimer--;
     if (dtimer == 0) {
         results_and_fanfare();
-        if (curstage + 1 < STAGE_COUNT) {   /* 次の面へ(スコア/残機は持ち越し) */
+        if (curstage + 1 < STAGE_TOTAL) {   /* 次の面へ(スコア/残機は持ち越し)。5面の次が最終面 */
             curstage++;
             stage_intro();      /* 次面開始: カード＋ファンファーレ→準備→BGM→開始 */
             return SCENE_NONE;
@@ -767,7 +787,9 @@ u8 stage_update(void) {
         pal_update();
     }
 
-    if (phase == 0) {
+    if (curstage == STAGE_FINAL) {
+        if (g_ovl_ok && final_frame()) final_over = 1;   /* スクロール/ボス/分割表 */
+    } else if (phase == 0) {
         /* 海のみ: ゆっくり前進。★毎フレーム1pxで動かす=停止フレームを作らない(整数スクロールで
            滑らかに出せる最も遅い一定速度)。旧実装は4/5コマだけ動かす=停止コマがカクつき「フレームレート
            低下」に見えていた。1px/f は蛇行(1.6px/f)より遅く、かつ完全に一定速度=滑らか。蛇行なし。 */
@@ -836,7 +858,9 @@ u8 stage_update(void) {
     /* ★衝撃波ディストーション(設計メモ §2-B)も同じ分割表に相乗りさせる。
        ovl_shock.c が「先頭=セットA＋表示起点リセット」「衝撃波リング(R#23)」「分割行=セットB」を
        行順に組んで分割数を返す。衝撃波が出ていなければ従来どおりの2分割になる。 */
-    if (g_ovl_ok) {
+    if (curstage == STAGE_FINAL) {
+        /* 分割表は final_frame が組んだ(HUD帯/ボス帯/自機帯) */
+    } else if (g_ovl_ok) {
         raster_arm(shock_build(CURTAIN_SPLIT_LINE));
     } else {
         arm_plain_split();
@@ -861,7 +885,7 @@ u8 stage_update(void) {
        aa_collide は撃破時 burn_add(VDPコマンド)を出すので、その前に海を完全ドレイン(cmd_wait)する。
        ★SEASCRL区間は分散のため計測不可(=0表示)。海のVDP待ちは挟んだ区間へ吸収される。 */
     { u8 sea_on = 0;
-      if (DBG_ON(1)) {   /* bit1=海アニ停止 */
+      if (DBG_ON(1) && curstage != STAGE_FINAL) {   /* bit1=海アニ停止。★最終面は海の模様を変えない(背景弾の消去が模様を前提にする) */
           if (phase != 0) { if (++seatick & 1) sea_on = 1; }        /* phase1: 2フレームに1回 */
           else if (++seatick >= SEA0_DIV) { seatick = 0; sea_on = 1; }
       }
@@ -905,6 +929,7 @@ u8 stage_update(void) {
     }
     g_spr_base = (u8)(g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
+    if (curstage == STAGE_FINAL && g_ovl_ok) final_bgbul();   /* ★弾を背景へ(スプライトでは描かせない) */
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
     if (g_cbul_live) curtain_present(CURTAIN_SLOTS, CURTAIN_SPLIT_LINE);   /* ★弾が居るときだけ
                                              (空振りでも色キャッシュを毎フレーム捨ててしまうため) */
@@ -926,7 +951,8 @@ u8 stage_update(void) {
            基準色へ戻してから演出へ入る。pal_need_reset で、再開時に全16色を書き直させる。 */
         vdp_palette_game();
         pal_need_reset = 1;
-        arm_plain_split();              /* ★被弾の衝撃波の帯を残したまま演出に入らない */
+        if (curstage == STAGE_FINAL) raster_off();   /* ★ボス帯の分割を止める(表Bのボスが下に出ないように) */
+        else arm_plain_split();         /* ★被弾の衝撃波の帯を残したまま演出に入らない */
         play_death_banked(cam);         /* 沈没演出(bank16) */
         if (g_lives) g_lives--;
         if (g_lives == 0) {
@@ -936,6 +962,13 @@ u8 stage_update(void) {
             stage_setup();              /* 残機あり: 面最初から全砲台復活 */
         }
         return SCENE_NONE;
+    }
+    if (final_over) {                  /* ★最終面: きりもみで落ちきった → 結果 → エンディング */
+        final_over = 0;
+        bgm_stop();
+        raster_off();
+        results_and_fanfare();
+        return SC_ENDING;
     }
     /* 全エンプレ(主砲＋対空砲)撃破でクリア → 撃破演出へ(炎上→撃破!!→スコア→ファンファーレ→エンディング) */
     if (phase == 1 && ent_live_turrets() == 0 && aa_alive() == 0) {

@@ -52,7 +52,7 @@ GAMEVER := $(shell cat VERSION 2>/dev/null || echo 0.0.0)
 #    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
 #    「新旧で構造体レイアウトが食い違うオブジェクトが混在→メモリ破損」という
 #    stale-object バグを踏む(実際に踏んだ)。小規模なので全再コンパイルで十分。
-HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h
+HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)/boss_frames.h
 
 # ★ops.rel(run_ops)は現在どこからも呼ばれていない(艦OPSの解釈は bank16 の ship_render 内に独自実装が
 #   ある)。常駐24KBを197B無駄に食っていたのでリンクから外した。使うときはここへ戻すこと。
@@ -269,7 +269,32 @@ $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
 	 fi; \
 	 echo "  ovl.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"
 
-BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/gen_planes.ihx \
+# ── 最終面(巨大機 XB-19) ──
+# コマは tools/gen_boss.py が三面図のシルエット(assets/xb19_mask.png)から生成する(約30秒)。
+$(BUILD)/boss_frames.h: tools/gen_boss.py assets/xb19_mask.png | $(BUILD)
+	python3 tools/gen_boss.py bin $(BUILD)/boss_vram.bin $(BUILD)/boss_misc.bin $@
+$(BUILD)/boss_vram.bin $(BUILD)/boss_misc.bin: $(BUILD)/boss_frames.h
+# 最終面のオーバレイ: パレット/宙返りは通常面と同じソースを別名で入れ、弾幕/クラッシュ/衝撃波は入れない。
+# ★ovl_final.c は 0xB700〜(海の写し 2KB)と 0xBF00〜(背景弾の前回位置)を RAM として使う＝コードは 0x1700 以内。
+OVL6_RELS = $(BUILD)/ovl6_palette.rel $(BUILD)/ovl6_rot.rel $(BUILD)/ovl_final.rel
+$(BUILD)/ovl6.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_final.c $(HDRS) $(BUILD)/boss_frames.h $(BUILD)/ovlhead6.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl6_palette.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl6_rot.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_final.c -o $(BUILD)/ovl_final.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
+	     $(BUILD)/ovlhead6.rel $(OVL6_RELS) $(BUILD)/resident_syms.rel -o $@
+$(BUILD)/ovlhead6.rel: $(SRC)/banked/ovlhead6.s | $(BUILD)
+	sdasz80 -o $@ $<
+$(BUILD)/ovl6.bin: $(BUILD)/ovl6.ihx tools/ihx2bin.mjs
+	@node tools/ihx2bin.mjs $(BUILD)/ovl6.ihx 0xA000 $@; \
+	 SZ=$$(wc -c < $@ | tr -d ' '); \
+	 if [ "$$SZ" -gt 5888 ]; then \
+	   echo "ERROR: ovl6.bin=$${SZ}B が 5888B(0xA000-0xB6FF)を超過。0xB700〜は海の写しの RAM。"; exit 3; \
+	 fi; \
+	 echo "  ovl6.bin=$${SZ}B / 5888B (残り$$((5888-SZ))B)"
+ROMPACK_BANKS += --asset 22 $(BUILD)/boss_vram.bin --bank 26 $(BUILD)/boss_misc.bin --bank 27 $(BUILD)/ovl6.bin
+
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 

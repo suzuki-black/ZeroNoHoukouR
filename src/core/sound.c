@@ -30,6 +30,7 @@ static u8 sfxTimer[SND_CH];
 u8 g_rumble_lv;   /* SFX_RUMBLE の音量(0..15)。演出側が波の進行に合わせて上げていく */
 
 volatile u16 snd_ticks;
+u16 g_bgm_t0;   /* ★最後に bgm_play した瞬間の snd_ticks。最終面の登場演出を曲のイントロに合わせる */
 volatile u8  snd_active;
 static u8 sfx_busy_b;   /* このフレーム tone B を SFX(SHOT/PHIT)が使用中 → BGM bass は譲る(★メロディ=chAは死守) */
 static u8 sfx_busy_c;   /* このフレーム noise C を SFX(HIT/BOOM/EFIRE)が使用中 → BGM drum は譲る */
@@ -101,9 +102,11 @@ void sfx_update(void) {
 }
 
 /* ---- BGM(データバンクの曲データを ISR で再生。旧cportのドライバを移植) ----
-   曲データ(RAMコピー)= [nMel,nBas,basStep, melPeak,melSus,melVib, basPeak,basSus, drumOn,
-                          melNote(nMel), melLen(nMel), basNote(nBas)]。
+   曲データ(RAMコピー)= [nMel,nBas,basStep, melPeak,melSus,melVib, basPeak,basSus, drumOn, sweep,
+                          melLoop, basLoop, melNote(nMel), melLen(nMel), basNote(nBas)]。
    melody=tone A(可変長), bass=tone B(固定basStep), drum=noise C(標準マーチ)。各パート独立ループ。
+   ★melLoop/basLoop: 末尾まで行ったら**そこへ戻る**(0=先頭)。最終面の「イントロ1回→本編だけループ」。
+     ループ位置が付いた曲はドラムを本編(ベースがループ位置に来た瞬間)から鳴らす。
    エンベロープ: 発音開始 peak → 毎フレーム-1 → sustain、末尾2フレーム無音。vib で伸ばし音に揺れ。 */
 #define BGM_REST 255
 static const s8 bgm_vibt[8]   = { 0, 1, 2, 1, 0, -1, -2, -1 };
@@ -112,9 +115,16 @@ static const u8 bgm_drmDec[4] = { 0, 3, 2, 3 };    /* 毎フレーム減衰(全s
 /* ★面別ドラム: スタイル別の [pat16, v0(4), tempo] はデータバンク(drum_off)に置き、bgm_play で当該21BをRAMへ。 */
 static u8 drm_blk[DRUM_STYLE_BYTES];   /* [0..15]=pattern / [16..19]=v0 / [20]=tempo */
 
-static u8  bgm_ram[BGM_RAM_MAX];
+/* ★曲データの RAM は固定番地 0xE100(開始カード画像 g_card_ram と共用)。常駐 _DATA は 0xE000 の天井まで
+   残り数十バイトしか無く、最終面の長い曲が入らなかった。共用してよい根拠: カードを描くのは
+   draw_stage_card の中だけで、そこは bgm_stop 済み(ISR は曲データを読まない)。カードの後は必ず
+   bgm_play で読み直す(stage_intro)。bgm_resume はステージ中のメガクラッシュ明けだけで、その間に
+   カードは描かれない。 */
+#define BGM_RAM_ADDR 0xE100
+static u8 __at(BGM_RAM_ADDR) bgm_ram[1536];
 static u8 *mel_n, *mel_l, *bas_n;
 static u8  nMel, nBas, basStep, melPeak, melSus, melVib, basPeak, basSus, drumOn;
+static u8  melLoop, basLoop, drmGate;
 static u8  bassSweep;   /* 1=ベース(chB)をロックマン風シンセドラムに(立上り1oct上→基音へ急降下＋速い減衰) */
 static u8  mIdx, mTrem, mCl;    /* melody: index / 残フレーム / 発音長 */
 static u8  bIdx, bTrem, bCl;    /* bass */
@@ -131,19 +141,20 @@ void bgm_play(u8 track) {
     nMel = p[0]; nBas = p[1]; basStep = p[2];
     melPeak = p[3]; melSus = p[4]; melVib = p[5];
     basPeak = p[6]; basSus = p[7]; drumOn = p[8]; bassSweep = p[9];
+    melLoop = p[10]; basLoop = p[11];
+    drmGate = (u8)(basLoop == 0);   /* ループ位置付きの曲はドラムを本編から */
     if (drumOn) { u16 doff = (u16)(drum_off + ((drumOn - 1) << 5));   /* style別21B(32Bストライド)をRAMへ */
                   data_read(BGM_BANK, doff, drm_blk, DRUM_STYLE_BYTES); }
-    mel_n = p + 10;
-    mel_l = p + 10 + nMel;
-    bas_n = p + 10 + nMel + nMel;
-    /* ★idx は n-1 で初期化する。bgm_voice/bgm_drum は「trem/drmT==0 なら *先に* idx を進めて
-       から鳴らす」実装のため、0 始まりだと最初のtickで idx が 0→1 に進み 1音目(index0)を飛ばし
-       2音目から鳴る=「曲が途中から始まる」。n-1 始まりなら最初の前進で 0 に戻り 1音目から正しく
-       鳴る(旧版の drmIdx=DRM_N-1 と同じ流儀)。 */
-    mIdx = (u8)(nMel ? nMel - 1 : 0); mTrem = mCl = 0;
-    bIdx = (u8)(nBas ? nBas - 1 : 0); bTrem = bCl = 0;
+    mel_n = p + 12;
+    mel_l = p + 12 + nMel;
+    bas_n = p + 12 + nMel + nMel;
+    /* ★bgm_voice/bgm_drum は「trem/drmT==0 なら *先に* idx を進めてから鳴らす」実装。0 始まりだと
+       1音目を飛ばす。**最初の前進で 0 になる値**から始めること(音符は 255、16手ドラムは 15)。 */
+    mIdx = 255; mTrem = mCl = 0;   /* ★最初の前進で (u8)(255+1)=0 → 1音目。n-1 始まりだとループ位置付きの曲で */
+    bIdx = 255; bTrem = bCl = 0;   /*   最初の前進がループ位置へ飛び、イントロが丸ごと飛ばされた(一度そうなった) */
     drmIdx = 15; drmT = drmType = drmVol = 0;   /* 16手ドラムも最初の前進で 0 へ */
     bgmLoaded = 1;
+    g_bgm_t0 = snd_ticks;
     bgmOn = 1;
 }
 
@@ -166,12 +177,12 @@ void bgm_stop(void) {
 
 /* 1声を進める。busy(SFXがこのchを使用中)なら PSG 書込を譲る。ch: 0=toneA / 1=toneB。 */
 static void bgm_voice(u8 *idx, u8 *trem, u8 *curlen,
-                      const u8 *notes, const u8 *lens, u8 n,
+                      const u8 *notes, const u8 *lens, u8 n, u8 loop,
                       u8 fixed, u8 ch, u8 peak, u8 sustain, u8 vib, u8 sweep, u8 busy) {
     u8 note, el, vol;
     u16 p;
     if (*trem == 0) {
-        *idx = (u8)((*idx + 1 >= n) ? 0 : *idx + 1);
+        if ((u8)(*idx + 1) >= n) *idx = loop; else (*idx)++;
         *trem = fixed ? fixed : lens[*idx];
         *curlen = *trem;
     }
@@ -213,9 +224,10 @@ static void bgm_drum(u8 busy) {
 /* ISR から毎フレーム(sfx_update の後)。SFX が使う ch は譲る。 */
 void bgm_update(void) {
     if (!bgmOn) return;
-    bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, 0,       0, melPeak, melSus, melVib, 0,         0);           /* ★メロディ(chA)は死守=SFXに絶対譲らない */
-    bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basStep, 1, basPeak, basSus, 0, bassSweep, sfx_busy_b);  /* ★ベース(chB)がSFX(SHOT/PHIT)に譲る */
-    if (drumOn) bgm_drum(sfx_busy_c);
+    bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, melLoop, 0,       0, melPeak, melSus, melVib, 0,         0);           /* ★メロディ(chA)は死守=SFXに絶対譲らない */
+    bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basLoop, basStep, 1, basPeak, basSus, 0, bassSweep, sfx_busy_b);  /* ★ベース(chB)がSFX(SHOT/PHIT)に譲る */
+    if (!drmGate && bIdx == basLoop && bTrem == (u8)(basStep - 1)) { drmGate = 1; drmIdx = 15; drmT = 0; }   /* ★本編の頭(ベースがループ位置に来た瞬間)でドラムを小節頭から入れる */
+    if (drumOn && drmGate) bgm_drum(sfx_busy_c);
 }
 
 /* ファンファーレ本体(前景・同期再生)。bgmを止め、mel=toneA/har=toneB を直接鳴らして

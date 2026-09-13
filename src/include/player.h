@@ -8,6 +8,7 @@
 #include "entity.h"
 
 extern u8 g_player_x, g_player_y;   /* 自機の現在位置(bh_player が毎フレーム更新) */
+extern u8 g_py_min;                 /* 自機が上がれる限界(画面Y)。最終面=壁の内側。通常面は0 */
 
 void bh_player(Entity *e);          /* entity.c の behaviors[ET_PLAYER] から呼ばれる */
 

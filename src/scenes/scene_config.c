@@ -59,7 +59,7 @@ static u8 change(u8 idx, s8 d) {
     if (idx == 0) { s8 v = (s8)g_difficulty + d; if (v >= 0 && v <= 2) { g_difficulty = (u8)v; return 1; } }
     else if (idx == 1) { s8 v = (s8)g_lives_idx + d; if (v >= 0 && v <= 2) { g_lives_idx = (u8)v; return 1; } }
     else if (idx == 2) { s8 v = (s8)g_durability + d; if (v >= 1 && v <= 9) { g_durability = (u8)v; return 1; } }
-    else if (idx == 3) { s8 v = (s8)g_stage_sel + d; if (v >= 0 && v < 5) { g_stage_sel = (u8)v; return 1; } }  /* 開始面(0..4=STAGE_COUNT-1)。面数変更時ここも更新 */
+    else if (idx == 3) { s8 v = (s8)g_stage_sel + d; if (v >= 0 && v < 6) { g_stage_sel = (u8)v; return 1; } }  /* 開始面(0..5。5=最終面)。面数変更時ここも更新 */
     else if (idx == 4) { u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_continue); if (n != g_continue) { g_continue = n; return 1; } }
     else if (idx == 5) { u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_invinc);   if (n != g_invinc)   { g_invinc = n;   return 1; } }
     else if (idx == 6) { s8 v = (s8)g_mode + d; if (v >= 0 && v <= 3) { g_mode = (u8)v; return 1; } }   /* VIEW: GAME/CARD/RESULT/ENDING */

@@ -47,6 +47,10 @@
 #define OVL_SLOT_WAVE_Y         13
 #define OVL_SLOT_SHOCK_BUILD    14
 #define OVL_SLOT_ROT_ZOOM       15
+/* 16〜 は最終面のオーバレイ(OVL6_BANK, ovlhead6.s)だけが持つ。通常面のオーバレイで呼ばないこと */
+#define OVL_SLOT_FINAL_INIT     16
+#define OVL_SLOT_FINAL_FRAME    17
+#define OVL_SLOT_FINAL_BGBUL    18
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 

@@ -108,25 +108,33 @@ void vdp_screen12(void) {
                                   GRAPHIC7ではR#7は直接8bit色(GRB332)＝0x00で黒。 */
 }
 
-/* bank から連続する生データ(total バイト)を現行スクリーンの VRAM 先頭(0)へ流し込む。
-   YJKタイトル画(54272B, bank9..15)のロード用。
+/* bank から連続する生データ(total バイト)を VRAM の (hi<<16 | lo) 番地から流し込む。
+   YJKタイトル画(54272B, bank9..15 → 0)と最終面ボスのコマ(page2)のロード用。
    ★V9938 の VRAMアドレスカウンタは14bit(=16KB)で、オートインクリメントの桁上げは R#14 へ
-     伝播しない。ゆえに 16KB を跨がぬよう、8KB(=バンク境界)ごとに vdp_write_addr で貼り直す。
-     8KB×連続バンクは常に 0/8192 始まりなので、各チャンク内で14bit桁上げは起きない。
+     伝播しない。ゆえに **16KB 境界ごとにアドレスを貼り直す**(バンク境界 8KB とは別に数える。
+     ボスのコマは 0x10800 始まりなので、バンク境界と 16KB 境界がずれる)。
    窓(0xA000)は bank ごとにめくる。ISR(音)は窓/VDPアドレスに触れないので di 不要
      (VDP_DAT=0x98 のオートインクリメント書込はフリップフロップを使わない)。 */
-void vdp_blit_bank_vram(u8 first_bank, u16 total) {
+void vdp_blit_bank_vram(u8 first_bank, u16 total, u8 hi, u16 lo) {
     const volatile u8 *win = (const volatile u8 *)0xA000;
-    u16 off = 0;
+    u16 off = 0, woff = 0;        /* off=全体の進み / woff=今の窓の中の位置 */
     u8 bank = first_bank;
+    bank_data(bank);
     while (off < total) {
         u16 j, chunk = (u16)(total - off);
-        if (chunk > 0x2000) chunk = 0x2000;    /* 8KB */
-        bank_data(bank);
-        vdp_write_addr(off);
-        for (j = 0; j < chunk; j++) VDP_DAT = win[j];
+        u16 room16 = (u16)(0x4000 - (lo & 0x3FFF));   /* 次の16KB境界まで */
+        u16 roomw  = (u16)(0x2000 - woff);             /* 窓の残り */
+        if (chunk > room16) chunk = room16;
+        if (chunk > roomw)  chunk = roomw;
+        __asm di __endasm;
+        VDP_CTRL = (u8)(((lo >> 14) & 3) | (hi << 2));  VDP_CTRL = 0x80 | 14;
+        VDP_CTRL = (u8)(lo & 0xFF);                     VDP_CTRL = (u8)(((lo >> 8) & 0x3F) | 0x40);
+        __asm ei __endasm;
+        for (j = 0; j < chunk; j++) VDP_DAT = win[(u16)(woff + j)];
         off = (u16)(off + chunk);
-        bank++;
+        woff = (u16)(woff + chunk);
+        { u16 nlo = (u16)(lo + chunk); if (nlo < lo) hi++; lo = nlo; }
+        if (woff == 0x2000) { woff = 0; bank++; bank_data(bank); }
     }
     bank_restore();
 }

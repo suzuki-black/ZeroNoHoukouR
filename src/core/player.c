@@ -11,6 +11,7 @@
 #define PCOOLDN  6   /* 連射クールダウン    */
 
 u8 g_player_x, g_player_y;
+u8 g_py_min;   /* ★自機が上がれる限界(画面Y)。最終面は壁の内側まで。通常面は0 */
 
 void bh_player(Entity *e) {
     u8 in = g_input;
@@ -22,7 +23,7 @@ void bh_player(Entity *e) {
 
     /* 画面内へクランプ(スプライト16x16) */
     if (e->x < 0) e->x = 0; else if (e->x > (s16)(SCR_W - 16)) e->x = SCR_W - 16;
-    if (e->y < 0) e->y = 0; else if (e->y > (s16)(SCR_H - 16)) e->y = SCR_H - 16;
+    if (e->y < (s16)g_py_min) e->y = g_py_min; else if (e->y > (s16)(SCR_H - 16)) e->y = SCR_H - 16;
 
     /* 発砲(トリガ押下＋クールダウン) — 自機弾は上方向、TEAM_PLAYER
        ★宙返り中は撃てない(「無敵で撃ち放題」にしないための代償。ROADMAP P2 項目9)。 */
