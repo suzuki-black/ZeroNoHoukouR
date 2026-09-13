@@ -39,7 +39,11 @@ static void scene_bgm_enter(u8 cur) {
 #define TITLE_YJK_LEN 54272
 static u8 g_vmode;   /* 現在のスクリーンモード(5/12)。0=未設定で初回に必ず張る。 */
 static void scene_video_enter(u8 cur) {
+#ifdef MAGTEST
+    u8 want = 5;   /* ★検証ROM: 起動シーン(bank21)も SCREEN5 */
+#else
     u8 want = (cur == SC_TITLE) ? 12 : 5;
+#endif
     if (want == g_vmode) return;
     g_vmode = want;
     if (want == 12) {
@@ -57,7 +61,11 @@ extern u8   stage_update(void);
 
 /* シーンID順に登録。SC_COUNT と個数を一致させること。 */
 static const Scene registry[SC_COUNT] = {
+#ifdef MAGTEST
+    /* SC_TITLE  */ { 0,          0,           21 },   /* ★検証ROM: MAG 分割テスト(scene_magtest, bank21) */
+#else
     /* SC_TITLE  */ { 0,          0,            5 },   /* 冷たいシーン: bank5(bcall)。起動シーン */
+#endif
     /* SC_CONFIG */ { 0,          0,            6 },   /* 冷たいシーン: bank6        */
     /* SC_STAGE  */ { stage_init, stage_update, 0 },   /* ★連続縦スクロール面        */
     /* SC_ENDING */ { 0,          0,            7 },   /* 冷たいシーン: bank7        */

@@ -273,6 +273,12 @@ BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 
+# ── 実機検証: 走査線途中の MAG 切替テスト(起動シーンを差し替え): make clean && make MAGTEST=1
+ifdef MAGTEST
+  DEFS          += -DMAGTEST
+  BANK_IHX      += $(BUILD)/scene_magtest.ihx
+  ROMPACK_BANKS += --bank 21 $(BUILD)/scene_magtest.ihx
+endif
 ifdef DEBUG_PROF
   BANK_IHX      += $(BUILD)/prof_bank.ihx
   ROMPACK_BANKS += --bank 20 $(BUILD)/prof_bank.ihx
