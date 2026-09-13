@@ -491,26 +491,9 @@ static const u8 stage_bgm[STAGE_COUNT] = { 1, 3, 4, 5, 6 };
    艦名は可変長なので中央寄せ(8px/char)。 */
 /* 開始カード(STAGE n / TARGET / 艦名 / 艦シルエット)を page0 に描く。stage_intro とビューアで共用。 */
 static void draw_stage_card(void) {
-    const char *nm;
-    u8 n = 0;
-    char num[2];
     load_stage_data();                      /* ★カードで艦名を描く前に当該面の艦名等をRAMへ */
-    nm = cur_name;
-    while (nm[n]) n++;                       /* 艦名の長さ(中央寄せ用) */
-
-    bgm_stop();                              /* カード中は無音(タイトル/前面のBGMを止める) */
-    raster_off();                            /* ★page0 全面の画面。分割表を走らせない(次面で stage_update が張り直す) */
-    vdp_set_vscroll(0);                      /* 縦スクロール解除(page0のズレ防止) */
-    vdp_sprite_hide_from(0);                 /* スプライト全消し */
-    vdp_set_display_page(0);
-    vdp_fill(0, 0, 256, 212, 1);            /* 背景=海の濃紺(旧パレット色1=1,4,5)。装飾ラインは無し */
-
-    /* 見出しは2倍角(旧版準拠)。STAGE n / - TARGET - / 艦名 を中央寄せで大きく。地色=背景(1)。 */
-    num[0] = (char)('1' + curstage); num[1] = 0;
-    vdp_text_s(72, 18, 15, 1, 2, "STAGE");         /* "STAGE"(5字×16=80) 72..152。白で視認性確保 */
-    vdp_text_s(168, 18, 15, 1, 2, num);            /* n は空白1つ空けて 168 */
-    vdp_text_s(48, 44, 11, 1, 2, "- TARGET -");    /* 10字×16=160 → x48 中央(赤) */
-    vdp_text_s((u8)(128 - n * 8), 176, 15, 1, 2, nm);   /* 艦名(2倍角・中央寄せ, 1字=16px) */
+    g_shipargs.mode = 6; g_shipargs.hull = curstage; g_shipargs.ops = (const u8 *)cur_name;
+    bcall_to(GEN_PLANES_BANK);              /* 文字は冷たいバンク(bank19 の card_text_impl) */
     draw_card_ship();                       /* 事前ベイク艦画像を即blit=カード完成(重い生成を待たない) */
 }
 
@@ -559,73 +542,17 @@ void stage_init(void) {
     stage_intro();        /* 1面開始: カード＋ファンファーレ→準備→BGM→開始 */
 }
 
-/* スコアを5桁ゼロ詰め文字列へ(結果画面表示用)。 */
-static char scorebuf[6];
-static void fmt_score(u16 v) {
-    u8 i;
-    for (i = 5; i > 0; i--) { scorebuf[i - 1] = (char)('0' + (v % 10)); v /= 10; }
-    scorebuf[5] = 0;
-}
-
-/* 撃破!! パネルの1bppデータをバンク→RAMへ(結果画面の直前に1回)。 */
-static u8 panel_ram[PANEL_WB * PANEL_H];
-/* 撃破!! パネルを透過描画(1bit=1px正確)。★旧版(cport)踏襲: 各行で立ちビットのラン(連続)を検出し
-   1本を vdp_fill(LMMV=コマンド)で塗る。以前の「vdp_write_addr+vdp_data で1画素ずつ直接VRAM書込」は、
-   細切れの di/ei の隙間に60Hz割込み(BIOSがVDPステータス読取)が刺さってVDP状態がずれ、横方向に
-   潰れて化けた(撃沈画面の撃破!!が白黒ぐしゃ)。コマンドエンジンは1コマンド=原子的で割込み耐性がある。
-   透過: 立ちビットのランだけ oncol で塗る=オフ画素は下地/影が残る。dstx は偶数前提。 */
-static void blit_panel_t(u16 dstx, u16 dsty, u8 oncol) {
-    u8 y, c;
-    for (y = 0; y < PANEL_H; y++) {
-        const u8 *row = &panel_ram[(u16)y * PANEL_WB];
-        c = 0;
-        while (c < PANEL_W) {
-            if (row[c >> 3] & (u8)(0x80 >> (c & 7))) {
-                u8 run = 1;
-                while ((u8)(c + run) < PANEL_W &&
-                       (row[(u8)(c + run) >> 3] & (u8)(0x80 >> ((c + run) & 7)))) run++;
-                vdp_fill((u16)(dstx + c), (u16)(dsty + y), run, 1, oncol);   /* ラン1本=1回のLMMV(割込み耐性) */
-                c = (u8)(c + run);
-            } else c++;
-        }
-    }
-}
-
-/* 撃破結果画面(page0)＋勝ちどきファンファーレ(前景・ブロッキング)。終わりにトリガ待ち。 */
+/* 撃破結果画面＋勝ちどきファンファーレ。★描画と待ちは冷たいバンク(bank19 の results_impl)。
+   パネルの data_read だけは窓を差し替えるので常駐で済ませてから渡す(g_card_ram＝カード中/結果中だけ使う冷RAM)。 */
 static void results_and_fanfare(void) {
-    u8 f;
     raster_off();                       /* ★page0 全面の画面。分割表(特に R#23 の帯)を走らせない */
-    vdp_set_vscroll(0);                 /* 縦スクロール解除(page0テキストのズレ＋上端ゴミを防ぐ) */
+    vdp_set_vscroll(0);                 /* 縦スクロール解除 */
     vdp_set_hscroll(0, 0);              /* ★横スクロール(蛇行weaveX)も解除=残ると画面全体が右に寄る */
-    vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
+    vdp_sprite_hide_from(0);
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
-    vdp_fill(0, 0, 256, 212, 1);        /* 背景=エンディング/開始カードと同じ青(色1)。トーン統一 */
-    /* 撃破!! (魏碑の筆文字)。枠・赤は無し。ブラウン管ゴースト風に黒影を横+6/縦+2へ大きくずらす。
-       ★透過blitで「青地 → 影(黒) → 本体(白)」の順に重ねる(不透過blitだと本体の地塗りが影を消す)。 */
-    data_read(ASSET_BANK, panel_off, panel_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
-    blit_panel_t(78, 42, 0);            /* 影=黒。透過=隙間から本体の裏へ影が残る。横+6/縦+2で大きく覗く */
-    blit_panel_t(72, 40, 15);           /* 本体=白。透過で影の上に重ねる。中央 x72(=(256-112)/2) */
-    /* [艦名] SUNK を白・2倍角で中央。 */
-    { const char *m = cur_sunk; u8 n = 0;
-      while (m[n]) n++;
-      vdp_text_s((u8)((256 - (u16)n * 16) / 2), 100, 15, 1, 2, m); }
-    if (g_score > g_hiscore) g_hiscore = g_score;
-    fmt_score(g_score);
-    vdp_text(72, 132, 15, 1, "SCORE");         /* すべて白=青背景でも視認できる */
-    vdp_text(120, 132, 15, 1, scorebuf);
-    fmt_score(g_hiscore);
-    vdp_text(72, 152, 15, 1, "HI");
-    vdp_text(120, 152, 15, 1, scorebuf);
-    play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
-    vdp_text(88, 176, 15, 1, "PUSH SPACE");
-    { u8 armed = 0;                     /* ★連射ホールドで一瞬で飛ばされないよう「一度離してから押す」を要求 */
-      for (f = 0; f < 240; f++) {       /* 約4秒 or 新規トリガ押下で次へ */
-          input_poll();
-          if (!(g_input & INP_TRIG)) armed = 1;
-          if (armed && (g_input_edge & INP_TRIG)) break;
-          vdp_wait_frame();
-      }
-    }
+    data_read(ASSET_BANK, panel_off, g_card_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
+    g_shipargs.mode = 5; g_shipargs.ops = (const u8 *)cur_sunk;
+    bcall_to(GEN_PLANES_BANK);
 }
 
 /* 自機撃墜の沈没演出: スクロール凍結・自機位置に火球を降らせ轟音(旧版 player_burst 相当・短縮)。 */

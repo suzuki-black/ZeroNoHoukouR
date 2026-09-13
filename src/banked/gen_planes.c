@@ -8,6 +8,11 @@
 #include "sprites.h"
 #include "ship.h"    /* g_shipargs */
 #include "vdp.h"     /* vdp_sprite_pattern / vdp_sprite_pattern_read / vdp_write_addr */
+#include "sound.h"   /* play_fanfare / bgm_stop */
+#include "input.h"
+#include "raster.h"
+#include "gamestate.h"   /* g_score / g_hiscore */
+#include "assets_data.h" /* PANEL_W / PANEL_WB / PANEL_H */
 
 /* ===== 敵戦闘機/艦載機の8方向スプライトを手続き生成(旧版 build_plane_pattern 移植・常駐) =====
    胴体＋主翼＋尾翼＋エンジンを線分で描く。8方向×3サイズ(小/中/大)を面別に生成しVRAMへ。setup時=cartで実行。
@@ -110,7 +115,86 @@ static void loop_prerender(void) {
     }
 }
 
+/* ===== 面の区切りの画面(常駐から移設。面の開始/撃破で1回しか走らない冷たいコード) =====
+   ★data_read はここでは呼べない(窓を差し替えるとこのバンク自身が消える)。撃破!!パネルと艦名は
+     常駐側が RAM(g_card_ram / cur_name)へ読んでから g_shipargs で渡す。 */
+
+/* スコアを5桁ゼロ詰め文字列へ。 */
+static char scorebuf[6];
+static void fmt_score(u16 v) {
+    u8 i;
+    for (i = 5; i > 0; i--) { scorebuf[i - 1] = (char)('0' + (v % 10)); v /= 10; }
+    scorebuf[5] = 0;
+}
+
+/* 撃破!! パネルを透過描画(1bit=1px正確)。★各行で立ちビットのラン(連続)を検出し 1 本を vdp_fill(LMMV)で塗る。
+   1画素ずつ VRAM へ直接書くと、細切れの di/ei の隙間に割込みが刺さって横に潰れて化けた。 */
+static void blit_panel_t(u16 dstx, u16 dsty, u8 oncol) {
+    u8 y, c;
+    for (y = 0; y < PANEL_H; y++) {
+        const u8 *row = &g_card_ram[(u16)y * PANEL_WB];
+        c = 0;
+        while (c < PANEL_W) {
+            if (row[c >> 3] & (u8)(0x80 >> (c & 7))) {
+                u8 run = 1;
+                while ((u8)(c + run) < PANEL_W &&
+                       (row[(u8)(c + run) >> 3] & (u8)(0x80 >> ((c + run) & 7)))) run++;
+                vdp_fill((u16)(dstx + c), (u16)(dsty + y), run, 1, oncol);
+                c = (u8)(c + run);
+            } else c++;
+        }
+    }
+}
+
+/* 撃破結果画面(page0)＋勝ちどきファンファーレ＋トリガ待ち。パネルは g_card_ram、撃沈文は ops。 */
+static void results_impl(const char *m) {
+    u8 f, n = 0;
+    vdp_fill(0, 0, 256, 212, 1);        /* 背景=エンディング/開始カードと同じ青(色1) */
+    /* 撃破!! 。黒影を横+6/縦+2へずらす。透過blitで「青地 → 影(黒) → 本体(白)」の順に重ねる */
+    blit_panel_t(78, 42, 0);
+    blit_panel_t(72, 40, 15);
+    while (m[n]) n++;
+    vdp_text_s((u8)((256 - (u16)n * 16) / 2), 100, 15, 1, 2, m);   /* [艦名] SUNK を白・2倍角で中央 */
+    if (g_score > g_hiscore) g_hiscore = g_score;
+    fmt_score(g_score);
+    vdp_text(72, 132, 15, 1, "SCORE");
+    vdp_text(120, 132, 15, 1, scorebuf);
+    fmt_score(g_hiscore);
+    vdp_text(72, 152, 15, 1, "HI");
+    vdp_text(120, 152, 15, 1, scorebuf);
+    play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
+    vdp_text(88, 176, 15, 1, "PUSH SPACE");
+    { u8 armed = 0;                     /* ★連射ホールドで一瞬で飛ばされないよう「一度離してから押す」 */
+      for (f = 0; f < 240; f++) {
+          input_poll();
+          if (!(g_input & INP_TRIG)) armed = 1;
+          if (armed && (g_input_edge & INP_TRIG)) break;
+          vdp_wait_frame();
+      }
+    }
+}
+
+/* 開始カードの文字(STAGE n / - TARGET - / 艦名)。艦の絵は常駐側が続けて描く。 */
+static void card_text_impl(u8 stage, const char *nm) {
+    u8 n = 0;
+    char num[2];
+    while (nm[n]) n++;
+    bgm_stop();                              /* カード中は無音 */
+    raster_off();                            /* ★page0 全面の画面。分割表を走らせない */
+    vdp_set_vscroll(0);
+    vdp_sprite_hide_from(0);
+    vdp_set_display_page(0);
+    vdp_fill(0, 0, 256, 212, 1);
+    num[0] = (char)('1' + stage); num[1] = 0;
+    vdp_text_s(72, 18, 15, 1, 2, "STAGE");
+    vdp_text_s(168, 18, 15, 1, 2, num);
+    vdp_text_s(48, 44, 11, 1, 2, "- TARGET -");
+    vdp_text_s((u8)(128 - n * 8), 176, 15, 1, 2, nm);
+}
+
 void banked_entry(void) {
+    if (g_shipargs.mode == 5) { results_impl((const char *)g_shipargs.ops); return; }
+    if (g_shipargs.mode == 6) { card_text_impl(g_shipargs.hull, (const char *)g_shipargs.ops); return; }
     load_planes(g_shipargs.hull);
     loop_prerender();
 }
