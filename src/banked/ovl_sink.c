@@ -170,8 +170,15 @@ u8 ovl_sink_frame(void) {
         else if ((t % 16) == 8) sfx(2, SFX_RUMBLE);
         if (g_rumble_lv > 3 && (t & 15) == 0) g_rumble_lv--;
 
-        /* 船首まで沈んだ、または水面が画面の上へ抜けた(それより上は画面に出てこない＝待つ意味が無い) */
-        if (wl <= BOW_Y || wl <= cam) {
+        /* 船首まで沈んだ、または水面が画面の上端に着いた(それより上は画面に出てこない＝待つ意味が無い) */
+        if (wl <= BOW_Y || wl <= (u16)(cam + 12)) {
+            /* ★水面より上の網目の帯と、画面上端より上に描いてある行もまとめて海へ。残すと、網目で甲板だけが
+               海の色に紛れ、暗い砲塔のドームがゴミのように浮いて見えた(実機で報告) */
+            u16 top = (u16)(cam & 0xFFF0);
+            if (top > (u16)(wl - WET_ROWS)) top = (u16)(wl - WET_ROWS);
+            if (top < BOW_Y) top = BOW_Y;
+            if (wl > top) sea_rows(top, (u8)(wl - top));
+            wl = top;
             sfx(2, SFX_BOOM);
             g_rumble_lv = 0;
             calm = 1;

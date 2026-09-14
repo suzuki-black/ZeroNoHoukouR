@@ -547,9 +547,9 @@ void stage_init(void) {
    パネルの data_read だけは窓を差し替えるので常駐で済ませてから渡す(g_card_ram＝カード中/結果中だけ使う冷RAM)。 */
 static void results_and_fanfare(void) {
     raster_off();                       /* ★page0 全面の画面。分割表(特に R#23 の帯)を走らせない */
-    vdp_set_vscroll(0);                 /* 縦スクロール解除 */
-    vdp_set_hscroll(0, 0);              /* ★横スクロール(蛇行weaveX)も解除=残ると画面全体が右に寄る */
     vdp_sprite_hide_from(0);
+    /* ★縦横スクロールの解除も results_impl が page0 を塗って表示を切り替えるときに一緒に行う。
+       ここで先に 0 にすると、切替までの間 page1 のずれた行(艦の帯)が見えた(openMSX の連続写真で確認) */
     /* ★表示を page0 へ切り替えるのは results_impl が page0 を塗り潰した後(page0 にはこの面の開始カードが
        残っている。先に切り替えると、パネルを読む間それが見えた。実機で報告) */
     data_read(ASSET_BANK, panel_off, g_card_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */

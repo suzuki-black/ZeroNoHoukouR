@@ -149,10 +149,13 @@ static void blit_panel_t(u16 dstx, u16 dsty, u8 oncol) {
 /* 撃破結果画面(page0)＋勝ちどきファンファーレ＋トリガ待ち。パネルは g_card_ram、撃沈文は ops。 */
 static void results_impl(const char *m) {
     u8 f, n = 0;
-    vdp_palette_game();                 /* ★面の色調(夕焼け/夜など)を昼の基準へ戻す */
     vdp_fill(0, 0, 256, 212, 1);        /* 背景=エンディング/開始カードと同じ青(色1) */
     vdp_cmd_wait();
+    vdp_wait_frame();                   /* ★切替は VBLANK 直後にまとめて(途中で変えると1フレームだけ混ざる) */
     vdp_set_display_page(0);            /* ★塗り終えてから表示(page0 に残る開始カードを見せない) */
+    vdp_set_vscroll(0);
+    vdp_set_hscroll(0, 0);              /* ★横スクロール(蛇行weaveX)も解除=残ると画面全体が右に寄る */
+    vdp_palette_game();                 /* ★面の色調(夕焼け/夜など)を昼の基準へ戻す(切替の後。先だと沈んだ海の色が変わって見える) */
     /* 撃破!! 。黒影を横+6/縦+2へずらす。透過blitで「青地 → 影(黒) → 本体(白)」の順に重ねる */
     blit_panel_t(78, 42, 0);
     blit_panel_t(72, 40, 15);
