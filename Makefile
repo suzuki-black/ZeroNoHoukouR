@@ -300,7 +300,28 @@ $(BUILD)/ovl6.bin: $(BUILD)/ovl6.ihx tools/ihx2bin.mjs
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl6 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
 ROMPACK_BANKS += --asset 32 $(BUILD)/boss_vram.bin --asset 40 $(BUILD)/boss_vram0.bin --bank 43 $(BUILD)/boss_misc.bin --bank 27 $(BUILD)/ovl6.bin
 
-BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
+# 撃沈シーンのオーバレイ: 撃破の瞬間に通常面のものと入れ替える。パレット(面の天候つき)は同じソースを別名で入れる。
+# ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
+OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel
+$(BUILD)/ovl7.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_SINK $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl7_palette.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_sink.c -o $(BUILD)/ovl_sink.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
+	     $(BUILD)/ovlhead7.rel $(OVL7_RELS) $(BUILD)/resident_syms.rel -o $@
+$(BUILD)/ovlhead7.rel: $(SRC)/banked/ovlhead7.s | $(BUILD)
+	sdasz80 -o $@ $<
+$(BUILD)/ovl7.bin: $(BUILD)/ovl7.ihx tools/ihx2bin.mjs
+	@node tools/ihx2bin.mjs $(BUILD)/ovl7.ihx 0xA000 $@; \
+	 SZ=$$(wc -c < $@ | tr -d ' '); \
+	 if [ "$$SZ" -gt 8192 ]; then \
+	   echo "ERROR: ovl7.bin=$${SZ}B が オーバレイ枠 8192B を超過。"; exit 3; \
+	 fi; \
+	 echo "  ovl7.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"; \
+	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl7.map | head -1); \
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl7 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
+ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
+
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 

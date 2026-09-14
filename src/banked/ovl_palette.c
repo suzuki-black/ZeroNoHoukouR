@@ -53,6 +53,9 @@ static u8 fx_t;             /* 残りフレーム(大きいほど濃い) */
 static u8 last_hit, last_gun;
 static u8 shimmer;          /* 海シマーの位相 */
 static u8 storm_t, storm_f; /* 3面の稲光: 次までのフレーム / 光っている残り */
+#ifdef OVL_SINK
+u8 sink_flash;              /* 撃沈シーン(ovl_sink.c)の閃光: >0 の間、全画面を白へ寄せる */
+#endif
 
 #define FX_NONE 0
 #define FX_HIT  1
@@ -108,6 +111,9 @@ void ovl_pal_update(void) {
         if (fx_t == 0) fx_kind = FX_NONE;
     }
 
+#ifdef OVL_SINK
+    if (sink_flash) { w = (sink_flash > 4) ? 4 : sink_flash; tr = tg = tb = 7; sink_flash--; }
+#endif
     shimmer++;
     /* ★3面(荒天): ときどき稲光。数秒おきに「白→少し戻る→また光る→消える」を 4 フレームで。 */
 #ifndef OVL_FINAL

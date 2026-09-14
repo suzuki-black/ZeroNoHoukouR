@@ -105,3 +105,6 @@ void rot_zoom(u8 k) __naked { (void)k; __asm jp 0xA02D __endasm; }
 void final_init(void) __naked  { __asm jp 0xA030 __endasm; }
 u8   final_frame(void) __naked { __asm jp 0xA033 __endasm; }
 void final_bgbul(void) __naked { __asm jp 0xA036 __endasm; }
+/* ---- 撃沈シーンのオーバレイ(OVL7_BANK)だけが持つ入口 ---- */
+void sink_init(void) __naked   { __asm jp 0xA039 __endasm; }
+u8   sink_frame(void) __naked  { __asm jp 0xA03C __endasm; }

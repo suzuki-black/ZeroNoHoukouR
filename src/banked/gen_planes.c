@@ -151,6 +151,8 @@ static void results_impl(const char *m) {
     u8 f, n = 0;
     vdp_palette_game();                 /* ★面の色調(夕焼け/夜など)を昼の基準へ戻す */
     vdp_fill(0, 0, 256, 212, 1);        /* 背景=エンディング/開始カードと同じ青(色1) */
+    vdp_cmd_wait();
+    vdp_set_display_page(0);            /* ★塗り終えてから表示(page0 に残る開始カードを見せない) */
     /* 撃破!! 。黒影を横+6/縦+2へずらす。透過blitで「青地 → 影(黒) → 本体(白)」の順に重ねる */
     blit_panel_t(78, 42, 0);
     blit_panel_t(72, 40, 15);

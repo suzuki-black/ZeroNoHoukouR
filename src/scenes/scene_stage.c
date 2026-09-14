@@ -237,7 +237,7 @@ static u8 aa_alive(void) { u8 i, n = 0; for (i = 0; i < SHIP_NAAG; i++) if (!aa_
    スプライト枠(32/8perline)を使わず、事前ベイクした火球を page1リングへ透過コピーで毎フレーム重ねる。
    → 全27エンプレを同時炎上でき、破壊済みか一目で分かる(小炎が消える時間帯が無い)。 */
 #define FB_PAGE0_Y 0             /* 火球ベイク先(page0の非表示域 上端。ゲーム中は表示page1) */
-static const u8  fb_box[3] = { 32, 22, 16 };            /* 0=大(主砲=ドームを包む) 1=中(大型AA) 2=小(極小AA) */
+const u8  fb_box[3] = { 32, 22, 16 };   /* 0=大(主砲=ドームを包む) 1=中(大型AA) 2=小(極小AA)。★非static: 撃沈シーンが沈んだ炎を外すのに使う */
 /* page0非表示域の各コマのベイクX(6枚: s0f0,s0f1,s1f0,s1f1,s2f0,s2f1)。1行内に横並び(<256px)。 */
 static const u8  fb_px[6] = { 0, 32, 64, 86, 108, 124 };
 
@@ -265,11 +265,12 @@ static void bake_fireballs(void) {
      炎がエイリアスして乗る不具合(手前砲台を壊すと奥砲台に半分炎)があった。B経由なら draw_row が
      行ごとに正しいリング位置へ写すのでエイリアスしない。 */
 #define BURN_MAX 48              /* 主砲4＋対空砲23＋撃破時の散布火球 */
-static u8  burn_left[BURN_MAX];  /* 火球の左X(page1)。box≤32で0..224=u8可 */
-static u16 burn_wtop[BURN_MAX];  /* 火球の世界Y上端 */
-static u8  burn_sz[BURN_MAX];    /* 0大/1中/2小 */
-static u8  burn_coma[BURN_MAX];  /* ★各炎が現在Bへ焼込み済みのコマ(0/1)。fire_draw はコマ変化時のみ再焼込み=無駄コピー排除 */
-static u8  nburn;
+/* ★炎上サイト表は非static: 撃沈シーン(ovl_sink.c)が沈んだ行の炎を表から外す */
+u8  burn_left[BURN_MAX];  /* 火球の左X(page1)。box≤32で0..224=u8可 */
+u16 burn_wtop[BURN_MAX];  /* 火球の世界Y上端 */
+u8  burn_sz[BURN_MAX];    /* 0大/1中/2小 */
+u8  burn_coma[BURN_MAX];  /* ★各炎が現在Bへ焼込み済みのコマ(0/1)。fire_draw はコマ変化時のみ再焼込み=無駄コピー排除 */
+u8  nburn;
 /* 炎球1個を艦バッファBへ透過焼込み。src=page0の火球コマ列位置(fb_px添字)。 */
 static void burn_bake(u8 left, u16 wtop, u8 box, u8 src) {
     u16 bufY = (u16)((s16)SC_SHIPBUF_Y + (s16)wtop - SC_SHIP_R0 * 16);
@@ -549,7 +550,8 @@ static void results_and_fanfare(void) {
     vdp_set_vscroll(0);                 /* 縦スクロール解除 */
     vdp_set_hscroll(0, 0);              /* ★横スクロール(蛇行weaveX)も解除=残ると画面全体が右に寄る */
     vdp_sprite_hide_from(0);
-    vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
+    /* ★表示を page0 へ切り替えるのは results_impl が page0 を塗り潰した後(page0 にはこの面の開始カードが
+       残っている。先に切り替えると、パネルを読む間それが見えた。実機で報告) */
     data_read(ASSET_BANK, panel_off, g_card_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
     g_shipargs.mode = 5; g_shipargs.ops = (const u8 *)cur_sunk;
     bcall_to(GEN_PLANES_BANK);
@@ -562,19 +564,27 @@ static void results_and_fanfare(void) {
 /* ゲームオーバー画面＋コンティニュー選択(旧版準拠・カウントダウン無し)。戻り 1=CONTINUE / 0=TITLE。
    継続ON時のみ CONTINUE/TITLE のカーソルメニュー。CONTINUE=残機初期化＋同面再開(スコア保持)。 */
 
-/* 撃破演出(炎上スペクタクル): スクロール凍結・艦上へ爆発を降らせる＋轟音。尺が尽きたら結果へ。 */
+/* 撃破演出。★オーバレイが使える機械では撃沈シーン(ovl_sink.c: 誘爆→船尾から水没→静まる。見本は 1943)。
+   使えない機械では旧来の炎上(艦上へ爆発を降らせる＋轟音)を尺が尽きるまで。 */
 static u8 defeat_update(void) {
-    u8 iv;
+    u8 done;
     scroll_to(cam);                     /* 表示維持(cam凍結) */
-    vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 7) - 3));   /* 撃破の迫力: 縦±3px揺れ */
-    iv = (dtimer < 50) ? 1 : 3;         /* クライマックス(残り<50)で爆発を倍密に */
-    if ((dtimer & iv) == 0) ent_spawn_explosion((s16)(80 + (rnd() % 96)), (s16)(20 + (rnd() % 172)));  /* 艦の全幅に降らす */
-    if ((dtimer % 12) == 0) sfx(2, SFX_BOOM);
+    if (g_ovl_ok) {
+        ramx_use_ram();
+        done = sink_frame();            /* 揺れ/爆発/水没/スクロール/パレット。★炎の描き直しより先(沈んだ炎を表から外す) */
+        ramx_use_cart();
+    } else {
+        vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 7) - 3));   /* 撃破の迫力: 縦±3px揺れ */
+        if ((dtimer & 1) == 0) ent_spawn_explosion((s16)(80 + (rnd() % 96)), (s16)(20 + (rnd() % 172)));
+        if ((dtimer % 12) == 0) sfx(2, SFX_BOOM);
+        done = (--dtimer == 0);
+    }
+    hud_draw(g_score, g_lives);         /* ★撃沈中は画面が進む(R#23 が動く)ので HUD の位置も毎フレーム書き直す */
     ent_update_all();                   /* 爆発アニメを進める */
-    fire_draw();                        /* 全炎上サイト(27基＋撃破時に足した散布)を2コマ描画=艦を炎に包む */
+    fire_draw();                        /* 残っている炎上サイトを2コマ描画 */
     ent_draw_all();
-    if (dtimer) dtimer--;
-    if (dtimer == 0) {
+    if (done) {
+        g_rumble_lv = 0;
         results_and_fanfare();
         if (curstage + 1 < STAGE_TOTAL) {   /* 次の面へ(スコア/残機は持ち越し)。5面の次が最終面 */
             curstage++;
@@ -911,6 +921,8 @@ u8 stage_update(void) {
             u8 rr = rnd(); s16 fx = (s16)(72 + (rnd() & 127));
             burn_add(fx, (u16)((s16)cam + 12 + (rr & 63) + (rnd() & 127)), (u8)(rr >> 6 > 2 ? 2 : rr >> 6)); } }
         bgm_stop();
+        /* ★撃沈シーンのオーバレイへ入れ替える(page2 が cart のここで。次の面の準備で通常面のものへ戻る) */
+        if (g_ovl_ok) { overlay_load(OVL7_BANK); if (g_ovl_ok) { ramx_use_ram(); sink_init(); ramx_use_cart(); } }
         return SCENE_NONE;
     }
     return SCENE_NONE;

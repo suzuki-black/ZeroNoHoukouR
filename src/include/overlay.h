@@ -51,6 +51,10 @@
 #define OVL_SLOT_FINAL_INIT     16
 #define OVL_SLOT_FINAL_FRAME    17
 #define OVL_SLOT_FINAL_BGBUL    18
+/* 19〜 は撃沈シーンのオーバレイ(OVL7_BANK, ovlhead7.s)だけが持つ。撃破の瞬間に読み込む */
+#define OVL_SLOT_SINK_INIT      19
+#define OVL_SLOT_SINK_FRAME     20
+#define OVL7_BANK               28
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -73,5 +77,7 @@ void crush_wave_off(void);                 /* メガクラッシュ: 津波ス�
 s16  crush_wave_y(u8 step);                /* メガクラッシュ: その step の波頭 画面Y(等加速度) */
 u8   shock_build(u8 split_line);           /* 衝撃波: g_ras[] を組み立て分割数を返す(設計メモ §2-B) */
 void rot_zoom(u8 k);                       /* 宙返り: 焼いたコマ(bank19)をHMMMでパターン表へ＋2×2合成(k=0..15) */
+void sink_init(void);                      /* 撃沈シーン(OVL7): 状態を決め直す */
+u8   sink_frame(void);                     /* 撃沈シーン(OVL7): 1フレーム。戻り 1=終わった */
 
 #endif /* OVERLAY_H */
