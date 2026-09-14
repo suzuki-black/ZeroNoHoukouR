@@ -181,7 +181,10 @@ u8 ovl_sink_frame(void) {
     }
 
     /* ---- 静まる: 沈んだ所に泡がしばらく残る ---- */
-    if (calm < 12) foam((u16)(wl + (rnd() & 7)), 2);
+    if (calm < 8) foam((u16)(wl + (rnd() & 7)), 2);
+    /* ★泡は海の上に描いた点なので、消さないと結果画面へ移るまで船首のあった所にゴミとして残る(実機で報告)。
+       静まりの後半で、白波が残りうる範囲(水面〜白波の行＋泡の散る 8 行)を海に戻す */
+    else if (calm == 8) sea_rows(wl, (u8)(WAKE_ROWS + 8));
     if (++calm >= CALM_T) return 1;
     return 0;
 }

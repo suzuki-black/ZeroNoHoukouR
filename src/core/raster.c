@@ -143,7 +143,15 @@ void raster_arm(u8 n) {
 }
 
 void raster_off(void) {
-    if (s_armed) { set_e1(0); s_armed = 0; }
+    if (s_armed) {
+        set_e1(0); s_armed = 0;
+        /* ★分割はフレームの途中で止まるので、そのとき効いていた帯の設定(スプライト表 B・パターン表の組・MAG)が
+           そのまま残る。最終面ではボス帯(表 B＋MAG)の途中で止まると、結果画面やエンディングに
+           回転縮小したボスや表 B の残りが出た(実機で報告)。全画面の基準(表 A・パターン表 0x7800・MAG なし)へ戻す。 */
+        vdp_wreg(5, SPR_R5_A);
+        vdp_wreg(6, 0x0F);
+        vdp_wreg(1, (u8)(*(volatile u8 *)0xF3E0 & 0xFE));   /* RG1SAV から MAG を落とした値 */
+    }
     g_ras_n = 0;
     g_ras_i = 0;
 }
