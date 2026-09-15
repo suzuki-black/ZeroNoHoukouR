@@ -867,10 +867,7 @@ u8 stage_update(void) {
             }
         }
     }
-    { u8 b = (u8)(g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
-      /* ★雲(1〜5面): 自機より上を流れるので HUD(と宙返りの合成)の次、自機より前の slot に置く。海の区間だけ新しく出す */
-      if (g_ovl_ok && curstage != STAGE_FINAL) b = (u8)(b + cloud_frame(b, (u8)(phase == 0)));
-      g_spr_base = b; }
+    g_spr_base = (u8)(g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (curstage == STAGE_FINAL && g_ovl_ok) final_bgbul();   /* ★弾を背景へ(スプライトでは描かせない) */
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */

@@ -108,5 +108,3 @@ void final_bgbul(void) __naked { __asm jp 0xA036 __endasm; }
 /* ---- 撃沈シーンのオーバレイ(OVL7_BANK)だけが持つ入口 ---- */
 void sink_init(void) __naked   { __asm jp 0xA039 __endasm; }
 u8   sink_frame(void) __naked  { __asm jp 0xA03C __endasm; }
-/* ---- 通常面のオーバレイ(1〜5面の雲) ---- */
-u8   cloud_frame(u8 slot, u8 spawn) __naked { (void)slot; (void)spawn; __asm jp 0xA03F __endasm; }
