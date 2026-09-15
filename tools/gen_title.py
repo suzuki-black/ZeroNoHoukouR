@@ -1,123 +1,95 @@
 #!/usr/bin/env python3
-# gen_title.py — タイトルYJK画に「改」(毛筆)と「KAI」を合成する。
-#   入力: assets/title_base.yjk (改/KAI 合成前の原画=基底。冪等に再実行するため)
-#   既定はプレビューのみ(build/title_preview.png)。--encode 指定時だけ assets/title.yjk を再エンコード。
-#   → 反復中はPNGだけ更新(SC12/YJK変換のトークン浪費を避ける)。承認後に --encode。
-#   零の咆哮 の隣に大きく毛筆「改」、ローマ字 ZERO NO HOUKOU の隣に「KAI」を
-#   同フォント(Arial Bold, スモールキャップス)/同色(白青)/同サイズ/同ベースラインで揃えて配置。
-import glob, sys, os
-from PIL import Image, ImageFont, ImageDraw
+"""gen_title.py — タイトル画(PNG)を SCREEN12(YJK 自然画, 256x212)へ変換する。
+
+入力: assets/title_src.png(元画像を 4:3 に切り抜いて縮めたもの。元は Copilot で作ったタイトル画 1536x1024)
+出力: assets/title.yjk(54272B = 256x212, 1 画素 1 バイト)。"PRESS SPACE KEY" などの文字も絵に焼き込まれている。
+
+YJK は 4 画素ごとに色(J,K)を 1 組だけ持ち、明るさ Y(5bit)だけが画素ごと。
+  R = Y + J,  G = Y + K,  B = (5Y - 2J - K) / 4      (J,K は -32..31)
+4 画素ぶんの色を平均した J,K の周り ±2 を探し、各画素の Y を最適に選んで RGB の誤差が最小になる組を採る
+(平均だけだと、色の境目で滲みが強く出る)。
+
+使い方:
+  python3 tools/gen_title.py src <元画像.png>   # 切り抜き(4:3)＋縮小して assets/title_src.png を作る
+  python3 tools/gen_title.py preview           # build/title_preview.png(変換→復号した見た目を 2 倍で)
+  python3 tools/gen_title.py encode            # assets/title.yjk を書き出す(プレビューも更新)
+"""
+import os, sys
+from PIL import Image
 
 W, H = 256, 212
-HERE = os.path.dirname(__file__)
-BASE = os.path.join(HERE, '..', 'assets', 'title_base.yjk')
-DST  = os.path.join(HERE, '..', 'assets', 'title.yjk')
+HERE = os.path.dirname(os.path.abspath(__file__))
+SRC = os.path.join(HERE, '..', 'assets', 'title_src.png')
+DST = os.path.join(HERE, '..', 'assets', 'title.yjk')
 PREVIEW = os.path.join(HERE, '..', 'build', 'title_preview.png')
-KAI_FONT = '/System/Library/Fonts/Supplemental/Arial Bold.ttf'   # ZERO NO HOUKOU は Arial/Helvetica Bold 系
-CORE = (224, 236, 252)     # コア(白青)
-MIDC = (150, 186, 236)     # 下側の青み(縦グラデ近似)
-OUTL = (24, 40, 78)        # 暗青縁
-
-def weibei():
-    for p in glob.glob('/System/Library/AssetsV2/**/WeibeiSC-Bold.otf', recursive=True):
-        return p
-    sys.exit('WeibeiSC-Bold.otf not found')
+# 元画像 1536x1024(3:2)から 4:3 を切り抜く。★右と上を詰めると、右上の「Made with AI」が枠の外に出て、
+#   タイトル文字がちょうど中央に来る。
+CROP = (0, 40, 1290, 1008)
 
 def clamp(v, lo, hi): return lo if v < lo else hi if v > hi else v
+
+def dec(Y, J, K):
+    return (clamp(Y + J, 0, 31), clamp(Y + K, 0, 31), clamp((5 * Y - 2 * J - K) >> 2, 0, 31))
+
+def best_y(r, g, b, J, K):
+    # この画素に最も近い Y(0..31)。誤差は RGB の二乗和(緑を少し重く)
+    y0 = clamp(int(round((2 * r + g + 4 * b) / 8)), 0, 31)
+    best = None
+    for Y in range(max(0, y0 - 3), min(31, y0 + 3) + 1):
+        R, G, B = dec(Y, J, K)
+        e = 2 * (R - r) ** 2 + 3 * (G - g) ** 2 + (B - b) ** 2
+        if best is None or e < best[0]: best = (e, Y)
+    return best
+
+def encode_group(px4):
+    p = [(r / 255 * 31, g / 255 * 31, b / 255 * 31) for (r, g, b) in px4]
+    js = ks = 0.0
+    for (r, g, b) in p:
+        y = (2 * r + g + 4 * b) / 8
+        js += r - y; ks += g - y
+    J0 = clamp(int(round(js / 4)), -32, 31); K0 = clamp(int(round(ks / 4)), -32, 31)
+    best = None
+    for J in range(max(-32, J0 - 2), min(31, J0 + 2) + 1):
+        for K in range(max(-32, K0 - 2), min(31, K0 + 2) + 1):
+            tot = 0; ys = []
+            for (r, g, b) in p:
+                e, Y = best_y(r, g, b, J, K); tot += e; ys.append(Y)
+            if best is None or tot < best[0]: best = (tot, J, K, ys)
+    _, J, K, Ys = best
+    return bytes([(Ys[0] << 3) | (K & 7), (Ys[1] << 3) | ((K >> 3) & 7),
+                  (Ys[2] << 3) | (J & 7), (Ys[3] << 3) | ((J >> 3) & 7)])
 
 def decode(d):
     im = Image.new('RGB', (W, H)); px = im.load()
     for y in range(H):
         for gx in range(64):
-            b = d[y*256+gx*4: y*256+gx*4+4]
-            K = (b[0]&7)|((b[1]&7)<<3); J = (b[2]&7)|((b[3]&7)<<3)
-            if K>=32: K-=64
-            if J>=32: J-=64
+            b = d[y * 256 + gx * 4: y * 256 + gx * 4 + 4]
+            K = (b[0] & 7) | ((b[1] & 7) << 3); J = (b[2] & 7) | ((b[3] & 7) << 3)
+            if K >= 32: K -= 64
+            if J >= 32: J -= 64
             for i in range(4):
-                Y = b[i]>>3
-                px[gx*4+i, y] = (clamp(Y+J,0,31)*8, clamp(Y+K,0,31)*8, clamp((5*Y-2*J-K)>>2,0,31)*8)
+                R, G, B = dec(b[i] >> 3, J, K)
+                px[gx * 4 + i, y] = (R * 255 // 31, G * 255 // 31, B * 255 // 31)
     return im
 
-def encode_group(rgb4):
-    Ys=[]; Js=[]; Ks=[]
-    for (R,G,B) in rgb4:
-        R>>=3; G>>=3; B>>=3
-        Y = clamp((4*B + 2*R + G)//8, 0, 31)
-        Ys.append(Y); Js.append(R-Y); Ks.append(G-Y)
-    J = clamp(round(sum(Js)/4), -32, 31); K = clamp(round(sum(Ks)/4), -32, 31)
-    return bytes([(Ys[0]<<3)|(K&7), (Ys[1]<<3)|((K>>3)&7),
-                  (Ys[2]<<3)|(J&7), (Ys[3]<<3)|((J>>3)&7)])
-
-def outlined(d, xy, text, font, fill, outline, ow=1):
-    x, y = xy
-    for dx in range(-ow, ow+1):
-        for dy in range(-ow, ow+1):
-            if dx or dy: d.text((x+dx, y+dy), text, font=font, fill=outline)
-    d.text((x, y), text, font=font, fill=fill)
-
-def draw_grad_glyph(canvas, x, top, baseline, ch, font):
-    """1文字を 白青の縦グラデ＋暗青縁 で描く(ZERO NO HOUKOU の質感に合わせる)。"""
-    asc, _ = font.getmetrics()
-    ty = baseline - asc
-    d = ImageDraw.Draw(canvas)
-    # 暗青縁(8方向)
-    for dx in (-1,0,1):
-        for dy in (-1,0,1):
-            if dx or dy: d.text((x+dx, ty+dy), ch, font=font, fill=OUTL)
-    # 本体を白で一旦描き、その画素だけ縦グラデ(上=CORE/下=MIDC)に置換
-    mask = Image.new('L', canvas.size, 0)
-    ImageDraw.Draw(mask).text((x, ty), ch, font=font, fill=255)
-    bb = mask.getbbox()
-    if bb:
-        y0, y1 = bb[1], bb[3]
-        grad = Image.new('RGB', canvas.size)
-        gp = grad.load()
-        for yy in range(y0, y1):
-            t = (yy - y0) / max(1, (y1 - y0 - 1))
-            c = tuple(round(CORE[k]*(1-t) + MIDC[k]*t) for k in range(3))
-            for xx in range(bb[0], bb[2]): gp[xx, yy] = c
-        canvas.paste(grad, (0,0), mask)
-
-PLATE = (8, 16, 48)   # HOUKOU が乗る暗紺の帯
-
-def _kai_w(text, big_px, small_px):
-    dd = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-    return sum(dd.textlength(c, font=ImageFont.truetype(KAI_FONT, big_px if i==0 else small_px)) + 1.0
-               for i, c in enumerate(text))
-
-def smallcaps(canvas, x, baseline, text, big_px, small_px):
-    w = _kai_w(text, big_px, small_px)
-    # 暗紺の帯(角丸)= HOUKOU と同じ「帯に乗った文字」に
-    ImageDraw.Draw(canvas).rounded_rectangle(
-        [x-3, baseline-big_px, x+w+1, baseline+2], radius=2, fill=PLATE)
-    cx = float(x)
-    for i, ch in enumerate(text):
-        f = ImageFont.truetype(KAI_FONT, big_px if i == 0 else small_px)
-        draw_grad_glyph(canvas, round(cx), baseline - (big_px if i==0 else small_px), baseline, ch, f)
-        cx += ImageDraw.Draw(canvas).textlength(ch, font=f) + 1.0
-    return cx
-
 def main():
-    encode = '--encode' in sys.argv
-    d = bytearray(open(BASE, 'rb').read())
-    orig = decode(d); new = orig.copy()
-    # 「改」= 毛筆(魏碑)。零の咆哮 の隣、白＋暗赤縁(1943改風)。承認済=このまま。
-    outlined(ImageDraw.Draw(new), (200, 34), '改', ImageFont.truetype(weibei(), 58),
-             (255,255,255), (120,0,0), ow=3)
-    # 「KAI」= ZERO NO HOUKOU に揃える(Arial Bold スモールキャップス/白青/同サイズ/同ベースライン)。
-    smallcaps(new, 147, 88, 'KAI', big_px=6, small_px=6)
-    new.resize((W*2, H*2), Image.NEAREST).save(PREVIEW)
+    mode = sys.argv[1] if len(sys.argv) > 1 else 'preview'
+    if mode == 'src':
+        im = Image.open(sys.argv[2]).convert('RGB').crop(CROP)
+        im.resize((640, 480), Image.LANCZOS).save(SRC)
+        print('src:', SRC); return
+    src = Image.open(SRC).convert('RGB').resize((W, H), Image.LANCZOS)
+    sp = src.load()
+    out = bytearray()
+    for y in range(H):
+        for gx in range(64):
+            out += encode_group([sp[gx * 4 + i, y] for i in range(4)])
+    os.makedirs(os.path.dirname(PREVIEW), exist_ok=True)
+    decode(out).resize((W * 2, H * 2), Image.NEAREST).save(PREVIEW)
     print('preview:', PREVIEW)
-    if encode:
-        op = orig.load(); npx = new.load(); changed = 0
-        for y in range(H):
-            for gx in range(64):
-                x0 = gx*4
-                if any(npx[x0+i, y] != op[x0+i, y] for i in range(4)):
-                    d[y*256+gx*4: y*256+gx*4+4] = encode_group([npx[x0+i, y] for i in range(4)])
-                    changed += 1
-        open(DST, 'wb').write(d)
-        print(f'title.yjk updated: {changed} groups re-encoded')
+    if mode == 'encode':
+        open(DST, 'wb').write(out)
+        print('title.yjk:', len(out), 'B')
 
 if __name__ == '__main__':
     main()
