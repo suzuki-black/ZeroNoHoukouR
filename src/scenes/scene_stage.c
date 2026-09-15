@@ -111,7 +111,7 @@ static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
         g_lturret++;   /* ★生存砲台O(1)カウンタ(stage_buildで0初期化済み。当たり判定の撃破で--) */
         e->ax = (s16)shipX - 8;                /* 砲塔中心x→スプライト左上(中心x=shipX) */
         e->ay = (s16)(SC_SHIP_R0 * 16 + shipY) - 8;   /* 砲身スプライト(旋回中心=8,8)をドーム中心に合わせる */
-        e->hp = 10; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;  /* 耐久5(旧版)。★威力を半分単位で数えるので 2 倍の 10 */
+        e->hp = 30; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;  /* 旧版の耐久5を半分単位で10、★パワーアップで簡単になったので3倍の30 */
         e->vx = 4; e->vy = 0; e->h = 0;        /* 砲身の向き=下 / 旋回冷却 / 命中フラッシュ残 */
         e->pat = (u8)(SPR_BARREL0 + 4 * 4);    /* 可動砲身(下向き, BGドームに重なる) */
         e->coltab = barrel_col;                /* 金属シェード(行別カラー) */
@@ -212,7 +212,7 @@ static void apply_weave(void) {
 /* ★AA状態は hot.c(RAM実行の aa_update/aa_collide)と共有するため非static化(aa_hot.h で公開)。
    実体は常駐DATA(このTU)に置き、hot.c は extern 参照する(RAM実行モジュールにDATAを持たせない規律)。 */
 u8 aa_fire[SHIP_NAAG];
-u8 aa_hp[SHIP_NAAG];     /* 対空砲の耐久(大型=前14基:2 / 小型=後9基:1)。0で aa_dead */
+u8 aa_hp[SHIP_NAAG];     /* 対空砲の耐久(半分単位。大型=前14基:12 / 小型=後9基:6)。0で aa_dead */
 u8 aa_dead[SHIP_NAAG];   /* 1=破壊(発砲停止・炎上) */
 /* ★可視AAリスト: aa_update が23基を1回走査する際、当たり範囲(-8..216)内の生存AAだけを
    sx/sy付きで記録。aa_collide は23基再走査・sx/sy再計算をせず、このリストだけを回す
@@ -228,7 +228,7 @@ static void aa_reset(void) {
     for (i = 0; i < SHIP_NAAG; i++) {
         u16 t = (u16)60 + (u16)i * 11;   /* ★u16で計算し255クランプ。u8のままだと高iで桁溢れ(例 i=20→320&FF=64)し初期CDが乱れる */
         aa_fire[i] = (t > 255) ? 255 : (u8)t;
-        aa_hp[i]   = (i < 14) ? 4 : 2;   /* 旧版準拠: 大型HP2 / 極小HP1。★威力を半分単位で数えるので 2 倍 */
+        aa_hp[i]   = (i < 14) ? 12 : 6;  /* 旧版の大型HP2/極小HP1を半分単位で4/2、★パワーアップで簡単になったので3倍 */
         aa_dead[i] = 0;
     }
 }
