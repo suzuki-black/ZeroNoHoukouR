@@ -245,6 +245,7 @@ static const Behavior behaviors[ET_COUNT] = {
     bh_combo,     /* ET_COMBO(双子艦の合体弾予告) */
     bh_spark,     /* ET_SPARK(火花) */
     bh_parked,    /* ET_PARKED(空母甲板の停泊機。艦上静止) */
+    bh_parked,    /* ET_ITEM(増槽。海の世界アンカーで流れる＝停泊機と同じ動き) */
 };
 
 
@@ -292,10 +293,10 @@ void hot_aa_update(void) {
 /* 自機弾 × 対空砲(RAM実行)。★挙動は scene_stage.c の旧 aa_collide と完全同一。移設のみ。 */
 void hot_aa_collide(void) {
     u8 v, k, nb = 0;
-    Entity *bul[8];                     /* 画面内の自機弾を一度だけ収集(AA毎の全プール再走査=乗算を排す) */
+    Entity *bul[10];                    /* 画面内の自機弾を一度だけ収集(AA毎の全プール再走査=乗算を排す)。★パワーアップで最大9発 */
     Entity *e = ent_pool();
     for (k = 0; k < ENT_MAX; k++, e++)
-        if (e->active && e->type == ET_BULLET && e->team == TEAM_PLAYER && nb < 8) bul[nb++] = e;
+        if (e->active && e->type == ET_BULLET && e->team == TEAM_PLAYER && nb < 10) bul[nb++] = e;
     if (!nb || !aa_nvis) return;        /* 自機弾/可視AAが無ければ即終了 */
     {
     const u8 *aax; const u16 *aay;
@@ -310,8 +311,10 @@ void hot_aa_collide(void) {
             { s16 dx = (s16)(b->x + 8) - sx, dy = (s16)(b->y + 8) - sy;
               if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
               if (dx < 10 && dy < 10) {
-                  b->active = 0;
-                  if (aa_hp[i]) aa_hp[i]--;
+                  if (b->ftimer == i + 1) continue;        /* ★貫通弾は同じ対空砲に1回だけ当たる(ftimer は自機弾では未使用) */
+                  b->ftimer = i + 1;
+                  if (g_pwr < PWR_MAX) b->active = 0;      /* 3段目は貫通 */
+                  if (aa_hp[i] > g_pdmg) aa_hp[i] -= g_pdmg; else aa_hp[i] = 0;   /* 威力は半分単位 */
                   if (aa_hp[i] == 0) {
                       u16 pts = (i < 14) ? 30 : 20;
                       aa_dead[i] = 1; g_score += pts;

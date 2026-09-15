@@ -98,6 +98,9 @@ static void scorepop_reset(void) { u8 i; for (i = 0; i < SPOP_MAX; i++) spop_t[i
 /* 敵弾/敵機が自機に当たったときの共通処理。
    ★CPU弾幕(ovl_curtain.c)からも呼ぶので独立関数にした。無敵中(被弾直後/設定)は無傷で抜ける。
      弾を消すのは呼び出し側の責任(弾の実体が系統ごとに違うため)。 */
+u8  g_drop;            /* 1=銀の敵機(増槽持ち)が落ちた。オーバレイ(ovl_power.c)が増槽を出して 0 に戻す */
+s16 g_drop_x, g_drop_y;
+
 void ent_player_hit(s16 px, s16 py) {
     if (g_pinv != 0 || g_invinc) return;       /* 被弾直後の無敵中/設定無敵 は無傷 */
     /* ★宙返り中は当たらない。ただし「無敵」ではなく「一瞬だけ面から外れて弾が下を抜ける」
@@ -156,15 +159,20 @@ void ent_resolve_collisions(void) {
             dy = t->y - by; if (dy < 0) dy = -dy; if (dy >= 14) continue;   /* Y(=overlap成立) */
             tt = t->type;
             if (tt == ET_FIGHTER || tt == ET_PURSUER || tt == ET_PARKED) {
-                b->active = 0; t->active = 0; g_kills++;
+                if (g_pwr < PWR_MAX) b->active = 0;   /* ★3段目は貫通(弾を消さない) */
+                t->active = 0; g_kills++;
+                if (t->hp == 2) { g_drop_x = t->x; g_drop_y = t->y; g_drop = 1; }   /* ★銀の敵機を落とした→増槽(出すのはオーバレイ) */
                 { u16 pts = (tt == ET_PURSUER) ? 20 : 10; g_score += pts;   /* 追尾機20 / 戦闘機・停泊機10 */
                   scorepop_add(t->x, t->y, pts); }                          /* ★破壊点数ポップアップ */
                 ent_spawn_explosion(t->x, t->y);   /* 停泊機も自機弾で破壊(体当り判定は持たない) */
                 break;
             }
             if (tt == ET_TURRET && t->hp) {
-                b->active = 0;
-                if (--t->hp == 0) { t->hidden = 1; g_gun_kills++; g_lturret--; g_score += 60; ent_spawn_explosion(t->x, t->y);
+                if (b->ax == (s16)(u16)t) continue;   /* ★貫通弾は同じ砲台に1回だけ当たる */
+                b->ax = (s16)(u16)t;
+                if (g_pwr < PWR_MAX) b->active = 0;
+                t->hp = (t->hp > b->hp) ? (u8)(t->hp - b->hp) : 0;   /* 威力は半分単位(gamestate.h) */
+                if (t->hp == 0) { t->hidden = 1; g_gun_kills++; g_lturret--; g_score += 60; ent_spawn_explosion(t->x, t->y);
                                     scorepop_add(t->x, t->y, 60);  /* ★破壊点数ポップアップ */
                                     sfx(2, SFX_BOOM);              /* ★主砲撃破の爆発音 */
                                     g_hitstop = 4; g_shake = 8;

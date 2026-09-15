@@ -71,6 +71,9 @@ static const u8 fighter_iv[STAGE_COUNT]   = { 40, 28, 40, 40, 28 };/* 出現間�
 /* 敵機の行別カラー(陰影16B)は面別にデータバンク(fighter_ctab_off)へ置き、stage_build で当該面の
    16BをRAMへ読む(常駐節約)。海イントロ機／艦載機の coltab に使う。 */
 static u8 cur_ctab[16];
+/* 銀の敵機(増槽持ち)の行ごとの色: 上=明るい銀 / 中ほど=赤帯 / 下=銀。どの面の敵機・敵弾(橙)とも見分けられる */
+static const u8 pw_ctab[16] = { 15,15,15,15, 15,15,11,11, 11,14,14,14, 14,14,14,14 };
+static u8 pw_done;
 
 static u16 rng;
 u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }   /* ★非static: hot.c(RAM実行のaa_update)から参照 */
@@ -108,7 +111,7 @@ static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
         g_lturret++;   /* ★生存砲台O(1)カウンタ(stage_buildで0初期化済み。当たり判定の撃破で--) */
         e->ax = (s16)shipX - 8;                /* 砲塔中心x→スプライト左上(中心x=shipX) */
         e->ay = (s16)(SC_SHIP_R0 * 16 + shipY) - 8;   /* 砲身スプライト(旋回中心=8,8)をドーム中心に合わせる */
-        e->hp = 5; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;   /* 耐久5(旧版) */
+        e->hp = 10; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;  /* 耐久5(旧版)。★威力を半分単位で数えるので 2 倍の 10 */
         e->vx = 4; e->vy = 0; e->h = 0;        /* 砲身の向き=下 / 旋回冷却 / 命中フラッシュ残 */
         e->pat = (u8)(SPR_BARREL0 + 4 * 4);    /* 可動砲身(下向き, BGドームに重なる) */
         e->coltab = barrel_col;                /* 金属シェード(行別カラー) */
@@ -225,7 +228,7 @@ static void aa_reset(void) {
     for (i = 0; i < SHIP_NAAG; i++) {
         u16 t = (u16)60 + (u16)i * 11;   /* ★u16で計算し255クランプ。u8のままだと高iで桁溢れ(例 i=20→320&FF=64)し初期CDが乱れる */
         aa_fire[i] = (t > 255) ? 255 : (u8)t;
-        aa_hp[i]   = (i < 14) ? 2 : 1;   /* 旧版準拠: 大型HP2 / 極小HP1 */
+        aa_hp[i]   = (i < 14) ? 4 : 2;   /* 旧版準拠: 大型HP2 / 極小HP1。★威力を半分単位で数えるので 2 倍 */
         aa_dead[i] = 0;
     }
 }
@@ -416,6 +419,8 @@ static void stage_build(void) {
     /* ★メガクラッシュ残数は1回の挑戦ごとに補充。演出の実体(雷光パレット/稲妻描画/敵弾消去)は
        すべて RAM オーバレイ側なので、載らない機械では残数0＝表示も出さない(空撃ちでストックだけ
        減る、という壊れ方を避ける)。**overlay_load の後**で判定すること。 */
+    if (curstage == STAGE_FINAL) g_pwr = 0;   /* ★最終面は初期装備に戻す(ボム無し・宙返りだけで倒すコンセプト) */
+    pw_done = 0;                              /* 銀の敵機(増槽持ち)は海モード1回につき1機 */
     g_crush = (g_ovl_ok && curstage != STAGE_FINAL) ? CRUSH_MAX : 0;   /* ★最終面は津波(全画面MAG)がボス帯と両立しないので無し */
     g_crush_t = 0;
     g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
@@ -526,6 +531,7 @@ static void results_and_fanfare(void);   /* 前方宣言(ビューアの結果�
 
 void stage_init(void) {
     g_score = 0;
+    g_pwr = 0;             /* ★新しいゲームは通常の弾から */
     g_kills = 0; g_playerhit = 0;
     g_lives = lives_init();
     curstage = (g_stage_sel < STAGE_TOTAL) ? g_stage_sel : 0;
@@ -753,6 +759,12 @@ u8 stage_update(void) {
                 f->coltab = cur_ctab;   /* 行別色=陰影 */
                 f->shadow = 1;                        /* 海面へ落ち影(旧版に無い新規) */
                 if (rnd() & 1) { f->fire = fd_faim; f->ftimer = 20 + (rnd() % 30); }
+                /* ★パワーアップ: 海モードに1機だけ、銀＋赤帯の敵機(撃ち落とすと増槽を落とす)。
+                   印は hp=2(戦闘機は1発で落ちるので hp は判定に使っていない)。狙いやすいようにまっすぐゆっくり降りてきて、撃ってこない */
+                if (!pw_done && cam < SC_CAM_START - 16) {
+                    pw_done = 1;
+                    f->hp = 2; f->coltab = pw_ctab; f->ax = 2; f->vx = 0; f->vy = 2; f->fire = (const u8 *)0;
+                }
             }
             sfx(1, SFX_HIT);
         }
@@ -844,6 +856,7 @@ u8 stage_update(void) {
       }
       if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
       if (g_ovl_ok && DBG_ON(8)) curtain_collide();   /* ★CPU弾幕の被弾(常駐 ent_player_hit に集約) */
+      if (g_ovl_ok && curstage != STAGE_FINAL) power_frame();   /* ★増槽: 銀の敵機が落ちたら出す/自機が触れたら取る */
       if (sea_on) { while (sea_step()) { } vdp_cmd_wait(); }   /* ★aa_collide(burn=VDPコマンド)前に海完全完了 */
       if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_collide());
     }
@@ -886,6 +899,7 @@ u8 stage_update(void) {
        尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */
     if (g_miss) {
         g_miss = 0;
+        g_pwr = 0;                      /* ★ミスしたらパワーアップは通常に戻る */
         /* ★被弾フラッシュの途中で撃墜されるとホット区間を抜けたままになり、沈没演出のあいだ
            ずっと画面が赤く染まったままになる(パレットエンジンはホット区間でしか回らないため)。
            基準色へ戻してから演出へ入る。pal_need_reset で、再開時に全16色を書き直させる。 */

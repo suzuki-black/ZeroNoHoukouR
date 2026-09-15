@@ -108,3 +108,5 @@ void final_bgbul(void) __naked { __asm jp 0xA036 __endasm; }
 /* ---- 撃沈シーンのオーバレイ(OVL7_BANK)だけが持つ入口 ---- */
 void sink_init(void) __naked   { __asm jp 0xA039 __endasm; }
 u8   sink_frame(void) __naked  { __asm jp 0xA03C __endasm; }
+/* ---- 通常面のオーバレイ(増槽) ---- */
+void power_frame(void) __naked { __asm jp 0xA03F __endasm; }

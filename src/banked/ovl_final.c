@@ -94,7 +94,7 @@ static Entity *wp[6];   /* 弱点(エンジン4＋銃座2)。当たり判定は�
 /* 弱点の位置(通常コマ M72=表示 144x96 の中心から) */
 static const s8 wp_dx[6] = { -22, -10, 11, 23, 0, 0 };
 static const s8 wp_dy[6] = {  20,  20, 20, 20, -9, 24 };
-static const u8 wp_hp[6] = {   8,   8,  8,  8, 12, 12 };   /* 実機で詰める(自機弾は1発=1) */
+static const u8 wp_hp[6] = {  16,  16, 16, 16, 24, 24 };   /* 実機で詰める。★威力を半分単位で数える(自機弾は1発=2、最終面は通常の弾) */
 static const u8 fd_engine[] = { 64, 0, FIRE_AIMED, 2, 1, 3, FIRE_END };
 static const u8 fd_turret[] = { 44, 0, FIRE_AIMFAN, 3, 1, 3, FIRE_END };
 

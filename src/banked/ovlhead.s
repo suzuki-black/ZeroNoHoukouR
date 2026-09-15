@@ -19,6 +19,7 @@
         .globl  _ovl_crush_wave_y
         .globl  _ovl_shock_build
         .globl  _ovl_rot_zoom
+        .globl  _ovl_power_frame
         .area   _CODE
         jp      _ovl_curtain_update   ; slot0 (OVL_SLOT_CURTAIN_UPDATE)
         jp      _ovl_curtain_ring     ; slot1 (OVL_SLOT_CURTAIN_RING)
@@ -36,3 +37,17 @@
         jp      _ovl_crush_wave_y     ; slot13 (OVL_SLOT_WAVE_Y)
         jp      _ovl_shock_build      ; slot14 (OVL_SLOT_SHOCK_BUILD)
         jp      _ovl_rot_zoom         ; slot15 (OVL_SLOT_ROT_ZOOM)
+        jp      stub_ret              ; slot16 final_init(最終面のオーバレイだけ)
+        jp      stub_zero             ; slot17 final_frame
+        jp      stub_ret              ; slot18 final_bgbul
+        jp      stub_ret              ; slot19 sink_init(撃沈のオーバレイだけ)
+        jp      stub_zero             ; slot20 sink_frame
+        jp      _ovl_power_frame      ; slot21 (OVL_SLOT_POWER_FRAME)
+stub_zero:
+        xor     a
+        ld      d, a
+        ld      e, a
+        ld      l, a
+        ld      h, a
+stub_ret:
+        ret

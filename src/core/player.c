@@ -9,6 +9,18 @@
 #define SCR_H 212
 #define PSPEED   3   /* 移動px/frame       */
 #define PCOOLDN  6   /* 連射クールダウン    */
+#define PCOOLDN_PW 10 /* パワーアップ中の連射クールダウン(3発ずつなので間隔を延ばす) */
+/* パワーアップの3発: 縦/左上/右上 */
+static const s8 pw_dx[3]  = { 0, -6, 6 };
+static const s8 pw_vx[3]  = { 0, -3, 3 };
+static const s8 pw_vy[3]  = { -6, -5, -5 };
+static const u8 pw_pat[3] = { SPR_PWV, SPR_PWL, SPR_PWR };
+static const u8 pw_dmg[PWR_MAX + 1] = { 2, 4, 5, 6 };   /* 半分単位の威力(通常/2倍/2.5倍/3倍) */
+/* 弾の行ごとの色(弾は 4〜11 行)。1段目=赤で先端だけ白 / 2段目=白で根元だけ赤 / 3段目=全部白(白熱) */
+static const u8 pw_col1[16] = { 15,15,15,15, 15,15,11,11, 11,11,11,11, 11,11,11,11 };
+static const u8 pw_col2[16] = { 15,15,15,15, 15,15,15,15, 15,15,11,11, 11,11,11,11 };
+static const u8 pw_col3[16] = { 15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15 };
+static const u8 * const pw_col[PWR_MAX + 1] = { (const u8 *)0, pw_col1, pw_col2, pw_col3 };
 
 u8 g_player_x, g_player_y;
 u8 g_py_min;   /* ★自機が上がれる限界(画面Y)。最終面は壁の内側まで。通常面は0 */
@@ -29,14 +41,20 @@ void bh_player(Entity *e) {
        ★宙返り中は撃てない(「無敵で撃ち放題」にしないための代償。ROADMAP P2 項目9)。 */
     if (e->ftimer) e->ftimer--;
     if ((in & INP_TRIG) && e->ftimer == 0 && !g_loop_t) {
-        Entity *b = ent_spawn(ET_BULLET);
-        if (b) {
-            b->x = e->x; b->y = e->y - 10;
-            b->vx = 0; b->vy = -6;
-            b->team = TEAM_PLAYER;
-            b->pat = SPR_PBULLET; b->color = 11;   /* 赤い縦ストリーク(旧pat44) */
+        /* ★パワーアップ中は太い弾を縦・左上・右上へ1発ずつ。発射間隔を 6→10 に延ばして画面上の自機弾を約9枚に抑える
+           (1走査線に乗るのは同じ回の3発だけ)。威力は段階ごと(半分単位、gamestate.h)、色は行ごとに段階で変える。 */
+        u8 k, n = g_pwr ? 3 : 1;
+        g_pdmg = pw_dmg[g_pwr];
+        for (k = 0; k < n; k++) {
+            Entity *b = ent_spawn(ET_BULLET);
+            if (!b) break;
+            b->x = (s16)(e->x + pw_dx[k]); b->y = e->y - 10;
+            b->vx = pw_vx[k]; b->vy = pw_vy[k];
+            b->team = TEAM_PLAYER; b->hp = g_pdmg;
+            b->pat = g_pwr ? pw_pat[k] : SPR_PBULLET; b->color = 11;   /* 通常=赤い縦ストリーク(旧pat44) */
+            b->coltab = pw_col[g_pwr];                                  /* 通常は NULL(単色) */
         }
-        e->ftimer = PCOOLDN;
+        e->ftimer = g_pwr ? PCOOLDN_PW : PCOOLDN;
         sfx(0, SFX_SHOT);
     }
 
