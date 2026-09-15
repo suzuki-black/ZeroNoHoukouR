@@ -12,6 +12,9 @@
 #include "scroll.h"     /* g_cam */
 
 /* 増槽の行ごとの色: 上端=明るい銀 / 胴=銀 / 赤帯 / 尾翼=暗い灰 */
+/* 最高段階で取ったときの点数(主砲1基=60、対空砲=20〜30、戦闘機=10 と比べて大きく) */
+#define PWR_BONUS 1000u
+
 static const u8 tank_col[16] = { 14,15,15,14, 14,11,11,14, 14,14,14,14, 14,4,4,4 };
 
 void ovl_power_frame(void) {
@@ -37,7 +40,11 @@ void ovl_power_frame(void) {
         if (dx < 12 && dy < 12) {
             e->active = 0;
             if (g_pwr < PWR_MAX) g_pwr++;
-            else { g_score += 100; scorepop_add(e->x, e->y, 100); }   /* 最高段階ならボーナス */
+            else {                                                      /* ★最高段階でさらに取ったら高得点 */
+                g_score = (g_score > 65535u - PWR_BONUS) ? 65535u : (u16)(g_score + PWR_BONUS);
+                scorepop_add(e->x, e->y, PWR_BONUS);
+                sfx(2, SFX_BOOM);
+            }
             sfx(1, SFX_HIT);
         }
     }
