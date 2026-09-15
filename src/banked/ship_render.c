@@ -12,6 +12,7 @@
 #include "input.h"   /* input_poll/g_input_edge/INP_* */
 #include "gamestate.h" /* g_score/g_hiscore/g_continue */
 #include "sprites.h"  /* SPR_* / vdp_sprite_pattern(mode4=パターン投入を移設) */
+#include "cloud_pat.h" /* 自動生成(tools/gen_cloud.py): 雲の4枚 */
 
 __sfr __at(0x98) SH_DAT;     /* VRAM データ */
 __sfr __at(0x99) SH_CTRL;    /* VDP アドレス/レジスタ */
@@ -491,7 +492,11 @@ static void load_sprites_impl(void) {
     vdp_sprite_pattern(SPR_BLOCK,   pat_block);
     vdp_sprite_pattern(SPR_BULLET,  pat_bullet);
     vdp_sprite_pattern(SPR_TURRET,  pat_turret);
-    vdp_sprite_pattern(SPR_HELLCAT,  pat_hellcat);   /* ★停泊機(空母)は今まで通り手描きF6F。空戦戦闘機は8方向生成へ移行 */
+    vdp_sprite_pattern(SPR_HELLCAT,  pat_hellcat);
+    vdp_sprite_pattern(SPR_CLOUD0,   pat_cloud0);
+    vdp_sprite_pattern(SPR_CLOUD1,   pat_cloud1);
+    vdp_sprite_pattern(SPR_CLOUD2,   pat_cloud2);
+    vdp_sprite_pattern(SPR_CLOUD3,   pat_cloud3);   /* ★停泊機(空母)は今まで通り手描きF6F。空戦戦闘機は8方向生成へ移行 */
     vdp_sprite_pattern(SPR_ZERO,     pat_zero_a);
     vdp_sprite_pattern(SPR_ZERO2,    pat_zero_b);
     vdp_sprite_pattern(SPR_PBULLET,  pat_pbullet);

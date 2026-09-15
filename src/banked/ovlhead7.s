@@ -28,6 +28,7 @@
         jp      stub_ret             ; slot18 final_bgbul
         jp      _ovl_sink_init       ; slot19 (OVL_SLOT_SINK_INIT)
         jp      _ovl_sink_frame      ; slot20 (OVL_SLOT_SINK_FRAME)
+        jp      stub_zero            ; slot21 cloud_frame(雲は出さない＝0枚)
 stub_zero:
         xor     a
         ld      d, a

@@ -52,7 +52,7 @@ GAMEVER := $(shell cat VERSION 2>/dev/null || echo 0.0.0)
 #    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
 #    「新旧で構造体レイアウトが食い違うオブジェクトが混在→メモリ破損」という
 #    stale-object バグを踏む(実際に踏んだ)。小規模なので全再コンパイルで十分。
-HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)/boss_frames.h $(BUILD)/stage_grade.h
+HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)/boss_frames.h $(BUILD)/stage_grade.h $(BUILD)/cloud_pat.h
 
 # ★ops.rel(run_ops)は現在どこからも呼ばれていない(艦OPSの解釈は bank16 の ship_render 内に独自実装が
 #   ある)。常駐24KBを197B無駄に食っていたのでリンクから外した。使うときはここへ戻すこと。
@@ -251,14 +251,15 @@ $(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs $(SRC)/include/hotcode.h
 # page2 を RAM 化している間だけ見える seg5 上位8KB(=0xA000-0xBFFF)へ載せる。0xA000 リンク。
 # data-loc はバンクシーン(0xE000)と衝突しない高位フリー帯へ。rompack が bank OVL_BANK へ格納し、
 # シーン初期化で overlay_load() が seg5 上位へ複製する。
-OVL_SRCS = $(SRC)/banked/ovl_curtain.c $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_crush.c $(SRC)/banked/ovl_shock.c $(SRC)/banked/ovl_rot.c
-OVL_RELS = $(BUILD)/ovl_curtain.rel $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel
+OVL_SRCS = $(SRC)/banked/ovl_curtain.c $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_crush.c $(SRC)/banked/ovl_shock.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_cloud.c
+OVL_RELS = $(BUILD)/ovl_curtain.rel $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_cloud.rel
 $(BUILD)/ovl.ihx: $(OVL_SRCS) $(HDRS) $(BUILD)/ovlhead.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_curtain.c -o $(BUILD)/ovl_curtain.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl_palette.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_crush.c -o $(BUILD)/ovl_crush.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_shock.c -o $(BUILD)/ovl_shock.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl_rot.rel
+	sdcc -m$(TARGET) -c $(OPT) --opt-code-size $(DEFS) $(INC) $(SRC)/banked/ovl_cloud.c -o $(BUILD)/ovl_cloud.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead.rel $(OVL_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
@@ -272,6 +273,9 @@ $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
 # ── 最終面(巨大機 XB-19) ──
 # コマは tools/gen_boss.py が三面図のシルエット(assets/xb19_mask.png)から生成する(約30秒)。
 # 面ごとの時間帯・天候のパレット(パレットエンジンが持つ表)
+# 1〜5面の雲のスプライト(32x32 の網目)
+$(BUILD)/cloud_pat.h: tools/gen_cloud.py | $(BUILD)
+	python3 tools/gen_cloud.py h $@
 $(BUILD)/stage_grade.h: tools/gen_grade.py | $(BUILD)
 	python3 tools/gen_grade.py h $@
 $(BUILD)/boss_frames.h: tools/gen_boss.py assets/xb19_mask.png | $(BUILD)
