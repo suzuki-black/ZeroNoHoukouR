@@ -31,7 +31,7 @@ static u8 t;
 
 /* sin 1周期を 16 段で(±64 を 1/64 で正規化)。帯ごとの横位置＝amp * sin16[i] / 64 */
 static const s8 sin16[16] = { 0, 24, 45, 59, 64, 59, 45, 24, 0, -24, -45, -59, -64, -59, -45, -24 };
-static const char *const mode_name[5] = { "COARSE+FINE", "FINE ONLY  ", "COARSE ONLY", "NO SPLIT   ", "FROZEN WAVE" };
+static const char *const mode_name[6] = { "COARSE+FINE", "FINE ONLY  ", "COARSE ONLY", "NO SPLIT   ", "FROZEN WAVE", "2BAND STATIC" };
 
 /* 市松と縦縞。横にずれたことが一目で分かる絵。 */
 static const u8 pat_box[32] = {
@@ -56,6 +56,7 @@ static void draw_bg(void) {
     for (y = 0; y < 180; y++) vdp_fill((u16)((y + 20) & 255), y, 2, 1, 11); /* 斜めの赤線(継ぎ目の段差が読める) */
     vdp_text(2, 2, 15, 1, "R#26/27 SPLIT TEST");
     vdp_text(2, 182, 14, 1, "SPACE:MODE UD:AMP LR:BANDS M:MSK");
+    if (mode == 5) vdp_text(2, 170, 11, 1, "LINE106 -> RIGHT 32DOT");
     vdp_text(2, 192, 15, 1, "MODE");
     vdp_text(42, 192, 12, 1, mode_name[mode]);
     vdp_text(140, 192, 15, 1, "AMP");   num3(172, 192, amp);
@@ -72,6 +73,19 @@ static void arm(void) {
     u8 i, n;
     if (mode == 3) {                       /* 分割なし: 全画面を同じ量で揺らす(基準。継ぎ目が出ないことの確認) */
         raster_off();
+        return;
+    }
+    if (mode == 5) {
+        /* ★切り分け用: 帯は2つだけ・動かさない。上=ずらさない / 画面中央(106行)から下=右へ 32 ドット。
+           実機での見え方で原因が分かる:
+             (a) 上下で段差 … 走査線の途中で効く(＝帯ごとの演出が作れる)
+             (b) 画面全体が 32 ドットずれる … レジスタはフレーム単位で読まれる(最後に書いた値が次のフレーム全体に効く)
+             (c) 何も動かない … 画面の途中の書き込みは無視される */
+        g_ras[0].line = 0;   g_ras[0].reg = 26; g_ras[0].val = 0;               g_ras[0].reg2 = 27; g_ras[0].val2 = 0;
+        g_ras[0].pidx = RAS_NOPAL;
+        g_ras[1].line = 106; g_ras[1].reg = 26; g_ras[1].val = hs_coarse(32);   g_ras[1].reg2 = 27; g_ras[1].val2 = hs_fine(32);
+        g_ras[1].pidx = RAS_NOPAL;
+        raster_arm(2);
         return;
     }
     for (i = 0; i <= bands; i++) {
@@ -107,7 +121,7 @@ static void hstest_init(void) {
 
 static u8 hstest_update(void) {
     t++;
-    if (g_input_edge & INP_TRIG)  { mode = (u8)((mode + 1) % 5); draw_bg(); }
+    if (g_input_edge & INP_TRIG)  { mode = (u8)((mode + 1) % 6); draw_bg(); }
     if (g_input_edge & INP_TRIGB) { msk = (u8)(msk ^ 1); vdp_wreg(25, (u8)(msk ? 0x02 : 0x00)); draw_bg(); }  /* R#25 bit1=MSK */
     if ((g_input_edge & INP_UP)    && amp < 32) { amp = (u8)(amp + 2); draw_bg(); }
     if ((g_input_edge & INP_DOWN)  && amp > 2)  { amp = (u8)(amp - 2); draw_bg(); }
