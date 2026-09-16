@@ -332,6 +332,12 @@ ifdef MAGTEST
   BANK_IHX      += $(BUILD)/scene_magtest.ihx
   ROMPACK_BANKS += --bank 21 $(BUILD)/scene_magtest.ihx
 endif
+# ── 実機検証: 走査線途中の 横スクロール(R#26/R#27) 切替テスト: make clean && make HSTEST=1
+ifdef HSTEST
+  DEFS          += -DHSTEST
+  BANK_IHX      += $(BUILD)/scene_hstest.ihx
+  ROMPACK_BANKS += --bank 22 $(BUILD)/scene_hstest.ihx
+endif
 ifdef DEBUG_PROF
   BANK_IHX      += $(BUILD)/prof_bank.ihx
   ROMPACK_BANKS += --bank 20 $(BUILD)/prof_bank.ihx
