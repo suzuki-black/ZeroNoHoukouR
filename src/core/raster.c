@@ -74,7 +74,9 @@ void ras_rearm(void) {
        割込み応答遅れのぶん、行2 などに置いた復帰用の分割は画面上端に数ライン取りこぼしが出る
        (実際にHUD帯が前フレームの色のまま残った)。フレーム先頭の確定は VBLANK でやること。
        ras_apply が「次の分割の R#19」まで面倒を見るので、ここでは呼ぶだけでよい。 */
-    if (g_ras[0].line == 0) { ras_apply(); return; }
+    /* ★line==0 が連続していれば、そこで全部適用する。1本で書けるレジスタは2本なので、
+       画面先頭で3本以上決めたいとき(横スクロールを帯で変えたら先頭で必ず戻す、等)に使う。 */
+    if (g_ras[0].line == 0) { do ras_apply(); while (g_ras_i < g_ras_n && g_ras[g_ras_i].line == 0); return; }
     { u8 v = (u8)(g_ras[0].line + s_vs - RAS_LINE_BIAS);
       RAS_CTRL = v;
       RAS_CTRL = 0x80 | 19; }

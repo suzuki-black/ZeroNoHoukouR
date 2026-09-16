@@ -58,6 +58,9 @@ HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)
 #   ある)。常駐24KBを197B無駄に食っていたのでリンクから外した。使うときはここへ戻すこと。
 # ── 常駐(bank0-2, <=24KB)にリンクするソース。crt0 は先頭に別途リンク。
 #    ここへ足すたびに常駐サイズが増える。冷たいものは足さず bcall バンクへ回すこと。
+# ★BGTEST(背景弾の実測)のときだけ常駐へ足す。RESIDENT_RELS は rom.ihx の依存に読み込み時点で展開されるので、
+#   ifdef ブロックで後から足しても依存にならない(踏んだ)。ここで足す。
+
 RESIDENT_RELS = \
   $(BUILD)/ramexec.rel \
   $(BUILD)/raster.rel \
@@ -337,6 +340,12 @@ ifdef HSTEST
   DEFS          += -DHSTEST
   BANK_IHX      += $(BUILD)/scene_hstest.ihx
   ROMPACK_BANKS += --bank 22 $(BUILD)/scene_hstest.ihx
+endif
+# ── 実機検証: 背景に描く弾の発数と FPS: make clean && make BGTEST=1 DEBUG_FPS=1
+#    ★本番の弾はホット区間(page1/2 を RAM へ差し替えた状態)で動くので、**ゲーム本体の海の区間に混ぜて**測る。
+#      別シーン(ROM実行)で測ると 4 倍近く遅い別物になる。発数はスコア欄に出る(3秒ごとに +8 で自動掃引)。
+ifdef BGTEST
+  DEFS          += -DBGTEST
 endif
 ifdef DEBUG_PROF
   BANK_IHX      += $(BUILD)/prof_bank.ihx

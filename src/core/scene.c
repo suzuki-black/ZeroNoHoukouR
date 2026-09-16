@@ -65,6 +65,7 @@ static const Scene registry[SC_COUNT] = {
     /* SC_TITLE  */ { 0,          0,           21 },   /* ★検証ROM: MAG 分割テスト(scene_magtest, bank21) */
 #elif defined(HSTEST)
     /* SC_TITLE  */ { 0,          0,           22 },   /* ★検証ROM: 横スクロール分割テスト(scene_hstest, bank22) */
+
 #else
     /* SC_TITLE  */ { 0,          0,            5 },   /* 冷たいシーン: bank5(bcall)。起動シーン */
 #endif

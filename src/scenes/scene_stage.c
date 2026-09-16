@@ -242,6 +242,54 @@ static u8 aa_alive(void) { u8 i, n = 0; for (i = 0; i < SHIP_NAAG; i++) if (!aa_
 /* aa_update / aa_collide の本体は banked/hot.c(RAM実行)へ移設。ここからは hotcode.c のラッパ
    (aa_update/aa_collide=hot_ram のジャンプテーブル)を aa_hot.h 経由で呼ぶ。 */
 
+#ifdef BGTEST
+/* ★実機検証(make BGTEST=1 DEBUG_FPS=1): 背景に描く弾を何発まで出せるか。中ボス案5面の「背景弾幕」の前提。
+   本番と同じ経路(ホット区間＝RAM実行 / 消すのは海テンプレから HMMM / 描くのは VRAM 直書き)で、海の区間に混ぜて測る。
+   発数はスコア欄に出す。3秒ごとに +8 発。一巡したら弾の大きさを 6x6 ↔ 4x4 で切替える。 */
+#define BGT_MAX 120
+static u8  bgt_x[BGT_MAX], bgt_y[BGT_MAX];
+static s8  bgt_vx[BGT_MAX], bgt_vy[BGT_MAX];
+static u8  bgt_n, bgt_big, bgt_init_done, bgt_sec;
+static u16 bgt_lastj;
+static void bgt_frame(void) {
+    u8 i, w = bgt_big ? 3 : 2, h = bgt_big ? 6 : 4;
+    u16 j;
+    if (!bgt_init_done) {
+        bgt_init_done = 1; bgt_n = 8; bgt_big = 1; bgt_lastj = *(volatile u16 *)0xFC9E;
+        for (i = 0; i < BGT_MAX; i++) {
+            bgt_x[i] = (u8)(8 + (rnd() % 232)); bgt_y[i] = (u8)(16 + (rnd() % 180));
+            bgt_vx[i] = (s8)((rnd() & 3) - 1);  bgt_vy[i] = (s8)(1 + (rnd() & 1));
+        }
+    }
+    for (i = 0; i < bgt_n; i++)      /* 消す: 海テンプレートの該当行から 8x8 を戻す(HMMM 1本/発) */
+        vdp_copy(bgt_x[i], (u16)(SC_SEATMPL_Y + ((bgt_y[i] + (u8)cam) & 15)), bgt_x[i], (u16)(256 + (u8)(bgt_y[i] + (u8)cam)), 8, 8);
+    for (i = 0; i < bgt_n; i++) {    /* 動かす */
+        s16 x = (s16)bgt_x[i] + bgt_vx[i], y = (s16)bgt_y[i] + bgt_vy[i];
+        if (x < 4 || x > 240) { bgt_vx[i] = (s8)(-bgt_vx[i]); x = bgt_x[i]; }
+        if (y < 8 || y > 190) { bgt_vy[i] = (s8)(-bgt_vy[i]); y = bgt_y[i]; }
+        bgt_x[i] = (u8)x; bgt_y[i] = (u8)y;
+    }
+    vdp_cmd_wait();
+    for (i = 0; i < bgt_n; i++) {    /* 描く: VRAM 直書き(1行=アドレス設定＋数バイト) */
+        u8 r, ry = (u8)(bgt_y[i] + (u8)cam);
+        for (r = 0; r < h; r++) {
+            u8 c;
+            vdp_write_addr((u16)(((u16)(256 + (u8)(ry + r)) << 7) + (bgt_x[i] >> 1)));
+            for (c = 0; c < w; c++) vdp_data(0xFF);
+        }
+    }
+    j = *(volatile u16 *)0xFC9E;     /* 3秒ごとに発数を増やす。発数はスコア欄に出す */
+    if ((u16)(j - bgt_lastj) >= 180) {
+        bgt_lastj = j;
+        bgt_n = (u8)((bgt_n >= BGT_MAX - 8) ? 8 : (bgt_n + 8));
+        if (bgt_n == 8) bgt_big = (u8)(bgt_big ^ 1);
+    }
+    /* ★スコア欄に「発数(3桁)＋FPS(2桁)」を出す。例 06428 = 64発で 28fps。末尾の大きさは HI 欄(6x6=1 / 4x4=0) */
+    g_score = (u16)((u16)bgt_n * 100 + ((g_fps > 99) ? 99 : g_fps));
+    g_hiscore = bgt_big;
+}
+#endif
+
 /* ===== 破壊した砲台/対空砲の常時炎上(BG火球ブリット。旧版 fireball 移植) =====
    スプライト枠(32/8perline)を使わず、事前ベイクした火球を page1リングへ透過コピーで毎フレーム重ねる。
    → 全27エンプレを同時炎上でき、破壊済みか一目で分かる(小炎が消える時間帯が無い)。 */
@@ -438,6 +486,9 @@ static void stage_build(void) {
     if (e) { e->x = 120; e->y = 176; e->pat = SPR_ZERO; e->coltab = zcol; e->shadow = 1; }  /* 零戦＋行別陰影＋落ち影 */
 
     g_php = g_durability ? g_durability : 1;   /* 1機あたりの耐久HP(設定) */
+#ifdef BGTEST
+    g_invinc = 1;                              /* ★実機検証: 測定が途切れないよう無敵 */
+#endif
     g_pinv = 0;
     g_miss = 0;
     dmode = 0; dtimer = 0; raided = 0; final_over = 0;
@@ -746,11 +797,18 @@ u8 stage_update(void) {
            滑らかに出せる最も遅い一定速度)。旧実装は4/5コマだけ動かす=停止コマがカクつき「フレームレート
            低下」に見えていた。1px/f は蛇行(1.6px/f)より遅く、かつ完全に一定速度=滑らか。蛇行なし。 */
         vstep = 1;
+#ifdef BGTEST
+        vstep = 0;   /* ★実機検証: 海の区間で止めて測る(艦が出てこない=条件を一定に) */
+#endif
         if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= vstep) ? (u16)(cam - vstep) : SC_CAM_SHIP; }
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
            (でないと戦闘機が上端=艦の上に突然湧いてゴミに見える。HANDOFF §2: 空戦→戦艦)。 */
-        if (cam > SC_CAM_SHIP && (++ftick % diff_interval((u8)(fighter_iv[curstage] >> 1))) == 0) {  /* ★出現間隔を半分=海モードの戦闘機を倍増 */
+#ifdef BGTEST
+        if (0) {     /* ★実機検証: 敵機も出さない(背景弾だけの負荷を測る) */
+#else
+        if (cam > SC_CAM_SHIP && (++ftick % diff_interval((u8)(fighter_iv[curstage] >> 1))) == 0) {
+#endif  /* ★出現間隔を半分=海モードの戦闘機を倍増 */
             Entity *f = ent_spawn(ET_FIGHTER);
             if (f) {
                 /* ★各面の固有挙動(急降下/直進/蛇行)に「蛇行」を50%混在させる=どの面でも一部が斜めにバンク
@@ -894,6 +952,9 @@ u8 stage_update(void) {
                                              (空振りでも色キャッシュを毎フレーム捨ててしまうため) */
 #ifdef DEBUG_PROF
     PROF_ADD(PF_DRAW, _pd); }
+#endif
+#ifdef BGTEST
+    bgt_frame();   /* ★実機検証: 背景弾の発数と FPS(海の区間に混ぜて本番と同じ経路で測る) */
 #endif
     /* ★炎はここ(ent_draw_allの後)で一括。ent_draw_allはSAT/色をVRAM直書きするため、その最中に
        VDPコマンド(炎コピー)を走らせると競合して双方遅くなる(実測でDRAW+1ms悪化→前に出す案は撤回)。
