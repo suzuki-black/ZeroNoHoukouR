@@ -244,47 +244,263 @@ static u8 aa_alive(void) { u8 i, n = 0; for (i = 0; i < SHIP_NAAG; i++) if (!aa_
 
 #ifdef BGTEST
 /* ★実機検証(make BGTEST=1 DEBUG_FPS=1): 背景に描く弾を何発まで出せるか。中ボス案5面の「背景弾幕」の前提。
-   本番と同じ経路(ホット区間＝RAM実行 / 消すのは海テンプレから HMMM / 描くのは VRAM 直書き)で、海の区間に混ぜて測る。
-   発数はスコア欄に出す。3秒ごとに +8 発。一巡したら弾の大きさを 6x6 ↔ 4x4 で切替える。 */
-#define BGT_MAX 120
-static u8  bgt_x[BGT_MAX], bgt_y[BGT_MAX];
+   本番と同じ経路(ホット区間＝RAM実行)で、海の区間に混ぜて測る。発数はスコア欄に出す。3秒ごとに +8 発。
+   一巡したら弾の大きさを 6x6 ↔ 4x4 で切替える。
+   ★v2(実機で 16発=20fps / 48発=15fps と重すぎた): VDPコマンド(HMMM)をやめ、
+     (1) 前回の矩形と今回の矩形の差分の行だけを VRAM 直書き(真下に動くなら上端と下端の行だけ)、
+     (2) 奇数/偶数番の弾を1フレームおきに半分ずつ、倍の速度で動かす。
+     消す絵は海テンプレートの左 64 ドットを RAM(fb_ram の番地。炎ベイク後は空き)へ写したもの=横 64 ドット周期の近似。 */
+#define BGT_MAX  120
+#define BGT_TMPL 0xE900            /* 海テンプレート 16行×32バイト(=左64ドット) */
+static u8  bgt_sx[BGT_MAX], bgt_sy[BGT_MAX], bgt_ry[BGT_MAX];   /* バイト列(0..124)/画面Y/最後に描いたリング行 */
 static s8  bgt_vx[BGT_MAX], bgt_vy[BGT_MAX];
-static u8  bgt_n, bgt_big, bgt_init_done, bgt_sec;
+static u8  bgt_n, bgt_big, bgt_init_done, bgt_par;
 static u16 bgt_lastj;
+/* asm(bgt_blit)への受け渡し。非static(asm から名前で参照する) */
+u8 bgt_ox, bgt_oy, bgt_nx, bgt_ny, bgt_w, bgt_h, bgt_oh, bgt_oofs, bgt_nofs, bgt_cnt, bgt_rowl, bgt_r14;
+__sfr __at(0x98) BGT_DAT;
+__sfr __at(0x99) BGT_CTL;
+
+/* 旧矩形(ox,oy,w×oh)を海へ戻し、新矩形(nx,ny,w×h)を白で描く。重なって変化しない行は触らない。
+   行はリング行(0..255 で自然に折返す)。VRAMアドレス = 0x8000 + 行*128 + バイト列。 */
+static void bgt_blit(void) __naked {
+    __asm
+        ld   a, (_bgt_ny)
+        ld   hl, #_bgt_oy
+        sub  a, (hl)
+        ld   b, (hl)               ; b = 開始行(下へ動くなら旧Y)
+        bit  7, a
+        jr   z, 09001$
+        ld   a, (_bgt_ny)          ; 上へ動くなら新Y
+        ld   b, a
+    09001$:
+        ld   a, (hl)
+        sub  a, b
+        ld   (_bgt_oofs), a
+        ld   hl, #_bgt_oh
+        add  a, (hl)
+        ld   c, a                  ; c = oofs + oh
+        ld   a, (_bgt_ny)
+        sub  a, b
+        ld   (_bgt_nofs), a
+        ld   hl, #_bgt_h
+        add  a, (hl)               ; a = nofs + h
+        cp   a, c
+        jr   nc, 09002$
+        ld   a, c
+    09002$:
+        ld   (_bgt_cnt), a
+        ld   c, #0                 ; c = k(開始行からの行番号), b = リング行
+    09010$:                        ; ── 行ループ
+        ld   a, (_bgt_oh)
+        ld   e, a
+        ld   a, (_bgt_oofs)
+        ld   d, a
+        ld   a, c
+        sub  a, d
+        cp   a, e                  ; carry = 旧矩形の行
+        ld   a, #0
+        rla
+        ld   d, a
+        ld   a, (_bgt_h)
+        ld   e, a
+        ld   a, (_bgt_nofs)
+        ld   l, a
+        ld   a, c
+        sub  a, l
+        cp   a, e                  ; carry = 新矩形の行
+        ld   a, d
+        rla                        ; a = 旧<<1 | 新
+        or   a, a
+        jr   z, 09090$
+        cp   a, #1
+        jr   z, 09020$
+        cp   a, #2
+        jr   z, 09030$
+        ld   a, (_bgt_nx)          ; 両方: 列が同じなら変化なし
+        ld   hl, #_bgt_ox
+        cp   a, (hl)
+        jr   z, 09090$
+        jr   09040$
+    09090$:
+        inc  b
+        inc  c
+        ld   a, (_bgt_cnt)
+        cp   a, c
+        jr   nz, 09010$
+        ret
+    09020$:                        ; 新だけ: 白を w バイト
+        ld   a, (_bgt_nx)
+        ld   e, a
+        call 09100$
+        ld   a, (_bgt_w)
+        ld   d, a
+        ld   a, #0xFF
+    09021$:
+        out  (0x98), a
+        dec  d
+        jr   nz, 09021$
+        jr   09090$
+    09030$:                        ; 旧だけ: 海を w バイト
+        ld   a, (_bgt_ox)
+        ld   e, a
+        call 09100$
+        call 09110$
+        ld   a, (_bgt_w)
+        ld   d, a
+    09031$:
+        ld   a, e
+        and  a, #31
+        ld   l, a
+        ld   a, (_bgt_rowl)
+        or   a, l
+        ld   l, a
+        ld   a, (hl)
+        out  (0x98), a
+        inc  e
+        dec  d
+        jr   nz, 09031$
+        jr   09090$
+    09040$:                        ; 両方で横に動いた: min(ox,nx) から w+|dx| バイト
+        ld   a, (_bgt_ox)
+        ld   hl, #_bgt_nx
+        sub  a, (hl)
+        jr   nc, 09041$
+        neg
+        ld   d, a
+        ld   a, (_bgt_ox)
+        jr   09042$
+    09041$:
+        ld   d, a
+        ld   a, (_bgt_nx)
+    09042$:
+        ld   e, a
+        ld   a, (_bgt_w)
+        add  a, d
+        ld   d, a
+        call 09100$
+        call 09110$
+    09043$:
+        ld   a, (_bgt_nx)
+        ld   l, a
+        ld   a, e
+        sub  a, l
+        ld   l, a
+        ld   a, (_bgt_w)
+        dec  a
+        cp   a, l                  ; (列-nx) <= w-1 なら新矩形の列
+        jr   c, 09044$
+        ld   a, #0xFF
+        jr   09045$
+    09044$:
+        ld   a, e
+        and  a, #31
+        ld   l, a
+        ld   a, (_bgt_rowl)
+        or   a, l
+        ld   l, a
+        ld   a, (hl)
+    09045$:
+        out  (0x98), a
+        inc  e
+        dec  d
+        jr   nz, 09043$
+        jp   09090$
+    09100$:                        ; 書込みアドレス(b=リング行, e=バイト列)。R#14 は変わるときだけ
+        di
+        ld   a, b
+        rlca
+        and  a, #1
+        or   a, #2
+        push hl
+        ld   hl, #_bgt_r14
+        cp   a, (hl)
+        jr   z, 09101$
+        ld   (hl), a
+        out  (0x99), a
+        ld   a, #0x8E
+        out  (0x99), a
+    09101$:
+        pop  hl
+        ld   a, b
+        and  a, #1
+        rrca
+        or   a, e
+        out  (0x99), a
+        ld   a, b
+        srl  a
+        or   a, #0x40
+        out  (0x99), a
+        ei
+        ret
+    09110$:                        ; h/rowl = テンプレート行 (b&15) の先頭
+        ld   a, b
+        and  a, #15
+        ld   l, a
+        ld   h, #0
+        add  hl, hl
+        add  hl, hl
+        add  hl, hl
+        add  hl, hl
+        add  hl, hl
+        ld   a, l
+        ld   (_bgt_rowl), a
+        ld   a, h
+        add  a, #0xE9
+        ld   h, a
+        ret
+    __endasm;
+}
+
+/* 弾 [from,to) を旧矩形なし(oh=0)で描く / 新矩形なし(h=0)で消す */
+static void bgt_each(u8 from, u8 to) {
+    u8 i;
+    for (i = from; i < to; i++) { bgt_ox = bgt_nx = bgt_sx[i]; bgt_oy = bgt_ny = bgt_ry[i]; bgt_blit(); }
+}
 static void bgt_frame(void) {
-    u8 i, w = bgt_big ? 3 : 2, h = bgt_big ? 6 : 4;
-    u16 j;
+    u8 i, w = bgt_big ? 3 : 2, h = bgt_big ? 6 : 4, cl = (u8)cam;
+    u16 j = *(volatile u16 *)0xFC9E;
+    vdp_cmd_wait();                  /* 直書きは VDP コマンド実行中に重ねない */
+    bgt_r14 = 0xFF;
     if (!bgt_init_done) {
-        bgt_init_done = 1; bgt_n = 8; bgt_big = 1; bgt_lastj = *(volatile u16 *)0xFC9E;
+        u8 r, *p = (u8 *)BGT_TMPL;
+        bgt_init_done = 1; bgt_big = 1; bgt_lastj = (u16)(j - 180);   /* 直後の「+8 発」で最初の 8 発を描く */
+        for (r = 0; r < 16; r++) {   /* 海テンプレート(y=512..527)の左 32 バイトを RAM へ */
+            __asm di __endasm;
+            BGT_CTL = 4; BGT_CTL = 0x80 | 14;
+            BGT_CTL = (u8)((r & 1) << 7); BGT_CTL = (u8)(r >> 1);
+            __asm ei __endasm;
+            for (i = 0; i < 32; i++) *p++ = BGT_DAT;
+        }
         for (i = 0; i < BGT_MAX; i++) {
-            bgt_x[i] = (u8)(8 + (rnd() % 232)); bgt_y[i] = (u8)(16 + (rnd() % 180));
-            bgt_vx[i] = (s8)((rnd() & 3) - 1);  bgt_vy[i] = (s8)(1 + (rnd() & 1));
+            bgt_sx[i] = (u8)(4 + (rnd() % 116)); bgt_sy[i] = (u8)(16 + (rnd() % 170));
+            bgt_vx[i] = (s8)((rnd() & 3) - 1); if (bgt_vx[i] == 2) bgt_vx[i] = 0;
+            bgt_vy[i] = (s8)(2 + ((rnd() & 1) << 1));
         }
     }
-    for (i = 0; i < bgt_n; i++)      /* 消す: 海テンプレートの該当行から 8x8 を戻す(HMMM 1本/発) */
-        vdp_copy(bgt_x[i], (u16)(SC_SEATMPL_Y + ((bgt_y[i] + (u8)cam) & 15)), bgt_x[i], (u16)(256 + (u8)(bgt_y[i] + (u8)cam)), 8, 8);
-    for (i = 0; i < bgt_n; i++) {    /* 動かす */
-        s16 x = (s16)bgt_x[i] + bgt_vx[i], y = (s16)bgt_y[i] + bgt_vy[i];
-        if (x < 4 || x > 240) { bgt_vx[i] = (s8)(-bgt_vx[i]); x = bgt_x[i]; }
-        if (y < 8 || y > 190) { bgt_vy[i] = (s8)(-bgt_vy[i]); y = bgt_y[i]; }
-        bgt_x[i] = (u8)x; bgt_y[i] = (u8)y;
+    bgt_par ^= 1;
+    bgt_w = w; bgt_h = h; bgt_oh = h;
+    for (i = bgt_par; i < bgt_n; i += 2) {   /* 半分ずつ、倍の速度で動かす */
+        s16 x = (s16)bgt_sx[i] + bgt_vx[i], y = (s16)bgt_sy[i] + bgt_vy[i];
+        if (x < 2 || x > 122) { bgt_vx[i] = (s8)(-bgt_vx[i]); x = bgt_sx[i]; }
+        if (y < 8 || y > 196) { bgt_vy[i] = (s8)(-bgt_vy[i]); y = bgt_sy[i]; }
+        bgt_ox = bgt_sx[i]; bgt_oy = bgt_ry[i];
+        bgt_sx[i] = (u8)x; bgt_sy[i] = (u8)y;
+        bgt_nx = (u8)x; bgt_ny = bgt_ry[i] = (u8)((u8)y + cl);
+        bgt_blit();
     }
-    vdp_cmd_wait();
-    for (i = 0; i < bgt_n; i++) {    /* 描く: VRAM 直書き(1行=アドレス設定＋数バイト) */
-        u8 r, ry = (u8)(bgt_y[i] + (u8)cam);
-        for (r = 0; r < h; r++) {
-            u8 c;
-            vdp_write_addr((u16)(((u16)(256 + (u8)(ry + r)) << 7) + (bgt_x[i] >> 1)));
-            for (c = 0; c < w; c++) vdp_data(0xFF);
-        }
-    }
-    j = *(volatile u16 *)0xFC9E;     /* 3秒ごとに発数を増やす。発数はスコア欄に出す */
-    if ((u16)(j - bgt_lastj) >= 180) {
+    if ((u16)(j - bgt_lastj) >= 180) {   /* 3秒ごとに +8 発。一巡したら全部消して大きさを切替え */
         bgt_lastj = j;
-        bgt_n = (u8)((bgt_n >= BGT_MAX - 8) ? 8 : (bgt_n + 8));
-        if (bgt_n == 8) bgt_big = (u8)(bgt_big ^ 1);
+        if (bgt_n >= BGT_MAX) {
+            bgt_h = 0; bgt_each(0, bgt_n);
+            bgt_n = 0; bgt_big ^= 1;
+            bgt_w = bgt_big ? 3 : 2; h = bgt_big ? 6 : 4;
+        }
+        for (i = bgt_n; i < bgt_n + 8; i++) bgt_ry[i] = (u8)(bgt_sy[i] + cl);
+        bgt_h = h; bgt_oh = 0; bgt_each(bgt_n, (u8)(bgt_n + 8));
+        bgt_n = (u8)(bgt_n + 8);
     }
-    /* ★スコア欄に「発数(3桁)＋FPS(2桁)」を出す。例 06428 = 64発で 28fps。末尾の大きさは HI 欄(6x6=1 / 4x4=0) */
+    /* ★スコア欄に「発数(3桁)＋FPS(2桁)」を出す。例 06428 = 64発で 28fps。大きさは HI 欄(6x6=1 / 4x4=0) */
     g_score = (u16)((u16)bgt_n * 100 + ((g_fps > 99) ? 99 : g_fps));
     g_hiscore = bgt_big;
 }
