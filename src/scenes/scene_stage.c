@@ -245,7 +245,7 @@ static u8 aa_alive(void) { u8 i, n = 0; for (i = 0; i < SHIP_NAAG; i++) if (!aa_
 #ifdef BGTEST
 /* ★実機検証(make BGTEST=1 DEBUG_FPS=1): 背景に描く弾を何発まで出せるか。中ボス案5面の「背景弾幕」の前提。
    本番と同じ経路(ホット区間＝RAM実行)で、海の区間に混ぜて測る。発数はスコア欄に出す。3秒ごとに +8 発。
-   一巡したら弾の大きさを 6x6 ↔ 4x4 で切替える。
+   一巡したら弾の大きさを 6x6 ↔ 4x4 で切替える。各巡の最初の3秒は 0 発(弾なしの素の FPS)。
    ★v2(実機で 16発=20fps / 48発=15fps と重すぎた): VDPコマンド(HMMM)をやめ、
      (1) 前回の矩形と今回の矩形の差分の行だけを VRAM 直書き(真下に動くなら上端と下端の行だけ)、
      (2) 奇数/偶数番の弾を1フレームおきに半分ずつ、倍の速度で動かす。
@@ -464,7 +464,7 @@ static void bgt_frame(void) {
     bgt_r14 = 0xFF;
     if (!bgt_init_done) {
         u8 r, *p = (u8 *)BGT_TMPL;
-        bgt_init_done = 1; bgt_big = 1; bgt_lastj = (u16)(j - 180);   /* 直後の「+8 発」で最初の 8 発を描く */
+        bgt_init_done = 1; bgt_big = 1; bgt_lastj = j;   /* 最初の3秒は 0 発(弾なしの素の FPS) */
         for (r = 0; r < 16; r++) {   /* 海テンプレート(y=512..527)の左 32 バイトを RAM へ */
             __asm di __endasm;
             BGT_CTL = 4; BGT_CTL = 0x80 | 14;
@@ -494,11 +494,12 @@ static void bgt_frame(void) {
         if (bgt_n >= BGT_MAX) {
             bgt_h = 0; bgt_each(0, bgt_n);
             bgt_n = 0; bgt_big ^= 1;
-            bgt_w = bgt_big ? 3 : 2; h = bgt_big ? 6 : 4;
+            bgt_w = bgt_big ? 3 : 2;    /* 切替え直後の3秒も 0 発 */
+        } else {
+            for (i = bgt_n; i < bgt_n + 8; i++) bgt_ry[i] = (u8)(bgt_sy[i] + cl);
+            bgt_h = h; bgt_oh = 0; bgt_each(bgt_n, (u8)(bgt_n + 8));
+            bgt_n = (u8)(bgt_n + 8);
         }
-        for (i = bgt_n; i < bgt_n + 8; i++) bgt_ry[i] = (u8)(bgt_sy[i] + cl);
-        bgt_h = h; bgt_oh = 0; bgt_each(bgt_n, (u8)(bgt_n + 8));
-        bgt_n = (u8)(bgt_n + 8);
     }
     /* ★スコア欄に「発数(3桁)＋FPS(2桁)」を出す。例 06428 = 64発で 28fps。大きさは HI 欄(6x6=1 / 4x4=0) */
     g_score = (u16)((u16)bgt_n * 100 + ((g_fps > 99) ? 99 : g_fps));
