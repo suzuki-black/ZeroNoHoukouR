@@ -543,19 +543,6 @@ u16 burn_wtop[BURN_MAX];  /* 火球の世界Y上端 */
 u8  burn_sz[BURN_MAX];    /* 0大/1中/2小 */
 u8  burn_coma[BURN_MAX];  /* ★各炎が現在Bへ焼込み済みのコマ(0/1)。fire_draw はコマ変化時のみ再焼込み=無駄コピー排除 */
 u8  nburn;
-/* ★1面の中ボス(Fw 200, 64x64)の 32 方向コマ(バンク MB_FRAMES_BANK から2バンク, 1コマ512B=4行)を page0 の MB_VRAM_Y 行から並べる。
-   コマの1行＝スプライトパターン表の1行と同じ並びなので、オーバレイは向きが変わるたびに HMMM で写すだけで済む。
-   fb_ram(512B)は火球のベイクが済んだら空き。 */
-static void mb_bake(void) {
-    u8 k;
-    u16 i;
-    for (k = 0; k < MB_NDIR; k++) {
-        data_read((u8)(MB_FRAMES_BANK + (k >> 4)), (u16)((u16)(k & 15) * 512), fb_ram, 512);
-        vdp_write_addr((u16)((u16)(MB_VRAM_Y + ((u16)k << 2)) * 128));
-        for (i = 0; i < 512; i++) vdp_data(fb_ram[i]);
-    }
-}
-
 /* 炎球1個を艦バッファBへ透過焼込み。src=page0の火球コマ列位置(fb_px添字)。 */
 static void burn_bake(u8 left, u16 wtop, u8 box, u8 src) {
     u16 bufY = (u16)((s16)SC_SHIPBUF_Y + (s16)wtop - SC_SHIP_R0 * 16);
@@ -757,7 +744,6 @@ static void stage_begin_display(void) {
     scroll_init();               /* display=page1(以降 page0 は非表示=火球ベイク用に空く) */
     if (curstage != STAGE_FINAL) bake_fireballs();   /* 破壊エンプレ炎上用の火球6枚を page0(非表示域)へ事前ベイク。
                                                           ★最終面はそこを2組目のスプライト表に使う */
-    if (curstage == 0) mb_bake();   /* ★1面の中ボスのコマを page0(40〜167行)へ */
     if (curstage == STAGE_FINAL)  /* ★ボスの残りのコマを page0(y=32〜)へ。カード(page0)を消した後でないと焼けない */
         vdp_blit_bank_vram(BOSS_VRAM0_BANK, BOSS_VRAM0_LEN, 0, (u16)(BOSS_VRAM0_Y * 128));
     sea_init(curstage);          /* 艦種別の海コラム帯を選択 */
@@ -1206,19 +1192,25 @@ u8 stage_update(void) {
     ramx_use_cart();    /* ★§4-3: ホット区間終了→page1/page2をカートリッジへ戻す(以降のバンキング=ミス/クリア/setup可) */
 
     /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
+    if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) {   /* ★中ボスの向き: ROM から次の向きを読む(書くのは次のフレームのオーバレイ) */
+        data_read((u8)(MB_FRAMES_BANK + (g_mb_req >> 3)), (u16)((u16)(g_mb_req & 7) << 10), (u8 *)MB_BUF, 1024);
+        g_mb_req = 0xFF; g_mb_new = 1;
+    }
     if (g_mb == MB_LOAD) {
         overlay_load(OVL8_BANK);
         if (g_ovl_ok) {
-            vdp_copy(0, MB_PAT_ROW_A, 0, MB_SAVE_Y, 256, 2);            /* 借りるパターン4行を page0 へ退避 */
-            vdp_copy(0, MB_PAT_ROW_B, 0, (u16)(MB_SAVE_Y + 2), 256, 2);
-            ramx_use_ram(); mb_init(); ramx_use_cart();
+            vdp_copy(0, MB_PAT_ROW_A, 0, MB_SAVE_Y, 256, 2);            /* 借りるパターン6行を page0 へ退避 */
+            vdp_copy(0, MB_PAT_ROW_B, 0, (u16)(MB_SAVE_Y + 2), 256, 4);
+            ramx_use_ram(); mb_init(); ramx_use_cart();   /* 最初の向きを g_mb_req に置く */
+            data_read((u8)(MB_FRAMES_BANK + (g_mb_req >> 3)), (u16)((u16)(g_mb_req & 7) << 10), (u8 *)MB_BUF, 1024);
+            g_mb_req = 0xFF; g_mb_new = 1;
             g_mb = MB_ACTIVE;
         } else {
             overlay_load(OVL_BANK); g_mb = MB_OVER;
         }
     } else if (g_mb == MB_RESTORE) {
-        vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_ROW_A, 256, 2);            /* 砲身と小さい艦載機のパターンを戻す */
-        vdp_copy(0, (u16)(MB_SAVE_Y + 2), 0, MB_PAT_ROW_B, 256, 2);
+        vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_ROW_A, 256, 2);            /* 砲身と艦載機のパターンを戻す */
+        vdp_copy(0, (u16)(MB_SAVE_Y + 2), 0, MB_PAT_ROW_B, 256, 4);
         overlay_load(OVL_BANK);
         g_mb = MB_OVER;
     }

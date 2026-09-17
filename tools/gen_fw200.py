@@ -3,10 +3,15 @@
    機体は実寸(全幅 32.85m / 全長 23.45m)を 1.88px/m で縦横比そのまま描き、8倍で回転してから面積率で2値化する。
    ★32x32(64方向)では「中ボスの迫力が無い」と実機で指摘 → 倍の 64x64(16x16 を 4x4=16枚)。
      コマが4倍になり VRAM の置き場(page0)に 64 方向は入らないので 32 方向。
-   使い方: python3 tools/gen_fw200.py preview <out.png>   … 見本(16方向の拡大＋海の上での等倍)
-           python3 tools/gen_fw200.py bin <out.bin>       … ROM 用 16384B(32コマ×512B)
-   1コマ=512B=128B×4行。1行=4x4 に並べた 16x16 スプライトの横1列ぶん(左から4枚)。各32Bは前半16B=左8列の16行、
-   後半16B=右8列の16行(MSB=左端)。スプライトパターン表の1行(128B)にそのまま載る並び。
+   使い方: python3 tools/gen_fw200.py preview <out.png>   … 見本(8方向, 単色)
+           python3 tools/gen_fw200.py color <out.png>     … 多色化の見本(1枚だけ/重ね6枚/灰/制約なし)
+           python3 tools/gen_fw200.py bin <out.bin>       … ROM 用 32768B(32方向×1024B, 迷彩＋重ね6枚)
+   ★多色化(実機で「1色だといかにもMSX」「旋回すると色が変わる」と指摘): 部位ごとの色(迷彩/エンジン/ガラス/国籍標識)を
+     機体座標で塗って回転し、16x16 のマスごとに「本体(1行1色)」＋最大6マスだけ「重ね(1行1色)」で表す(1行に最大6枚)。
+   1方向=1024B: [0,1]=本体のマス(bit c) [2,3]=重ねのマス [4..259]=本体 c=0..7 のパターン(砲身の枠)
+     [260..515]=本体 c=8..15(小さい艦載機の枠) [516..707]=重ね j=0..5(中くらいの艦載機の枠)
+     [708..995]=色表 16B×18(スロット順: 重ね j 昇順 → 本体 c 昇順。絵の無いマスは詰める)。
+   パターン32Bは前半16B=左8列の16行、後半16B=右8列の16行(MSB=左端)。
 """
 import math, sys
 from PIL import Image, ImageDraw
@@ -97,18 +102,205 @@ def frame_bytes(k):
 if __name__ == '__main__':
     if sys.argv[1] == 'preview':
         preview(sys.argv[2])
-    elif sys.argv[1] == 'bin':             # bin <out.bin> <mask.h>
-        data = b''.join(frame_bytes(k) for k in range(NDIR))
-        assert len(data) == 16384
-        open(sys.argv[2], 'wb').write(data)
-        # 各コマで絵のある 16x16 マス(4x4)のビット表。空のマスにはスプライトを割り当てない(32枚の枠を節約)
-        masks = []
-        for k in range(NDIR):
-            fb = frame_bytes(k); bits = 0
-            for c in range(16):
-                if any(fb[c * 32:(c + 1) * 32]):
-                    bits |= 1 << c
-            masks.append(bits)
-        with open(sys.argv[3], 'w') as f:
-            f.write('/* 生成: tools/gen_fw200.py。Fw 200 の各コマで絵のあるマス(bit c = 4x4 の c 番目, 行優先) */\n')
-            f.write('static const u16 fw_mask[%d] = { %s };\n' % (NDIR, ', '.join('0x%04X' % v for v in masks)))
+
+# ===== 多色化の試作(見本のみ): 部位ごとの色で描き、スプライトの制約(1枚=1行1色 / 重ね枚数)で量子化する =====
+PALRGB = {0: (0, 0, 0), 1: (1, 4, 5), 2: (2, 5, 6), 3: (1, 3, 1), 4: (3, 3, 3), 5: (2, 2, 2), 7: (0, 1, 3),
+          8: (2, 5, 2), 9: (3, 3, 1), 12: (7, 4, 0), 13: (1, 1, 1), 14: (4, 4, 5), 15: (7, 7, 7)}
+def prgb(i): return tuple(v * 255 // 7 for v in PALRGB[i])
+
+def body_color(scheme):
+    """(色, 多角形) を塗る順に。機体座標(m)。scheme: 'olive'=RLM72/73風の迷彩 / 'grey'=灰の濃淡。"""
+    L = 23.45; nose, tail = L * 0.48, -L * 0.52; le, span = 3.8, 16.4
+    A, B, ENG, GLASS = (9, 3, 5, 14) if scheme == 'olive' else (4, 5, 13, 14)
+    out = []
+    wing = [(-span, le - 1.3), (-1.0, le), (1.0, le), (span, le - 1.3), (span, le - 2.9), (1.0, le - 5.0), (-1.0, le - 5.0), (-span, le - 2.9)]
+    out.append((A, wing))
+    # 迷彩の切れ目(翼を斜めに区切る)
+    for x0 in (-13.0, -5.5, 2.0, 9.5):
+        out.append((B, [(x0, le + 0.5), (x0 + 3.2, le + 0.5), (x0 + 4.6, le - 5.5), (x0 + 1.4, le - 5.5)]))
+    fus = [(-1.2, nose - 1.2), (-0.6, nose), (0.6, nose), (1.2, nose - 1.2), (1.4, 4.0), (1.2, -3.0), (0.5, tail + 0.5), (-0.5, tail + 0.5), (-1.2, -3.0), (-1.4, 4.0)]
+    out.append((A, fus))
+    out.append((B, [(-1.4, 1.0), (1.4, -1.5), (1.3, -5.0), (-1.3, -2.5)]))
+    out.append((A, [(-5.4, tail + 3.6), (5.4, tail + 3.6), (5.4, tail + 1.9), (-5.4, tail + 1.9)]))
+    out.append((B, [(0.0, tail + 3.6), (5.4, tail + 3.6), (5.4, tail + 1.9), (0.0, tail + 1.9)]))
+    for xe in (-9.6, -4.6, 4.6, 9.6):
+        out.append((ENG, [(xe - 0.6, le + 3.2), (xe + 0.6, le + 3.2), (xe + 1.05, le + 2.0), (xe + 1.05, le - 4.0), (xe - 1.05, le - 4.0), (xe - 1.05, le + 2.0)]))
+        out.append((13, [(xe - 0.6, le + 3.2), (xe + 0.6, le + 3.2), (xe + 0.6, le + 2.3), (xe - 0.6, le + 2.3)]))   # カウル先端
+    out.append((GLASS, [(-0.7, nose - 0.3), (0.7, nose - 0.3), (0.9, nose - 2.6), (-0.9, nose - 2.6)]))
+    for xc in (-12.0, 12.0):              # 主翼の国籍標識(白縁＋黒)
+        out.append((15, [(xc - 1.3, le - 0.9), (xc + 1.3, le - 0.9), (xc + 1.3, le - 3.5), (xc - 1.3, le - 3.5)]))
+        out.append((13, [(xc - 0.5, le - 0.9), (xc + 0.5, le - 0.9), (xc + 0.5, le - 3.5), (xc - 0.5, le - 3.5)]))
+        out.append((13, [(xc - 1.3, le - 1.7), (xc + 1.3, le - 1.7), (xc + 1.3, le - 2.7), (xc - 1.3, le - 2.7)]))
+    return out
+
+def frame_color(k, scheme):
+    """方向 k の NxN 色番号(0=透明)。超解像で部位ごとに塗って回転し、各ドットは面積の多い色。"""
+    from collections import Counter
+    big = Image.new('L', (N * SS, N * SS), 0)
+    d = ImageDraw.Draw(big)
+    for col, p in body_color(scheme):
+        d.polygon([m(x, y) for x, y in p], fill=col)
+    big = big.rotate(-k * 360.0 / NDIR, resample=Image.NEAREST, center=(N * SS / 2, N * SS / 2))
+    sil = frame(k)
+    px = big.load()
+    out = [[0] * N for _ in range(N)]
+    for y in range(N):
+        for x in range(N):
+            if not sil[y][x]:
+                continue
+            c = Counter(px[x * SS + i, y * SS + j] for i in range(SS) for j in range(SS))
+            c.pop(0, None)
+            out[y][x] = c.most_common(1)[0][0] if c else 5
+    return out
+
+def quantize(img, max_ov, ov_per_band=2):
+    if max_ov == 99:   # 参考: 制約なし(元の色)
+        return img, 0, 0
+    """スプライトで出せる形へ: 16x16 のマスごとに 本体(1行1色)＋最大 max_ov マスだけ重ね(1行1色)。
+       戻り値: (出せる絵, 本体の枚数, 重ねの枚数)"""
+    from collections import Counter
+    res = [[0] * N for _ in range(N)]
+    cells = []
+    for c in range(16):
+        qx, qy = (c % 4) * 16, (c // 4) * 16
+        rows = []
+        gain = 0
+        for y in range(16):
+            cnt = Counter(img[qy + y][qx + x] for x in range(16) if img[qy + y][qx + x])
+            mc = cnt.most_common(2)
+            rows.append(mc)
+            if len(mc) > 1:
+                gain += mc[1][1]
+        cells.append((gain, c, rows))
+    chosen = set()
+    band = Counter()
+    for gain, c, rows in sorted(cells, reverse=True):
+        if len(chosen) >= max_ov or gain == 0 or band[c // 4] >= ov_per_band:
+            continue
+        chosen.add(c); band[c // 4] += 1
+    nb = 0
+    for gain, c, rows in cells:
+        qx, qy = (c % 4) * 16, (c // 4) * 16
+        if any(rows):
+            nb += 1
+        for y in range(16):
+            mc = rows[y]
+            if not mc:
+                continue
+            for x in range(16):
+                v = img[qy + y][qx + x]
+                if not v:
+                    continue
+                res[qy + y][qx + x] = mc[1][0] if (c in chosen and len(mc) > 1 and v == mc[1][0]) else mc[0][0]
+    return res, nb, len(chosen)
+
+def color_preview(out):
+    S = 3
+    kinds = [('olive', 0, ''), ('olive', 6, ''), ('grey', 6, ''), ('olive', 99, '')]
+    dirs = [0, 3, 6, 11]
+    W = len(dirs) * (N * S + 6) + 6
+    sheet = Image.new('RGB', (W, len(kinds) * (N * S + 6) + 6), prgb(1))
+    for row, (sch, ov, _) in enumerate(kinds):
+        for i, k in enumerate(dirs):
+            q, nb, no = quantize(frame_color(k, sch), ov)
+            ox, oy = 6 + i * (N * S + 6), 6 + row * (N * S + 6)
+            for y in range(N):
+                for x in range(N):
+                    if q[y][x]:
+                        for dy in range(S):
+                            for dx in range(S):
+                                sheet.putpixel((ox + x * S + dx, oy + y * S + dy), prgb(q[y][x]))
+    sheet.save(out)
+
+MAX_OV = 6
+
+def cell_bytes(bits16):
+    out = bytearray()
+    for cx in (0, 8):
+        for y in range(16):
+            v = 0
+            for x in range(8):
+                if bits16[y][cx + x]:
+                    v |= 0x80 >> x
+            out.append(v)
+    return out
+
+def dir_blob(k):
+    from collections import Counter
+    img = frame_color(k, 'olive')
+    cells = []
+    for c in range(16):
+        qx, qy = (c % 4) * 16, (c // 4) * 16
+        rows = []
+        gain = 0
+        for y in range(16):
+            mc = Counter(img[qy + y][qx + x] for x in range(16) if img[qy + y][qx + x]).most_common(2)
+            rows.append(mc)
+            if len(mc) > 1:
+                gain += mc[1][1]
+        cells.append((gain, c, rows))
+    chosen, band = set(), Counter()
+    for gain, c, rows in sorted(cells, reverse=True):
+        if len(chosen) >= MAX_OV or gain == 0 or band[c // 4] >= 2:
+            continue
+        chosen.add(c); band[c // 4] += 1
+    bm = om = 0
+    pat_base = [bytes(32)] * 16
+    pat_ov, col_base, col_ov = [], {}, []
+    for gain, c, rows in cells:
+        qx, qy = (c % 4) * 16, (c // 4) * 16
+        base = [[0] * 16 for _ in range(16)]
+        ov = [[0] * 16 for _ in range(16)]
+        bc, oc = [0] * 16, [0] * 16
+        for y in range(16):
+            mc = rows[y]
+            if not mc:
+                continue
+            bc[y] = mc[0][0]
+            if c in chosen and len(mc) > 1:
+                oc[y] = mc[1][0]
+            for x in range(16):
+                v = img[qy + y][qx + x]
+                if not v:
+                    continue
+                if oc[y] and v == oc[y]:
+                    ov[y][x] = 1
+                else:
+                    base[y][x] = 1
+        if any(any(r) for r in base):
+            bm |= 1 << c
+            pat_base[c] = cell_bytes(base)
+            col_base[c] = bytes(bc)
+        if c in chosen:
+            om |= 1 << c
+    for c in range(16):                         # 重ねはマス番号の昇順
+        if om & (1 << c):
+            gain, _, rows = cells[c]
+            qx, qy = (c % 4) * 16, (c // 4) * 16
+            ov = [[0] * 16 for _ in range(16)]
+            oc = [0] * 16
+            for y in range(16):
+                mc = rows[y]
+                if len(mc) > 1:
+                    oc[y] = mc[1][0]
+                    for x in range(16):
+                        if img[qy + y][qx + x] == oc[y]:
+                            ov[y][x] = 1
+            pat_ov.append(cell_bytes(ov)); col_ov.append(bytes(oc))
+    blob = bytearray(bm.to_bytes(2, 'little') + om.to_bytes(2, 'little'))
+    for c in range(16):
+        blob += pat_base[c]
+    for j in range(MAX_OV):
+        blob += pat_ov[j] if j < len(pat_ov) else bytes(32)
+    for col in col_ov:
+        blob += col
+    for c in range(16):
+        if bm & (1 << c):
+            blob += col_base[c]
+    assert len(blob) <= 1024
+    return bytes(blob + bytes(1024 - len(blob)))
+
+if __name__ == '__main__' and sys.argv[1] == 'color':
+    color_preview(sys.argv[2])
+if __name__ == '__main__' and sys.argv[1] == 'bin':
+    open(sys.argv[2], 'wb').write(b''.join(dir_blob(k) for k in range(NDIR)))

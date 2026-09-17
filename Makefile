@@ -330,7 +330,7 @@ ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
 # 中ボス用オーバレイ: 通常面のオーバレイから主砲の弾幕を抜き、中ボスを足す。海の区間で出現の瞬間に入れ替え、戦艦の前に戻す。
 # ★共通部分は ovl.bin と同じ .rel を同じ順で(static の番地を揃えるため)。中ボス本体は最後。
 OVL8_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_power.rel $(BUILD)/ovl_midboss.rel
-$(BUILD)/ovl8.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_midboss.c $(HDRS) $(BUILD)/fw200_mask.h $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
+$(BUILD)/ovl8.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_midboss.c $(HDRS) $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead8.rel $(OVL8_RELS) $(BUILD)/resident_syms.rel -o $@
@@ -345,12 +345,10 @@ $(BUILD)/ovl8.bin: $(BUILD)/ovl8.ihx tools/ihx2bin.mjs
 	 echo "  ovl8.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"; \
 	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl8.map | head -1); \
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl8 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
-# Fw 200(1面の中ボス, 64x64)の 32 方向コマ(16384B=2バンク)と、コマごとの絵のあるマスの表
+# Fw 200(1面の中ボス, 64x64・迷彩＋重ね)の 32 方向×1024B(4バンク)
 $(BUILD)/fw200.bin: tools/gen_fw200.py | $(BUILD)
-	python3 tools/gen_fw200.py bin $@ $(BUILD)/fw200_mask.h
-$(BUILD)/fw200_mask.h: $(BUILD)/fw200.bin
-	@true
-ROMPACK_BANKS += --asset 29 $(BUILD)/fw200.bin --bank 24 $(BUILD)/ovl8.bin
+	python3 tools/gen_fw200.py bin $@
+ROMPACK_BANKS += --asset 44 $(BUILD)/fw200.bin --bank 24 $(BUILD)/ovl8.bin
 
 BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
