@@ -18,10 +18,10 @@
 #define OVL8_BANK    24    /* 中ボス用オーバレイ(通常面のものから主砲の弾幕を抜き、中ボスを足したもの) */
 #define MB_FRAMES_BANK 23  /* Fw 200 の 64 コマ(8192B) */
 #define MB_VRAM_Y    136   /* page0: コマを並べる先頭行(136..199) */
-#define MB_SAVE_Y    200   /* page0: 借りる前の砲身パターン行の退避先 */
-#define MB_PAT_LINE  247   /* スプライトパターン表のうち SPR_BARREL0..+12 が載る行(0x7800+112*8=247*128) */
+#define MB_SAVE_Y    200   /* page0: 借りる前の砲身パターン2行(247/248)の退避先(200/201) */
+#define MB_PAT_LINE  247   /* スプライトパターン表のうち SPR_BARREL0..+12 が載る行(0x7800+112*8=247*128)。2機目は次の行(+16..+28) */
 #define MB_PAT       SPR_BARREL0
-#define MB_SLOT      (HUD_SLOTS + 4)   /* 宙返りの4枠の後ろ */
+#define MB_SLOT      (HUD_SLOTS + 4)   /* 宙返りの4枠の後ろから 4枚×2機 */
 
 extern u8 g_mb;
 

@@ -1181,8 +1181,8 @@ u8 stage_update(void) {
             }
         }
     }
-    if (g_mb == MB_ACTIVE) mb_frame();   /* ★中ボス: コマを1行写して4枚を置く(HUD+4..+7)。宙返りと同じくVDPコマンドを出すのでここ */
-    g_spr_base = (u8)((g_mb == MB_ACTIVE) ? (HUD_SLOTS + 8) : g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
+    if (g_mb == MB_ACTIVE) mb_frame();   /* ★中ボス: コマを1行写して4枚×2機を置く(HUD+4..+11)。宙返りと同じくVDPコマンドを出すのでここ */
+    g_spr_base = (u8)((g_mb == MB_ACTIVE) ? (HUD_SLOTS + 12) : g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (curstage == STAGE_FINAL && g_ovl_ok) final_bgbul();   /* ★弾を背景へ(スプライトでは描かせない) */
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
@@ -1204,14 +1204,14 @@ u8 stage_update(void) {
     if (g_mb == MB_LOAD) {
         overlay_load(OVL8_BANK);
         if (g_ovl_ok) {
-            vdp_copy(0, MB_PAT_LINE, 0, MB_SAVE_Y, 256, 1);   /* 借りる砲身のパターン行を page0 へ退避 */
+            vdp_copy(0, MB_PAT_LINE, 0, MB_SAVE_Y, 256, 2);   /* 借りる砲身のパターン2行を page0 へ退避 */
             ramx_use_ram(); mb_init(); ramx_use_cart();
             g_mb = MB_ACTIVE;
         } else {
             overlay_load(OVL_BANK); g_mb = MB_OVER;
         }
     } else if (g_mb == MB_RESTORE) {
-        vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_LINE, 256, 1);       /* 砲身を戻す */
+        vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_LINE, 256, 2);       /* 砲身を戻す */
         overlay_load(OVL_BANK);
         ent_spr_cache_inval(HUD_SLOTS);
         g_mb = MB_OVER;
