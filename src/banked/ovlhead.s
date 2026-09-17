@@ -43,6 +43,8 @@
         jp      stub_ret              ; slot19 sink_init(撃沈のオーバレイだけ)
         jp      stub_zero             ; slot20 sink_frame
         jp      _ovl_power_frame      ; slot21 (OVL_SLOT_POWER_FRAME)
+        jp      stub_ret             ; slot22 mb_init(中ボスのオーバレイだけ)
+        jp      stub_ret             ; slot23 mb_frame
 stub_zero:
         xor     a
         ld      d, a

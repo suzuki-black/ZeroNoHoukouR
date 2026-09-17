@@ -15,6 +15,7 @@
 #include "input.h"
 #include "player.h"        /* g_player_x/y(対空砲の自機狙い) */
 #include "bank.h"          /* data_read(艦体OPSをバンク→RAM) */
+#include "midboss.h"       /* 1面の中ボス(g_mb / コマの置き場) */
 #include "assets_data.h"   /* 自動生成: ship_ops_off/len, ship_hull/bowcnt/bowyb, SHIP_OPS_RAM_MAX, ASSET_BANK */
 #include "hotcode.h"       /* ent_resolve_collisions/aa_update/aa_collide のRAM実行ラッパ */
 #include "aa_hot.h"        /* AA状態(cam/curstage/aa_*)を hot.c と共有(公開=非static化) */
@@ -542,6 +543,18 @@ u16 burn_wtop[BURN_MAX];  /* 火球の世界Y上端 */
 u8  burn_sz[BURN_MAX];    /* 0大/1中/2小 */
 u8  burn_coma[BURN_MAX];  /* ★各炎が現在Bへ焼込み済みのコマ(0/1)。fire_draw はコマ変化時のみ再焼込み=無駄コピー排除 */
 u8  nburn;
+/* ★1面の中ボス(Fw 200)の 64 方向コマ(バンク MB_FRAMES_BANK, 1コマ128B)を page0 の MB_VRAM_Y 行から並べる。
+   コマ1行＝スプライトパターン表の1行と同じ並びなので、オーバレイは向きが変わるたびに HMMM で1行写すだけで済む。
+   fb_ram は火球のベイクが済んだら空き。 */
+static void mb_bake(void) {
+    u8 k, i;
+    for (k = 0; k < 64; k++) {
+        data_read(MB_FRAMES_BANK, (u16)((u16)k * 128), fb_ram, 128);
+        vdp_write_addr((u16)((u16)(MB_VRAM_Y + k) * 128));
+        for (i = 0; i < 128; i++) vdp_data(fb_ram[i]);
+    }
+}
+
 /* 炎球1個を艦バッファBへ透過焼込み。src=page0の火球コマ列位置(fb_px添字)。 */
 static void burn_bake(u8 left, u16 wtop, u8 box, u8 src) {
     u16 bufY = (u16)((s16)SC_SHIPBUF_Y + (s16)wtop - SC_SHIP_R0 * 16);
@@ -706,6 +719,7 @@ static void stage_build(void) {
     g_pinv = 0;
     g_miss = 0;
     dmode = 0; dtimer = 0; raided = 0; final_over = 0;
+    g_mb = MB_NONE;        /* ★中ボスは挑戦ごとに出し直す(オーバレイと砲身の枠は上の overlay_load / sprites_load で元に戻っている) */
 
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
@@ -742,6 +756,7 @@ static void stage_begin_display(void) {
     scroll_init();               /* display=page1(以降 page0 は非表示=火球ベイク用に空く) */
     if (curstage != STAGE_FINAL) bake_fireballs();   /* 破壊エンプレ炎上用の火球6枚を page0(非表示域)へ事前ベイク。
                                                           ★最終面はそこを2組目のスプライト表に使う */
+    if (curstage == 0) mb_bake();   /* ★1面の中ボスのコマを page0(136〜199行)へ */
     if (curstage == STAGE_FINAL)  /* ★ボスの残りのコマを page0(y=32〜)へ。カード(page0)を消した後でないと焼けない */
         vdp_blit_bank_vram(BOSS_VRAM0_BANK, BOSS_VRAM0_LEN, 0, (u16)(BOSS_VRAM0_Y * 128));
     sea_init(curstage);          /* 艦種別の海コラム帯を選択 */
@@ -1014,6 +1029,14 @@ u8 stage_update(void) {
 #ifdef BGTEST
         vstep = 0;   /* ★実機検証: 海の区間で止めて測る(艦が出てこない=条件を一定に) */
 #endif
+        /* ★1面の中ボス: 艦が見える手前で出す。戦っている間は海を流し続けるため、カメラを 256(=16行)ずつ巻き戻す。
+           リング上の位置も R#23 も変わらない＝描き直し無し(海は16行周期)。世界に置いた増槽だけ一緒にずらす。 */
+        if (curstage == 0 && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;
+        if (g_mb == MB_ACTIVE && cam <= SC_CAM_SHIP + 32) {
+            u8 i; Entity *it = ent_pool();
+            cam += 256; scroll_rebase(256);
+            for (i = 0; i < ENT_MAX; i++, it++) if (it->active && it->type == ET_ITEM) it->ay += 256;
+        }
         if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= vstep) ? (u16)(cam - vstep) : SC_CAM_SHIP; }
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
@@ -1021,7 +1044,7 @@ u8 stage_update(void) {
 #ifdef BGTEST
         if (0) {     /* ★実機検証: 敵機も出さない(背景弾だけの負荷を測る) */
 #else
-        if (cam > SC_CAM_SHIP && (++ftick % diff_interval((u8)(fighter_iv[curstage] >> 1))) == 0) {
+        if (cam > SC_CAM_SHIP && g_mb != MB_ACTIVE && g_mb != MB_LOAD && (++ftick % diff_interval((u8)(fighter_iv[curstage] >> 1))) == 0) {
 #endif  /* ★出現間隔を半分=海モードの戦闘機を倍増 */
             Entity *f = ent_spawn(ET_FIGHTER);
             if (f) {
@@ -1158,7 +1181,8 @@ u8 stage_update(void) {
             }
         }
     }
-    g_spr_base = (u8)(g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
+    if (g_mb == MB_ACTIVE) mb_frame();   /* ★中ボス: コマを1行写して4枚を置く(HUD+4..+7)。宙返りと同じくVDPコマンドを出すのでここ */
+    g_spr_base = (u8)((g_mb == MB_ACTIVE) ? (HUD_SLOTS + 8) : g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (curstage == STAGE_FINAL && g_ovl_ok) final_bgbul();   /* ★弾を背景へ(スプライトでは描かせない) */
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
@@ -1175,6 +1199,23 @@ u8 stage_update(void) {
        VDP並列化はVRAM非接触の純CPU(=海interleaveのAI)とだけ行う。 */
     PROF_CALL(PF_FIRE, fire_draw());
     ramx_use_cart();    /* ★§4-3: ホット区間終了→page1/page2をカートリッジへ戻す(以降のバンキング=ミス/クリア/setup可) */
+
+    /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
+    if (g_mb == MB_LOAD) {
+        overlay_load(OVL8_BANK);
+        if (g_ovl_ok) {
+            vdp_copy(0, MB_PAT_LINE, 0, MB_SAVE_Y, 256, 1);   /* 借りる砲身のパターン行を page0 へ退避 */
+            ramx_use_ram(); mb_init(); ramx_use_cart();
+            g_mb = MB_ACTIVE;
+        } else {
+            overlay_load(OVL_BANK); g_mb = MB_OVER;
+        }
+    } else if (g_mb == MB_RESTORE) {
+        vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_LINE, 256, 1);       /* 砲身を戻す */
+        overlay_load(OVL_BANK);
+        ent_spr_cache_inval(HUD_SLOTS);
+        g_mb = MB_OVER;
+    }
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。
        尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */

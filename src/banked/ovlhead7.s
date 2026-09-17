@@ -29,6 +29,8 @@
         jp      _ovl_sink_init       ; slot19 (OVL_SLOT_SINK_INIT)
         jp      _ovl_sink_frame      ; slot20 (OVL_SLOT_SINK_FRAME)
         jp      stub_ret             ; slot21 power_frame(撃沈中は呼ばない)
+        jp      stub_ret             ; slot22 mb_init(中ボスのオーバレイだけ)
+        jp      stub_ret             ; slot23 mb_frame
 stub_zero:
         xor     a
         ld      d, a

@@ -56,6 +56,9 @@
 #define OVL_SLOT_SINK_FRAME     20
 #define OVL7_BANK               28
 #define OVL_SLOT_POWER_FRAME    21   /* 通常面のオーバレイ(増槽)。最終面/撃沈のオーバレイでは何もしない空関数 */
+/* 22〜 は中ボスのオーバレイ(OVL8_BANK, ovlhead8.s)だけが持つ。出現の瞬間に読み込む(midboss.h) */
+#define OVL_SLOT_MB_INIT        22
+#define OVL_SLOT_MB_FRAME       23
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -81,5 +84,7 @@ void rot_zoom(u8 k);                       /* 宙返り: 焼いたコマ(bank19)
 void sink_init(void);                      /* 撃沈シーン(OVL7): 状態を決め直す */
 u8   sink_frame(void);                     /* 撃沈シーン(OVL7): 1フレーム。戻り 1=終わった */
 void power_frame(void);                    /* パワーアップ: 銀の敵機が落ちたら増槽を出し、自機が触れたら段階を上げる */
+void mb_init(void);                        /* 中ボス(OVL8): 状態を決め直す */
+void mb_frame(void);                       /* 中ボス(OVL8): 1フレーム。終わったら g_mb=MB_RESTORE */
 
 #endif /* OVERLAY_H */

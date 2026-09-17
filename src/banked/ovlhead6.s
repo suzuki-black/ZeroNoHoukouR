@@ -32,6 +32,8 @@
         jp      stub_ret             ; slot19 sink_init
         jp      stub_zero            ; slot20 sink_frame
         jp      stub_ret             ; slot21 power_frame(最終面に銀の敵機は出ない)
+        jp      stub_ret             ; slot22 mb_init(中ボスのオーバレイだけ)
+        jp      stub_ret             ; slot23 mb_frame
 stub_zero:
         xor     a
         ld      d, a
