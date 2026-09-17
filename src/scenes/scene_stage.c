@@ -543,15 +543,16 @@ u16 burn_wtop[BURN_MAX];  /* 火球の世界Y上端 */
 u8  burn_sz[BURN_MAX];    /* 0大/1中/2小 */
 u8  burn_coma[BURN_MAX];  /* ★各炎が現在Bへ焼込み済みのコマ(0/1)。fire_draw はコマ変化時のみ再焼込み=無駄コピー排除 */
 u8  nburn;
-/* ★1面の中ボス(Fw 200)の 64 方向コマ(バンク MB_FRAMES_BANK, 1コマ128B)を page0 の MB_VRAM_Y 行から並べる。
-   コマ1行＝スプライトパターン表の1行と同じ並びなので、オーバレイは向きが変わるたびに HMMM で1行写すだけで済む。
-   fb_ram は火球のベイクが済んだら空き。 */
+/* ★1面の中ボス(Fw 200, 64x64)の 32 方向コマ(バンク MB_FRAMES_BANK から2バンク, 1コマ512B=4行)を page0 の MB_VRAM_Y 行から並べる。
+   コマの1行＝スプライトパターン表の1行と同じ並びなので、オーバレイは向きが変わるたびに HMMM で写すだけで済む。
+   fb_ram(512B)は火球のベイクが済んだら空き。 */
 static void mb_bake(void) {
-    u8 k, i;
-    for (k = 0; k < 64; k++) {
-        data_read(MB_FRAMES_BANK, (u16)((u16)k * 128), fb_ram, 128);
-        vdp_write_addr((u16)((u16)(MB_VRAM_Y + k) * 128));
-        for (i = 0; i < 128; i++) vdp_data(fb_ram[i]);
+    u8 k;
+    u16 i;
+    for (k = 0; k < MB_NDIR; k++) {
+        data_read((u8)(MB_FRAMES_BANK + (k >> 4)), (u16)((u16)(k & 15) * 512), fb_ram, 512);
+        vdp_write_addr((u16)((u16)(MB_VRAM_Y + ((u16)k << 2)) * 128));
+        for (i = 0; i < 512; i++) vdp_data(fb_ram[i]);
     }
 }
 
@@ -756,7 +757,7 @@ static void stage_begin_display(void) {
     scroll_init();               /* display=page1(以降 page0 は非表示=火球ベイク用に空く) */
     if (curstage != STAGE_FINAL) bake_fireballs();   /* 破壊エンプレ炎上用の火球6枚を page0(非表示域)へ事前ベイク。
                                                           ★最終面はそこを2組目のスプライト表に使う */
-    if (curstage == 0) mb_bake();   /* ★1面の中ボスのコマを page0(136〜199行)へ */
+    if (curstage == 0) mb_bake();   /* ★1面の中ボスのコマを page0(40〜167行)へ */
     if (curstage == STAGE_FINAL)  /* ★ボスの残りのコマを page0(y=32〜)へ。カード(page0)を消した後でないと焼けない */
         vdp_blit_bank_vram(BOSS_VRAM0_BANK, BOSS_VRAM0_LEN, 0, (u16)(BOSS_VRAM0_Y * 128));
     sea_init(curstage);          /* 艦種別の海コラム帯を選択 */
@@ -1032,11 +1033,14 @@ u8 stage_update(void) {
         /* ★1面の中ボス: 艦が見える手前で出す。戦っている間は海を流し続けるため、カメラを 256(=16行)ずつ巻き戻す。
            リング上の位置も R#23 も変わらない＝描き直し無し(海は16行周期)。世界に置いた増槽だけ一緒にずらす。 */
         if (curstage == 0 && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;
-        if (g_mb == MB_ACTIVE && cam <= SC_CAM_SHIP + 32) {
-            u8 i; Entity *it = ent_pool();
-            cam += 256; scroll_rebase(256);
-            for (i = 0; i < ENT_MAX; i++, it++) if (it->active && it->type == ET_ITEM) it->ay += 256;
-        }
+        /* 終わったら逆に 256 進め、巻き戻したぶん待たされずに艦が出てくるようにする。 */
+        { s16 d = (g_mb == MB_ACTIVE && cam <= SC_CAM_SHIP + 32) ? 256
+                : (g_mb == MB_OVER && cam >= SC_CAM_SHIP + 304) ? -256 : 0;
+          if (d) {
+              u8 i; Entity *it = ent_pool();
+              cam = (u16)(cam + d); scroll_rebase((u16)d);
+              for (i = 0; i < ENT_MAX; i++, it++) if (it->active && it->type == ET_ITEM) it->ay += d;
+          } }
         if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= vstep) ? (u16)(cam - vstep) : SC_CAM_SHIP; }
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
@@ -1181,11 +1185,12 @@ u8 stage_update(void) {
             }
         }
     }
-    if (g_mb == MB_ACTIVE) mb_frame();   /* ★中ボス: コマを1行写して4枚×2機を置く(HUD+4..+11)。宙返りと同じくVDPコマンドを出すのでここ */
-    g_spr_base = (u8)((g_mb == MB_ACTIVE) ? (HUD_SLOTS + 12) : g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
+    g_spr_base = (u8)(g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
+    if (g_mb == MB_ACTIVE) g_spr_limit = (u8)(32 - g_mb_n);   /* ★中ボスは末尾の枠(最低優先) */
     if (curstage == STAGE_FINAL && g_ovl_ok) final_bgbul();   /* ★弾を背景へ(スプライトでは描かせない) */
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
+    if (g_mb == MB_ACTIVE) mb_frame();   /* ★中ボス: ent_draw_all の**後**(その停止マーカを埋め直して末尾の枠へ置く) */
     if (g_cbul_live) curtain_present(CURTAIN_SLOTS, CURTAIN_SPLIT_LINE);   /* ★弾が居るときだけ
                                              (空振りでも色キャッシュを毎フレーム捨ててしまうため) */
 #ifdef DEBUG_PROF
@@ -1204,16 +1209,17 @@ u8 stage_update(void) {
     if (g_mb == MB_LOAD) {
         overlay_load(OVL8_BANK);
         if (g_ovl_ok) {
-            vdp_copy(0, MB_PAT_LINE, 0, MB_SAVE_Y, 256, 2);   /* 借りる砲身のパターン2行を page0 へ退避 */
+            vdp_copy(0, MB_PAT_ROW_A, 0, MB_SAVE_Y, 256, 2);            /* 借りるパターン4行を page0 へ退避 */
+            vdp_copy(0, MB_PAT_ROW_B, 0, (u16)(MB_SAVE_Y + 2), 256, 2);
             ramx_use_ram(); mb_init(); ramx_use_cart();
             g_mb = MB_ACTIVE;
         } else {
             overlay_load(OVL_BANK); g_mb = MB_OVER;
         }
     } else if (g_mb == MB_RESTORE) {
-        vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_LINE, 256, 2);       /* 砲身を戻す */
+        vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_ROW_A, 256, 2);            /* 砲身と小さい艦載機のパターンを戻す */
+        vdp_copy(0, (u16)(MB_SAVE_Y + 2), 0, MB_PAT_ROW_B, 256, 2);
         overlay_load(OVL_BANK);
-        ent_spr_cache_inval(HUD_SLOTS);
         g_mb = MB_OVER;
     }
 

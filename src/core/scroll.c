@@ -152,11 +152,12 @@ void scroll_init(void) {
 
 /* ★最終面: 世界の縦座標を add(16の倍数)だけずらす。表示リングは 256px 周期、世界行 r のスロットは
    (u8)(r<<4) なので、512 ずらしてもリング上の位置は同じ＝**描き直しゼロ**でカメラを巻き戻せる。
-   海しか無い面でだけ使う(艦の行があると世界の中身が変わる)。 */
+   海しか無い面でだけ使う(艦の行があると世界の中身が変わる)。
+   ★1面の中ボスは 256 巻き戻し(+256)と、終わってからの前送り(-256=0xFF00)に使う。負でも行数がずれないよう符号付きで割る。 */
 void scroll_rebase(u16 add) {
     g_cam = (u16)(g_cam + add);
-    drawn_top = (s16)(drawn_top + (s16)(add >> 4));
-    drawn_bot = (s16)(drawn_bot + (s16)(add >> 4));
+    drawn_top = (s16)(drawn_top + ((s16)add >> 4));
+    drawn_bot = (s16)(drawn_bot + ((s16)add >> 4));
 }
 
 void scroll_to(u16 cam) {

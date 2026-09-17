@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""Fw 200 コンドル(1面の中ボス)の見下ろしシルエットを 64 方向ぶん 32x32 の 1bit に焼く。
-   機体は実寸(全幅 32.85m / 全長 23.45m)を 0.94px/m で縦横比そのまま描き、8倍で回転してから面積率で2値化する。
+"""Fw 200 コンドル(1面の中ボス)の見下ろしシルエットを 32 方向ぶん 64x64 の 1bit に焼く。
+   機体は実寸(全幅 32.85m / 全長 23.45m)を 1.88px/m で縦横比そのまま描き、8倍で回転してから面積率で2値化する。
+   ★32x32(64方向)では「中ボスの迫力が無い」と実機で指摘 → 倍の 64x64(16x16 を 4x4=16枚)。
+     コマが4倍になり VRAM の置き場(page0)に 64 方向は入らないので 32 方向。
    使い方: python3 tools/gen_fw200.py preview <out.png>   … 見本(16方向の拡大＋海の上での等倍)
-           python3 tools/gen_fw200.py bin <out.bin>       … ROM 用 8192B(64コマ×128B)
-   1コマ=128B は 16x16 スプライト4枚ぶんのパターン(左上/右上/左下/右下の順)。各32Bは前半16B=左8列の16行、
+           python3 tools/gen_fw200.py bin <out.bin>       … ROM 用 16384B(32コマ×512B)
+   1コマ=512B=128B×4行。1行=4x4 に並べた 16x16 スプライトの横1列ぶん(左から4枚)。各32Bは前半16B=左8列の16行、
    後半16B=右8列の16行(MSB=左端)。スプライトパターン表の1行(128B)にそのまま載る並び。
 """
 import math, sys
 from PIL import Image, ImageDraw
 
 SS = 8                 # 超解像の倍率
-N = 32
-PX_M = 0.94            # 1m あたりのドット数
+N = 64
+NDIR = 32
+PX_M = 1.88            # 1m あたりのドット数
 
 def m(x, y):           # 機体座標(m, 機首+y, 右+x, 機体中心原点) → 超解像ピクセル(回転前・上向き)
     return (N * SS / 2 + x * PX_M * SS, N * SS / 2 - y * PX_M * SS)
@@ -36,17 +39,17 @@ def body():
     return polys
 
 def frame(k):
-    """方向 k(0=機首上, 時計回り 64 分割)の 32x32 2値(行ごとの bit リスト)。"""
+    """方向 k(0=機首上, 時計回り NDIR 分割)の NxN 2値(行ごとの bit リスト)。"""
     big = Image.new('L', (N * SS, N * SS), 0)
     d = ImageDraw.Draw(big)
     for p in body():
         d.polygon([m(x, y) for x, y in p], fill=255)
-    big = big.rotate(-k * 360.0 / 64, resample=Image.BILINEAR, center=(N * SS / 2, N * SS / 2))
+    big = big.rotate(-k * 360.0 / NDIR, resample=Image.BILINEAR, center=(N * SS / 2, N * SS / 2))
     small = big.resize((N, N), Image.BOX)
     return [[1 if small.getpixel((x, y)) >= 80 else 0 for x in range(N)] for y in range(N)]
 
 # 行別の色(画面固定の光=上から照らす): MSX パレット番号と表示用 RGB(0..7)
-ROWCOL = [14] * 6 + [4] * 20 + [5] * 6
+ROWCOL = [14] * 12 + [4] * 40 + [5] * 12
 PAL = {1: (1, 4, 5), 2: (2, 5, 6), 7: (0, 1, 3), 4: (3, 3, 3), 5: (2, 2, 2), 14: (4, 4, 5), 13: (1, 1, 1)}
 def rgb(i): return tuple(v * 255 // 7 for v in PAL[i])
 
@@ -67,36 +70,45 @@ def paste(im, bits, ox, oy, scale=1):
                         im.putpixel((ox + x * scale + dx, oy + y * scale + dy), rgb(ROWCOL[y]))
 
 def preview(out):
-    S = 4
-    cols = 8
-    sheet = sea(cols * (N * S + 4) + 4, 2 * (N * S + 4) + 4 + 120)
-    for i, k in enumerate(range(0, 64, 4)):
-        paste(sheet, frame(k), 4 + (i % cols) * (N * S + 4), 4 + (i // cols) * (N * S + 4), S)
-    # 等倍(実画面サイズ)を2倍表示で: 1周を 8 方向ぶん並べる
-    strip = sea(256, 48, 7)
-    for i in range(8):
-        paste(strip, frame(i * 8), 4 + i * 32, 8)
-    strip = strip.resize((512, 96), Image.NEAREST)
-    sheet.paste(strip, (4, sheet.height - 104))
-    sheet.save(out)
+    # 実画面(256x212)に零戦(16x16)と並べた 2倍表示: 1周を 8 方向ぶん
+    scr = sea(256, 212, 7)
+    for i in range(4):
+        paste(scr, frame(i * 4), 8 + i * 60, 16)
+        paste(scr, frame((i + 4) * 4), 8 + i * 60, 100)
+    for y in range(16):                     # 自機の大きさの目安(16x16 の緑)
+        for x in range(16):
+            scr.putpixel((120 + x, 184 + y), (60, 150, 60))
+    scr.resize((512, 424), Image.NEAREST).save(out)
 
 def frame_bytes(k):
     b = frame(k)
     out = bytearray()
-    for qy, qx in ((0, 0), (0, 16), (16, 0), (16, 16)):
-        for cx in (0, 8):
-            for y in range(16):
-                v = 0
-                for x in range(8):
-                    if b[qy + y][qx + cx + x]:
-                        v |= 0x80 >> x
-                out.append(v)
+    for qy in range(0, N, 16):
+        for qx in range(0, N, 16):
+            for cx in (0, 8):
+                for y in range(16):
+                    v = 0
+                    for x in range(8):
+                        if b[qy + y][qx + cx + x]:
+                            v |= 0x80 >> x
+                    out.append(v)
     return out
 
 if __name__ == '__main__':
     if sys.argv[1] == 'preview':
         preview(sys.argv[2])
-    elif sys.argv[1] == 'bin':
-        data = b''.join(frame_bytes(k) for k in range(64))
-        assert len(data) == 8192
+    elif sys.argv[1] == 'bin':             # bin <out.bin> <mask.h>
+        data = b''.join(frame_bytes(k) for k in range(NDIR))
+        assert len(data) == 16384
         open(sys.argv[2], 'wb').write(data)
+        # 各コマで絵のある 16x16 マス(4x4)のビット表。空のマスにはスプライトを割り当てない(32枚の枠を節約)
+        masks = []
+        for k in range(NDIR):
+            fb = frame_bytes(k); bits = 0
+            for c in range(16):
+                if any(fb[c * 32:(c + 1) * 32]):
+                    bits |= 1 << c
+            masks.append(bits)
+        with open(sys.argv[3], 'w') as f:
+            f.write('/* 生成: tools/gen_fw200.py。Fw 200 の各コマで絵のあるマス(bit c = 4x4 の c 番目, 行優先) */\n')
+            f.write('static const u16 fw_mask[%d] = { %s };\n' % (NDIR, ', '.join('0x%04X' % v for v in masks)))
