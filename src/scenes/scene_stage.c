@@ -543,6 +543,16 @@ u16 burn_wtop[BURN_MAX];  /* 火球の世界Y上端 */
 u8  burn_sz[BURN_MAX];    /* 0大/1中/2小 */
 u8  burn_coma[BURN_MAX];  /* ★各炎が現在Bへ焼込み済みのコマ(0/1)。fire_draw はコマ変化時のみ再焼込み=無駄コピー排除 */
 u8  nburn;
+/* ★中ボスの向き g_mb_req のデータ(1024B)を ROM から MB_BUF へ。data_read は複写の間ずっと割込みを止めるので、
+   1KB を一度に読むと走査線分割と VBLANK が止まり、スプライトが数コマ消えた(openMSX)。128B ずつに分けて割込みを通す。 */
+static void mb_fetch(void) {
+    u8 k;
+    u16 off = (u16)((u16)(g_mb_req & 7) << 10);
+    for (k = 0; k < 8; k++)
+        data_read((u8)(MB_FRAMES_BANK + (g_mb_req >> 3)), (u16)(off + ((u16)k << 7)), (u8 *)(MB_BUF + ((u16)k << 7)), 128);
+    g_mb_req = 0xFF; g_mb_new = 1;
+}
+
 /* 炎球1個を艦バッファBへ透過焼込み。src=page0の火球コマ列位置(fb_px添字)。 */
 static void burn_bake(u8 left, u16 wtop, u8 box, u8 src) {
     u16 bufY = (u16)((s16)SC_SHIPBUF_Y + (s16)wtop - SC_SHIP_R0 * 16);
@@ -1174,6 +1184,7 @@ u8 stage_update(void) {
     g_spr_base = (u8)(g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (g_mb == MB_ACTIVE) g_spr_limit = (u8)(32 - g_mb_n);   /* ★中ボスは末尾の枠(最低優先) */
+    g_spr_hide_to = (g_mb == MB_ACTIVE) ? g_spr_limit : 0;   /* ★その手前に停止マーカを置かない(vdp.c) */
     if (curstage == STAGE_FINAL && g_ovl_ok) final_bgbul();   /* ★弾を背景へ(スプライトでは描かせない) */
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
     if (g_mb == MB_ACTIVE) mb_frame();   /* ★中ボス: ent_draw_all の**後**(その停止マーカを埋め直して末尾の枠へ置く) */
@@ -1192,18 +1203,14 @@ u8 stage_update(void) {
     ramx_use_cart();    /* ★§4-3: ホット区間終了→page1/page2をカートリッジへ戻す(以降のバンキング=ミス/クリア/setup可) */
 
     /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
-    if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) {   /* ★中ボスの向き: ROM から次の向きを読む(書くのは次のフレームのオーバレイ) */
-        data_read((u8)(MB_FRAMES_BANK + (g_mb_req >> 3)), (u16)((u16)(g_mb_req & 7) << 10), (u8 *)MB_BUF, 1024);
-        g_mb_req = 0xFF; g_mb_new = 1;
-    }
+    if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
         overlay_load(OVL8_BANK);
         if (g_ovl_ok) {
             vdp_copy(0, MB_PAT_ROW_A, 0, MB_SAVE_Y, 256, 2);            /* 借りるパターン6行を page0 へ退避 */
             vdp_copy(0, MB_PAT_ROW_B, 0, (u16)(MB_SAVE_Y + 2), 256, 4);
             ramx_use_ram(); mb_init(); ramx_use_cart();   /* 最初の向きを g_mb_req に置く */
-            data_read((u8)(MB_FRAMES_BANK + (g_mb_req >> 3)), (u16)((u16)(g_mb_req & 7) << 10), (u8 *)MB_BUF, 1024);
-            g_mb_req = 0xFF; g_mb_new = 1;
+            mb_fetch();
             g_mb = MB_ACTIVE;
         } else {
             overlay_load(OVL_BANK); g_mb = MB_OVER;

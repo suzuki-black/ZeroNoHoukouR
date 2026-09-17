@@ -558,16 +558,26 @@ void vdp_sat_pos(u8 slot, u8 x, u8 y, u8 patnum) {
      速すぎると V9958 の VRAMアクセス窓に追いつかず書込みが欠落し、SATのY/Xが化けてスプライトが
      "分身"する(実機turboRで発生・openMSX/Z80では速度が遅く再現しない)。Cループの1バイトあたりの
      命令数が自然にペーシングになり実機で安全(0x9B宛のvdp_cmd_flushはOTIR可だがVRAMデータ0x98は不可)。 */
+/* ★g_spr_hide_to(0 以外): 停止マーカを書かず、live..g_spr_hide_to-1 を画面外へ置く。後ろの枠に中ボスが居るとき用。
+     停止マーカを書いてから中ボスが自分の枠を書き直すまでの間に走査線が通ると、その行より上で中ボスが丸ごと消えた
+     (openMSX の画面で機体の上半分が欠けたコマ。VRAM の中身は正しかった)。 */
+u8 g_spr_hide_to;
+static void sat_tail(u8 live) {
+    if (g_spr_hide_to) {
+        u8 hy = spr_y(220);
+        for (; live < g_spr_hide_to; live++) { VDP_DAT = hy; VDP_DAT = 0; VDP_DAT = 0; VDP_DAT = 0; }
+    } else if (live < 32) VDP_DAT = 216;   /* 停止マーカ(=スロットliveのY)。以降のスプライト非表示 */
+}
 void vdp_sat_flush(u8 from, u8 live) {
     u8 i, n = (u8)((u16)(live - from) * 4);
     const u8 *src = &sat_shadow[(u16)from * 4];
     vdp_write_addr((u16)(SPR_ATTR + (u16)from * 4));
     for (i = 0; i < n; i++) VDP_DAT = src[i];
-    if (live < 32) VDP_DAT = 216;   /* 停止マーカ(=スロットliveのY)。以降のスプライト非表示 */
+    sat_tail(live);
     if (g_spr_dual) {               /* セットBへ同一内容をミラー(追加コストは 4B×枚数) */
         vdp_write_addr((u16)(SPR_ATTR_B + (u16)from * 4));
         for (i = 0; i < n; i++) VDP_DAT = src[i];
-        if (live < 32) VDP_DAT = 216;
+        sat_tail(live);
     }
 }
 

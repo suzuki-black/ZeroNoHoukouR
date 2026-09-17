@@ -271,6 +271,10 @@ static u8 draw1(u8 slot, const Entity *e) __naked {
         ld   a, (_g_vscroll)
         add  a, c
         dec  a
+        cp   a, #216               ; ★216=停止マーカ。ちょうど踏むとこの slot 以降が全部消える(spr_y と同じく 215 へ)
+        jr   nz, 00001$
+        dec  a
+    00001$:
         ld   (hl), a               ; p[0]=y+vscroll-1
         inc  hl
         ld   a, 2 (iy)             ; e->x(低位)

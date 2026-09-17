@@ -108,6 +108,32 @@ PALRGB = {0: (0, 0, 0), 1: (1, 4, 5), 2: (2, 5, 6), 3: (1, 3, 1), 4: (3, 3, 3), 
           8: (2, 5, 2), 9: (3, 3, 1), 12: (7, 4, 0), 13: (1, 1, 1), 14: (4, 4, 5), 15: (7, 7, 7)}
 def prgb(i): return tuple(v * 255 // 7 for v in PALRGB[i])
 
+XB, XW = 113, 115   # 国籍標識の黒/白(色番号+100。量子化で優先するための印。出力では 13/15)
+
+def cell_rows(img, c):
+    """マス c の各行の (本体の色, 重ねの色 or 0) と、重ねにする価値(gain)。
+       本体=その行で一番多い色。重ね=2番目に多い色。ただし国籍標識がある行は標識を優先し、白縁より黒十字を取る
+       (1行2色では白縁と黒十字を両方は出せない)。標識のあるマスは価値を大きくして重ねに選ばれやすくする
+       (翼が横向きだと標識の行はオリーブが多数派になり、1行1色では消えていた=実機で指摘)。"""
+    from collections import Counter
+    qx, qy = (c % 4) * 16, (c // 4) * 16
+    rows, gain = [], 0
+    for y in range(16):
+        cnt = Counter(img[qy + y][qx + x] for x in range(16) if img[qy + y][qx + x])
+        if not cnt:
+            rows.append((0, 0)); continue
+        base = cnt.most_common(1)[0][0]
+        ov = 0
+        for mark in (XB, XW):
+            if base != mark and cnt.get(mark):
+                ov = mark; gain += 40; break
+        if not ov:
+            mc = cnt.most_common(2)
+            if len(mc) > 1:
+                ov = mc[1][0]; gain += mc[1][1]
+        rows.append((base, ov))
+    return rows, gain
+
 def body_color(scheme):
     """(色, 多角形) を塗る順に。機体座標(m)。scheme: 'olive'=RLM72/73風の迷彩 / 'grey'=灰の濃淡。"""
     L = 23.45; nose, tail = L * 0.48, -L * 0.52; le, span = 3.8, 16.4
@@ -128,9 +154,9 @@ def body_color(scheme):
         out.append((13, [(xe - 0.6, le + 3.2), (xe + 0.6, le + 3.2), (xe + 0.6, le + 2.3), (xe - 0.6, le + 2.3)]))   # カウル先端
     out.append((GLASS, [(-0.7, nose - 0.3), (0.7, nose - 0.3), (0.9, nose - 2.6), (-0.9, nose - 2.6)]))
     for xc in (-12.0, 12.0):              # 主翼の国籍標識(白縁＋黒)
-        out.append((15, [(xc - 1.3, le - 0.9), (xc + 1.3, le - 0.9), (xc + 1.3, le - 3.5), (xc - 1.3, le - 3.5)]))
-        out.append((13, [(xc - 0.5, le - 0.9), (xc + 0.5, le - 0.9), (xc + 0.5, le - 3.5), (xc - 0.5, le - 3.5)]))
-        out.append((13, [(xc - 1.3, le - 1.7), (xc + 1.3, le - 1.7), (xc + 1.3, le - 2.7), (xc - 1.3, le - 2.7)]))
+        out.append((XW, [(xc - 1.3, le - 0.9), (xc + 1.3, le - 0.9), (xc + 1.3, le - 3.5), (xc - 1.3, le - 3.5)]))
+        out.append((XB, [(xc - 0.5, le - 0.9), (xc + 0.5, le - 0.9), (xc + 0.5, le - 3.5), (xc - 0.5, le - 3.5)]))
+        out.append((XB, [(xc - 1.3, le - 1.7), (xc + 1.3, le - 1.7), (xc + 1.3, le - 2.7), (xc - 1.3, le - 2.7)]))
     return out
 
 def frame_color(k, scheme):
@@ -153,51 +179,58 @@ def frame_color(k, scheme):
             out[y][x] = c.most_common(1)[0][0] if c else 5
     return out
 
-def quantize(img, max_ov, ov_per_band=2):
-    if max_ov == 99:   # 参考: 制約なし(元の色)
-        return img, 0, 0
-    """スプライトで出せる形へ: 16x16 のマスごとに 本体(1行1色)＋最大 max_ov マスだけ重ね(1行1色)。
-       戻り値: (出せる絵, 本体の枚数, 重ねの枚数)"""
+def pick_overlays(img, max_ov):
     from collections import Counter
-    res = [[0] * N for _ in range(N)]
-    cells = []
-    for c in range(16):
-        qx, qy = (c % 4) * 16, (c // 4) * 16
-        rows = []
-        gain = 0
-        for y in range(16):
-            cnt = Counter(img[qy + y][qx + x] for x in range(16) if img[qy + y][qx + x])
-            mc = cnt.most_common(2)
-            rows.append(mc)
-            if len(mc) > 1:
-                gain += mc[1][1]
-        cells.append((gain, c, rows))
-    chosen = set()
-    band = Counter()
-    for gain, c, rows in sorted(cells, reverse=True):
-        if len(chosen) >= max_ov or gain == 0 or band[c // 4] >= ov_per_band:
+    cells = [(cell_rows(img, c)[1], c) for c in range(16)]
+    chosen, band = [], Counter()
+    for gain, c in sorted(cells, reverse=True):
+        if len(chosen) >= max_ov or gain == 0 or band[c // 4] >= 2:
             continue
-        chosen.add(c); band[c // 4] += 1
-    nb = 0
-    for gain, c, rows in cells:
-        qx, qy = (c % 4) * 16, (c // 4) * 16
-        if any(rows):
-            nb += 1
-        for y in range(16):
-            mc = rows[y]
-            if not mc:
+        chosen.append(c); band[c // 4] += 1
+    return set(chosen)
+
+def split_cell(img, c, overlay):
+    """マス c を (本体のビット, 本体の行色, 重ねのビット, 重ねの行色) へ。色は出力用(標識の印を外す)。"""
+    rows, _ = cell_rows(img, c)
+    qx, qy = (c % 4) * 16, (c // 4) * 16
+    base = [[0] * 16 for _ in range(16)]; ov = [[0] * 16 for _ in range(16)]
+    bc, oc = [0] * 16, [0] * 16
+    for y in range(16):
+        b, o = rows[y]
+        if not overlay:
+            o = 0
+        bc[y], oc[y] = b % 100, o % 100
+        for x in range(16):
+            v = img[qy + y][qx + x]
+            if not v:
                 continue
+            if o and v == o:
+                ov[y][x] = 1
+            else:
+                base[y][x] = 1
+    return base, bc, ov, oc
+
+def quantize(img, max_ov, ov_per_band=2):
+    """スプライトで出せる形へ(見本用)。戻り値: (出せる絵, 本体の枚数, 重ねの枚数)"""
+    if max_ov == 99:
+        return [[v % 100 for v in r] for r in img], 0, 0
+    res = [[0] * N for _ in range(N)]
+    chosen = pick_overlays(img, max_ov) if max_ov else set()
+    for c in range(16):
+        base, bc, ov, oc = split_cell(img, c, c in chosen)
+        qx, qy = (c % 4) * 16, (c // 4) * 16
+        for y in range(16):
             for x in range(16):
-                v = img[qy + y][qx + x]
-                if not v:
-                    continue
-                res[qy + y][qx + x] = mc[1][0] if (c in chosen and len(mc) > 1 and v == mc[1][0]) else mc[0][0]
-    return res, nb, len(chosen)
+                if ov[y][x]:
+                    res[qy + y][qx + x] = oc[y]
+                elif base[y][x]:
+                    res[qy + y][qx + x] = bc[y]
+    return res, 0, len(chosen)
 
 def color_preview(out):
     S = 3
-    kinds = [('olive', 0, ''), ('olive', 6, ''), ('grey', 6, ''), ('olive', 99, '')]
-    dirs = [0, 3, 6, 11]
+    kinds = [('olive', 6, ''), ('olive', 99, '')]
+    dirs = [0, 3, 6, 8, 11, 16]
     W = len(dirs) * (N * S + 6) + 6
     sheet = Image.new('RGB', (W, len(kinds) * (N * S + 6) + 6), prgb(1))
     for row, (sch, ov, _) in enumerate(kinds):
@@ -226,66 +259,17 @@ def cell_bytes(bits16):
     return out
 
 def dir_blob(k):
-    from collections import Counter
     img = frame_color(k, 'olive')
-    cells = []
-    for c in range(16):
-        qx, qy = (c % 4) * 16, (c // 4) * 16
-        rows = []
-        gain = 0
-        for y in range(16):
-            mc = Counter(img[qy + y][qx + x] for x in range(16) if img[qy + y][qx + x]).most_common(2)
-            rows.append(mc)
-            if len(mc) > 1:
-                gain += mc[1][1]
-        cells.append((gain, c, rows))
-    chosen, band = set(), Counter()
-    for gain, c, rows in sorted(cells, reverse=True):
-        if len(chosen) >= MAX_OV or gain == 0 or band[c // 4] >= 2:
-            continue
-        chosen.add(c); band[c // 4] += 1
+    chosen = pick_overlays(img, MAX_OV)
     bm = om = 0
-    pat_base = [bytes(32)] * 16
-    pat_ov, col_base, col_ov = [], {}, []
-    for gain, c, rows in cells:
-        qx, qy = (c % 4) * 16, (c // 4) * 16
-        base = [[0] * 16 for _ in range(16)]
-        ov = [[0] * 16 for _ in range(16)]
-        bc, oc = [0] * 16, [0] * 16
-        for y in range(16):
-            mc = rows[y]
-            if not mc:
-                continue
-            bc[y] = mc[0][0]
-            if c in chosen and len(mc) > 1:
-                oc[y] = mc[1][0]
-            for x in range(16):
-                v = img[qy + y][qx + x]
-                if not v:
-                    continue
-                if oc[y] and v == oc[y]:
-                    ov[y][x] = 1
-                else:
-                    base[y][x] = 1
+    pat_base, col_base, pat_ov, col_ov = [bytes(32)] * 16, {}, [], []
+    for c in range(16):
+        base, bc, ov, oc = split_cell(img, c, c in chosen)
         if any(any(r) for r in base):
             bm |= 1 << c
-            pat_base[c] = cell_bytes(base)
-            col_base[c] = bytes(bc)
+            pat_base[c] = cell_bytes(base); col_base[c] = bytes(bc)
         if c in chosen:
             om |= 1 << c
-    for c in range(16):                         # 重ねはマス番号の昇順
-        if om & (1 << c):
-            gain, _, rows = cells[c]
-            qx, qy = (c % 4) * 16, (c // 4) * 16
-            ov = [[0] * 16 for _ in range(16)]
-            oc = [0] * 16
-            for y in range(16):
-                mc = rows[y]
-                if len(mc) > 1:
-                    oc[y] = mc[1][0]
-                    for x in range(16):
-                        if img[qy + y][qx + x] == oc[y]:
-                            ov[y][x] = 1
             pat_ov.append(cell_bytes(ov)); col_ov.append(bytes(oc))
     blob = bytearray(bm.to_bytes(2, 'little') + om.to_bytes(2, 'little'))
     for c in range(16):

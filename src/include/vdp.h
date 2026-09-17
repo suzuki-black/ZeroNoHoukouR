@@ -91,6 +91,7 @@ void vdp_sprite_hide_from(u8 slot);                  /* slot に停止マーカ(
 /* ★A6: SAT属性をRAM鏡へ溜め→一括バースト(ent_draw_all専用=ポートアクセス削減)。色表は別テーブルで従来通り。 */
 void vdp_sat_pos(u8 slot, u8 x, u8 y, u8 patnum);    /* 属性をシャドウへ(VRAM直書きせず) */
 void vdp_sat_flush(u8 from, u8 live);
+extern u8 g_spr_hide_to;   /* 0 以外: vdp_sat_flush は停止マーカを書かず、live..これ-1 を画面外へ(後ろの枠に中ボス) */
 
 /* ---- スプライト表の2セット目(ラスタ分割で32枚の総数制限を破る。詳細は vdp.c) ----
    R#5 = (色表>>7)|0x07 / 属性表 = 色表+0x200。A=0xEF(既定) / B=0xE7(色0x7000,属性0x7200)。 */
