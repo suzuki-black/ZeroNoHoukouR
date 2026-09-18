@@ -8,8 +8,9 @@
    ★スプライトは最低優先の末尾(32-n..31)。重ねを前(優先)、本体を後ろに、絵のあるマスだけ詰める(16〜18枚)。
      エンティティは g_spr_limit=32-n の手前まで。混んだ走査線では中ボスの方が先に欠ける(弾が見えなくなるよりよい)。
    ★呼ぶのは ent_draw_all の**後**: その末尾に書かれる停止マーカ(Y=216)を、中ボスの手前まで隠しスプライトで埋め直すため。
-   ★動き: 画面上から降りてきて、自機の上空を中心に反時計回りに旋回。側面銃座から自機狙いの3方向弾。
-     40秒で逃げる。撃墜で 500点＋残り時間ボーナス＋メガクラッシュ1回。
+   ★動き(突進): 自機の位置を見て 8 方向のどれかを決め、向き直ってから一直線に突っ込む。止まったらまた自機を見る、の繰り返し。
+     回転が見えるのは向き直る間だけ(ずっと回っているのは「せわしない」と実機で指摘)。向き直る間に自機狙いの3方向弾。
+     胴体に触れると被弾。40秒で逃げる。撃墜で 500点＋残り時間ボーナス＋メガクラッシュ1回。
    ★終わったら g_mb=MB_RESTORE にするだけ。オーバレイの入れ替えとパターンの書き戻しは常駐が行う。 */
 #include "types.h"
 #include "vdp.h"
@@ -24,31 +25,28 @@ __sfr __at(0x98) MB_DAT;
 
 extern u8 rnd(void);
 
-#define MB_HP       400     /* 半分単位(通常弾 2)=通常弾で200発 */
+#define MB_HP       200     /* 半分単位(通常弾 2)=通常弾で100発(400 は1面には硬すぎた) */
 #define MB_TIMEOUT  1200    /* 40秒で逃げる */
-#define MB_SPIN     56      /* 旋回の角速度(64分割を 256 分割した単位/フレーム)=約290フレームで1周 */
-#define MB_R0       60      /* 半径の初期値 */
-#define MB_R1       44      /* 半径の最小値 */
+#define MB_AIM_T    30      /* 向き直りの最短フレーム(180°の向き直りは 32 フレーム) */
+#define MB_DASH_T   45      /* 突進のフレーム数(3px/f で 135 ドット。画面の端に着いたらそこで止まる) */
 #define MB_PIERCE   0x7ABC  /* 貫通弾に付ける印(同じ弾が毎フレーム当たらないように) */
 
-enum { ST_ENTER, ST_ORBIT, ST_LEAVE, ST_DIE, ST_DONE };
+enum { ST_ENTER, ST_AIM, ST_DASH, ST_LEAVE, ST_DIE, ST_DONE };
 
-static const s8 sin64[64] = {
-    0, 12, 25, 37, 49, 60, 71, 81, 90, 98, 106, 112, 117, 122, 125, 126, 127, 126, 125, 122, 117, 112, 106, 98,
-    90, 81, 71, 60, 49, 37, 25, 12, 0, -12, -25, -37, -49, -60, -71, -81, -90, -98, -106, -112, -117, -122,
-    -125, -126, -127, -126, -125, -122, -117, -112, -106, -98, -90, -81, -71, -60, -49, -37, -25, -12 };
-static const u8 col_flash[16] = { 15,15,15,15,15,15,15,15, 15,15,15,15,15,15,15,15 };
+/* 8方向の突進速度(0=上, 時計回り)。斜めは 2,2 で約 2.8 */
+static const s8 dx8[8] = { 0, 2, 3, 2, 0, -2, -3, -2 };
+static const s8 dy8[8] = { -3, -2, 0, 2, 3, 2, 0, -2 };
+static const s8 hx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };   /* 向き直る間の惰性(1px/f) */
+static const s8 hy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
-static u8  st, fcur, flast, flash, fire_t, r, coldirty;
-static u16 phi, t, hp, bm, om;   /* bm=本体のマス / om=重ねのマス(いま VRAM に載っている向き) */
-static s16 bx, by, cx, cy;   /* bx,by=64x64 の左上(画面座標) / cx,cy=旋回の中心 */
+static u8  st, st_t, d8, fcur, flast, flash, coldirty;
+static u16 t, hp, bm, om;   /* bm=本体のマス / om=重ねのマス(いま VRAM に載っている向き) */
+static s16 bx, by;          /* 64x64 の左上(画面座標) */
 
 void ovl_mb_init(void) {
-    st = ST_ENTER; t = 0; hp = MB_HP; r = MB_R0;
-    cx = 128; cy = 84;
-    bx = (s16)(cx - r - 32); by = -64;
-    phi = (u16)48 << 8;      /* 旋回の入口=円の左端。そこでの進行方向は真下(=入場の向き) */
-    fcur = 16; flast = 16; flash = 0; fire_t = 60; bm = 0; om = 0; coldirty = 1;
+    st = ST_ENTER; t = 0; hp = MB_HP;
+    bx = 96; by = -64;
+    fcur = 16; flast = 16; flash = 0; bm = 0; om = 0; coldirty = 1;
     g_mb_n = 0; g_mb_req = 16; g_mb_new = 0;   /* 最初の向き(真下)は常駐がすぐ読む */
 }
 
@@ -67,13 +65,14 @@ static void put_sprites(void) {
         u16 m = pass ? bm : om;
         for (c = 0; c < 16; c++) {
             s16 x, y;
+            u8 off;
             if (!(m & (1u << c))) continue;
             x = (s16)(bx + ((c & 3) << 4));
             y = (s16)(by + ((c >> 2) << 4));
-            if (coldirty) vdp_sprite_color_tab(sl, flash ? col_flash : col);
+            if (coldirty) { if (flash) vdp_sprite_color(sl, 15); else vdp_sprite_color_tab(sl, col); }   /* 被弾=白 */
             col += 16;
-            vdp_sprite_pos(sl, (x < 0 || x > 240) ? 0 : (u8)x, (x < 0 || x > 240 || y < -16 || y > 212) ? 220 : (u8)y,
-                           pass ? MB_CELL_PAT(c) : MB_OV_PAT(j));
+            off = (u8)(x < 0 || x > 240 || y < -16 || y > 212);
+            vdp_sprite_pos(sl, off ? 0 : (u8)x, off ? 220 : (u8)y, pass ? MB_CELL_PAT(c) : MB_OV_PAT(j));
             j++; sl++;
         }
     }
@@ -101,8 +100,6 @@ static void hit_test(void) {
 static void shoot(void) {
     s16 ox = (s16)(bx + 24), oy = (s16)(by + 24);
     u8 a;
-    if (--fire_t) return;
-    fire_t = 40;
     if (oy < 0 || oy > 176) return;
     a = aim_dir(ox, oy, g_player_x, g_player_y);
     emit(ox, oy, (u8)(a - 2), 2, 3);
@@ -111,34 +108,46 @@ static void shoot(void) {
     sfx(2, SFX_EFIRE);
 }
 
+/* 自機の位置を見て突進の方向を決め、向き直りへ。画面の下半分に居るときは自機の真上の上空へ引き返す
+   (でないと自機に重なったまま下端で止まり、突っ込みが続かない)。 */
+static void aim(void) {
+    d8 = (u8)(((aim_dir((s16)(bx + 24), (s16)(by + 24), g_player_x, (by > 70) ? 8 : g_player_y) + 2) >> 2) & 7);
+    st = ST_AIM; st_t = 0;
+}
+
+/* 画面の範囲(機体の 1/4 までははみ出してよい)に留める。はみ出しかけたら 1 */
+static u8 move(s8 vx, s8 vy) {
+    s16 x = (s16)(bx + vx), y = (s16)(by + vy);
+    u8 out = 0;
+    if (x < -16) { x = -16; out = 1; } else if (x > 208) { x = 208; out = 1; }
+    if (y < -16) { y = -16; out = 1; } else if (y > 150) { y = 150; out = 1; }
+    bx = x; by = y;
+    return out;
+}
+
 void ovl_mb_frame(void) {
     u8 tgt = fcur;
     if (st == ST_DONE) return;
     t++;
     if (flash && !--flash) coldirty = 1;
-    if (st != ST_DIE) {   /* 旋回の中心は自機の横位置へゆっくり寄せる(64 ドット幅が画面の左右に収まる範囲) */
-        s16 tx = (s16)(g_player_x + 8);
-        if (tx < 112) tx = 112; else if (tx > 144) tx = 144;
-        if (cx < tx) cx++; else if (cx > tx) cx--;
-    }
     switch (st) {
     case ST_ENTER:
-        by += 2; bx = (s16)(cx - r - 32); tgt = 16;
-        if (by + 32 >= cy) st = ST_ORBIT;
+        by += 2; tgt = 16;
+        if (by >= 8) aim();
         hit_test();
         break;
-    case ST_ORBIT: {
-        u8 a;
-        phi -= MB_SPIN;
-        if (r > MB_R1 && (t & 15) == 0) r--;
-        a = (u8)(((phi + 128) >> 8) & 63);
-        bx = (s16)(cx + (((s16)r * sin64[a]) >> 7) - 32);
-        by = (s16)(cy - (((s16)r * sin64[(a + 16) & 63]) >> 7) - 32);
-        tgt = (u8)(((((a - 16) & 63) + 1) >> 1) & 31);   /* 反時計回りの進行方向(64分割→32方向) */
+    case ST_AIM: {                          /* 向き直りながら惰性でゆっくり進む。途中で撃つ */
+        u8 f8 = (u8)(((fcur + 2) >> 2) & 7);
+        move(hx8[f8], hy8[f8]);
+        tgt = (u8)(d8 << 2);
+        if (++st_t == 12) shoot();
+        if (st_t >= MB_AIM_T && fcur == tgt) { st = ST_DASH; st_t = 0; }
         hit_test();
-        shoot();
-        if (t >= MB_TIMEOUT) st = ST_LEAVE;
         break; }
+    case ST_DASH:                           /* 一直線に突っ込む */
+        if (move(dx8[d8], dy8[d8]) || ++st_t >= MB_DASH_T) aim();
+        hit_test();
+        break;
     case ST_LEAVE:                          /* 上へ向き直りながら上へ抜ける */
         tgt = 0;
         by -= 3;
@@ -162,7 +171,14 @@ void ovl_mb_frame(void) {
         g_mb = MB_RESTORE;
         return;
     }
-    if ((st == ST_ENTER || st == ST_ORBIT) && hp == 0) {   /* 撃墜 */
+    if (st == ST_AIM && t >= MB_TIMEOUT) st = ST_LEAVE;
+    if (st == ST_AIM || st == ST_DASH) {   /* 胴体に触れたら被弾(翼は当たらない。宙返り中は ent_player_hit が無視する) */
+        s16 dx = (s16)(bx + 24 - g_player_x), dy = (s16)(by + 24 - g_player_y);
+        if (dx < 0) dx = -dx;
+        if (dy < 0) dy = -dy;
+        if (dx < 12 && dy < 12) ent_player_hit(g_player_x, g_player_y);
+    }
+    if (st < ST_LEAVE && hp == 0) {   /* 撃墜 */
         u16 pts = (u16)(500 + (MB_TIMEOUT - t) / 3);    /* 残り1秒=10点 */
         st = ST_DIE; t = 0;
         g_score = (g_score > 65535u - pts) ? 65535u : (u16)(g_score + pts);

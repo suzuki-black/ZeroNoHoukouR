@@ -331,7 +331,7 @@ ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
 # ★共通部分は ovl.bin と同じ .rel を同じ順で(static の番地を揃えるため)。中ボス本体は最後。
 OVL8_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_power.rel $(BUILD)/ovl_midboss.rel
 $(BUILD)/ovl8.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_midboss.c $(HDRS) $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel   # ★8KB 枠に収めるため常にサイズ優先(1フレーム1回の処理で速度は効かない)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead8.rel $(OVL8_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead8.rel: $(SRC)/banked/ovlhead8.s | $(BUILD)
