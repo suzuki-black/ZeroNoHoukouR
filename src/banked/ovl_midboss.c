@@ -11,6 +11,8 @@
    ★動き(突進): 自機の位置を見て 8 方向のどれかを決め、向き直ってから一直線に突っ込む。止まったらまた自機を見る、の繰り返し。
      回転が見えるのは向き直る間だけ(ずっと回っているのは「せわしない」と実機で指摘)。向き直る間に自機狙いの3方向弾。
      胴体に触れると被弾。40秒で逃げる。撃墜で 500点＋残り時間ボーナス＋メガクラッシュ1回。
+   ★突進の予告: 突っ込む前に MB_WARN_T フレーム止まって白く明滅する(大きな体当たりを避ける合図)。
+   ★手負い: 耐久が半分を切ったら片側の内側エンジンが燃え(爆発を繰り返し出す)、向き直りが倍速・待ちが半分・突進が 4px/f になる。
    ★終わったら g_mb=MB_RESTORE にするだけ。オーバレイの入れ替えとパターンの書き戻しは常駐が行う。 */
 #include "types.h"
 #include "vdp.h"
@@ -29,6 +31,8 @@ extern u8 rnd(void);
 #define MB_TIMEOUT  1200    /* 40秒で逃げる */
 #define MB_AIM_T    30      /* 向き直りの最短フレーム(180°の向き直りは 32 フレーム) */
 #define MB_DASH_T   45      /* 突進のフレーム数(3px/f で 135 ドット。画面の端に着いたらそこで止まる) */
+#define MB_WARN_T   12      /* 突進の予告(止まって明滅)のフレーム数。突進のフレームに含まない */
+#define MB_HURT     (MB_HP / 2)   /* これを切ったら手負い */
 #define MB_PIERCE   0x7ABC  /* 貫通弾に付ける印(同じ弾が毎フレーム当たらないように) */
 
 enum { ST_ENTER, ST_AIM, ST_DASH, ST_LEAVE, ST_DIE, ST_DONE };
@@ -39,20 +43,20 @@ static const s8 dy8[8] = { -3, -2, 0, 2, 3, 2, 0, -2 };
 static const s8 hx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };   /* 向き直る間の惰性(1px/f) */
 static const s8 hy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
-static u8  st, st_t, d8, fcur, flast, flash, coldirty;
+static u8  st, st_t, d8, fcur, flast, flash, coldirty, hurt;
 static u16 t, hp, bm, om;   /* bm=本体のマス / om=重ねのマス(いま VRAM に載っている向き) */
 static s16 bx, by;          /* 64x64 の左上(画面座標) */
 
 void ovl_mb_init(void) {
     st = ST_ENTER; t = 0; hp = MB_HP;
     bx = 96; by = -64;
-    fcur = 16; flast = 16; flash = 0; bm = 0; om = 0; coldirty = 1;
+    fcur = 16; flast = 16; flash = 0; bm = 0; om = 0; coldirty = 1; hurt = 0;
     g_mb_n = 0; g_mb_req = 16; g_mb_new = 0;   /* 最初の向き(真下)は常駐がすぐ読む */
 }
 
 static void turn_to(u8 tgt) {
     u8 d = (u8)((tgt - fcur) & 31);
-    if (d && (t & 1)) fcur = (u8)((fcur + ((d < 16) ? 1 : 31)) & 31);
+    if (d && ((t & 1) || hurt)) fcur = (u8)((fcur + ((d < 16) ? 1 : 31)) & 31);
 }
 
 /* ent_draw_all の後に呼ぶ: 重ね→本体の順に末尾の枠へ置き、エンティティとの間の枠は隠して停止マーカを消す。 */
@@ -141,11 +145,13 @@ void ovl_mb_frame(void) {
         move(hx8[f8], hy8[f8]);
         tgt = (u8)(d8 << 2);
         if (++st_t == 12) shoot();
-        if (st_t >= MB_AIM_T && fcur == tgt) { st = ST_DASH; st_t = 0; }
+        if (st_t >= (hurt ? MB_AIM_T / 2 : MB_AIM_T) && fcur == tgt) { st = ST_DASH; st_t = 0; }
         hit_test();
         break; }
-    case ST_DASH:                           /* 一直線に突っ込む */
-        if (move(dx8[d8], dy8[d8]) || ++st_t >= MB_DASH_T) aim();
+    case ST_DASH:                           /* 予告(止まって明滅)のあと、一直線に突っ込む */
+        if (++st_t <= MB_WARN_T) {
+            if ((st_t & 3) == 1) { flash = 2; coldirty = 1; }
+        } else if (move(dx8[d8], dy8[d8]) || (hurt && move(hx8[d8], hy8[d8])) || st_t >= MB_WARN_T + MB_DASH_T) aim();
         hit_test();
         break;
     case ST_LEAVE:                          /* 上へ向き直りながら上へ抜ける */
@@ -177,6 +183,12 @@ void ovl_mb_frame(void) {
         if (dx < 0) dx = -dx;
         if (dy < 0) dy = -dy;
         if (dx < 12 && dy < 12) ent_player_hit(g_player_x, g_player_y);
+    }
+    if (st < ST_LEAVE && hp && hp < MB_HURT) {   /* 手負い: 片側の内側エンジン(機首方向へ約9・左へ約18ドット)が燃える */
+        u8 f8 = (u8)(((fcur + 2) >> 2) & 7), l8 = (u8)((f8 + 6) & 7);
+        if (!hurt) { hurt = 1; g_shake = 8; sfx(2, SFX_BOOM); }
+        if ((t & 7) == 0)
+            ent_spawn_explosion((s16)(bx + 24 + dx8[f8] * 3 + dx8[l8] * 6), (s16)(by + 24 + dy8[f8] * 3 + dy8[l8] * 6));
     }
     if (st < ST_LEAVE && hp == 0) {   /* 撃墜 */
         u16 pts = (u16)(500 + (MB_TIMEOUT - t) / 3);    /* 残り1秒=10点 */

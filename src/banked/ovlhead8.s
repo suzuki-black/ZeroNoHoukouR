@@ -13,7 +13,6 @@
         .globl  _ovl_crush_wave_y
         .globl  _ovl_shock_build
         .globl  _ovl_rot_zoom
-        .globl  _ovl_power_frame
         .globl  _ovl_mb_init
         .globl  _ovl_mb_frame
         .area   _CODE
@@ -38,7 +37,7 @@
         jp      stub_ret             ; slot18 final_bgbul
         jp      stub_ret             ; slot19 sink_init
         jp      stub_zero            ; slot20 sink_frame
-        jp      _ovl_power_frame     ; slot21
+        jp      stub_ret             ; slot21 power_frame(中ボス戦の間は銀の敵機が出ないので不要)
         jp      _ovl_mb_init         ; slot22 (OVL_SLOT_MB_INIT)
         jp      _ovl_mb_frame        ; slot23 (OVL_SLOT_MB_FRAME)
 stub_zero:
