@@ -367,11 +367,14 @@ void ent_draw_all(void) {
         if (e->hidden || e->y <= -16 || e->y >= 212 || e->x < 0 || e->x >= 256) continue;  /* 画面外/不可視 */
         if (ty == ET_PLAYER) player = e;                        /* 自機=最優先スロット(絶対に欠けさせない) */
         else                 vis[n++] = e;                      /* 通常描画対象 */
-        if (e->shadow) sh[nsh++] = e;                           /* 影(自機/敵機。可視かつshadow) */
+        if (e->shadow) sh[nsh++] = e;                           /* 影(自機/敵機。可視かつshadow)。中ボス中の自機の影は shadow=2(先に描く) */
     }
     /* 自機を固定最優先スロット(g_spr_base)へ */
     /* ★宙返り中は本体を描かない(2×2 合成が HUD 直後の4 slot に描いている)。影は下の影パスで描く。 */
     if (player && !g_loop_t) slot = draw1(slot, player);
+    /* ★中ボスが出ている間は枠が 5〜9 枚しか無く、最後に描く影が必ず溢れて自機の影が消えた(実機で指摘)。
+       その間だけ自機の影を自機の直後に描く(scene_stage が中ボスの間だけ自機の shadow を 2 にする)。 */
+    if (player && player->shadow == 2) slot = draw_shadow(slot, player);
     /* 収集集合内で開始位置を毎フレーム回転させて割当(9枚/走査線超の欠落をちらつきへ均等分散)。
        ★D2(§D2 逆順SAT): 交互フレームで割当て順を"正順/逆順"に反転する。SATは低slot=高優先(1走査線8枚まで)
          なので、順を反転すると混雑ラインで"表示される8枚"が前半⇔後半で交互に入れ替わる=消える弾が
@@ -392,7 +395,7 @@ void ent_draw_all(void) {
         if (slot < g_spr_limit && rx >= 0 && rx < 256) { spr_col1(slot, 12); vdp_sat_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
     }
     /* 落ち影パス: 影は最後=最も高いslot=最低優先(混雑ラインではゲーム弾/敵機に譲って先に落ちる)。 */
-    for (i = 0; i < nsh && slot < g_spr_limit; i++) slot = draw_shadow(slot, sh[i]);
+    for (i = 0; i < nsh && slot < g_spr_limit; i++) if (sh[i]->shadow == 1) slot = draw_shadow(slot, sh[i]);
     /* ★破壊点数ポップアップ: 撃破位置の"真上"(中心の16px上)に加算点を数字スプライトで表示。
        エンティティの後=高slot=低優先なので混雑走査線ではゲームスプライトへ譲る。ここで残フレームも減らす。
        ★画面内へクランプ: 真上が上端外だとスプライトYがu8回り込みで画面下へ飛び"消える"ため、

@@ -574,6 +574,12 @@ void mb_upload(u16 rowb, u8 sh) {
     g_mb_new = 0;
 }
 
+/* 自機の影の描き方: 1=通常(最後) / 2=自機の直後(中ボスの間。枠が足りず影が消えるため。entity.c) */
+static void player_shadow(u8 v) {
+    u8 i; Entity *e = ent_pool();
+    for (i = 0; i < ENT_MAX; i++, e++) if (e->active && e->type == ET_PLAYER) e->shadow = v;
+}
+
 void mb_finish(void) {
     u8 sl;
     for (sl = g_spr_used; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
@@ -1241,6 +1247,7 @@ u8 stage_update(void) {
             vdp_copy(0, MB_PAT_ROW_B, 0, (u16)(MB_SAVE_Y + 2), 256, 4);
             ramx_use_ram(); mb_init(); ramx_use_cart();   /* 最初の向きを g_mb_req に置く */
             mb_fetch();
+            player_shadow(2);
             g_mb = MB_ACTIVE;
         } else {
             overlay_load(OVL_BANK); g_mb = MB_OVER;
@@ -1249,6 +1256,7 @@ u8 stage_update(void) {
         vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_ROW_A, 256, 2);            /* 砲身と艦載機のパターンを戻す */
         vdp_copy(0, (u16)(MB_SAVE_Y + 2), 0, MB_PAT_ROW_B, 256, 4);
         overlay_load(OVL_BANK);
+        player_shadow(1);
         g_mb = MB_OVER;
     }
 

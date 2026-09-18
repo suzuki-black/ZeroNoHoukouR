@@ -30,6 +30,7 @@ extern u8 rnd(void);
 #define PB_HIGH_T   75      /* 高い所で位置を変える時間 */
 #define PB_HIGH_COL 10      /* 高い間(当たらない)の1色。2面の夕焼けでは淡い黄(5,5,2)=夕日を浴びて光る */
 #define PB_PIERCE   0x7ABD  /* 貫通弾に付ける印 */
+#define PB_SH_OFF   12      /* 低空でも影を右下へずらす量(0 だと 43 ドットの機体の真下に 32 ドットの影が隠れて見えなかった) */
 
 enum { ST_ENTER, ST_HIGH, ST_DIVE, ST_LOW, ST_CLIMB, ST_LEAVE, ST_DIE, ST_DONE };
 
@@ -65,7 +66,7 @@ static void fly(void) {
 /* ent_draw_all の後に呼ぶ: 重ね→本体→影 の順に末尾の枠へ。エンティティとの間の枠は隠す。 */
 static void put_sprites(void) {
     u8 c, j = 0, pass, sl, s0 = (u8)(32 - g_mb_n);
-    s16 bx = (s16)((qx >> 2) - 32), by = (s16)((qy >> 2) - 32), off = (s16)((alt >> 2) + (alt >> 3));
+    s16 bx = (s16)((qx >> 2) - 32), by = (s16)((qy >> 2) - 32), off = (s16)(PB_SH_OFF + (alt >> 2) + (alt >> 3));
     const u8 *col = (const u8 *)(MB_BUF + 708);
     for (sl = g_spr_used; sl < s0; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
     sl = s0;
@@ -127,7 +128,7 @@ static void shoot(void) {
 
 void ovl_mb_frame(void) {
     u8 tgt = dir, dv = (u8)(hurt ? 3 : 2);
-    s16 cx = (s16)(qx >> 2), cy = (s16)(qy >> 2), off = (s16)((alt >> 2) + (alt >> 3));
+    s16 cx = (s16)(qx >> 2), cy = (s16)(qy >> 2);
     s16 px = (s16)(g_player_x + 8), py = (s16)(g_player_y + 8);
     if (st == ST_DONE) return;
     t++;

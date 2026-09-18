@@ -6,6 +6,7 @@
    使い方: python3 tools/gen_pby.py preview <out.png>
            python3 tools/gen_pby.py bin <frames.bin> <shadow.bin>
    frames.bin: 6段階の大きさ(0=自機と同じ低空 43 ドット … 5=最も高い 60 ドット)×16方向 × 1024B。添字 = 大きさ*16 + 向き。
+     ★大きさ1以上(高い間)は 30 ドットの荒い元絵を最近傍で引き伸ばす(最も高い 60 ドットでちょうど 2 倍)=拡大と分かるようにドットを荒く。
      1件の並びは gen_fw200.py と同じ([0,1]本体のマス [2,3]重ねのマス [4..515]本体16マスのパターン [516..707]重ね6枠
      [708..]色表 16B×枚数(重ね→本体の順))。ただし重ねは最大2(1行2枚)、本体＋重ね＋影4 が 18 枚を超えない数まで。
    shadow.bin: 16方向 × 128B。影(海面の大きさ 32 ドット=2x2 マス)のパターン。
@@ -134,10 +135,29 @@ LEVELS = [1.35, 1.46, 1.57, 1.68, 1.79, PX_MAX]   # 大きさの段階ごとの 
 SHADOW_PX = 1.0
 MB_SPR_MAX = 18                                    # 中ボス全体(本体＋重ね＋影)のスプライト上限
 
+COARSE_PX = PX_MAX / 2   # ★拡大の元絵(30 ドット)。高い間はこれを最近傍で引き伸ばす=ドットが荒くなって「拡大」と分かる(ユーザー要望)
+
+def upscale(img, f):
+    """64x64 の中心を基準に f 倍へ最近傍で引き伸ばす(f=2 で 1ドット=2x2)"""
+    import math
+    out = [[0] * G.N for _ in range(G.N)]
+    h = G.N // 2
+    for y in range(G.N):
+        sy = h + math.floor((y - h) / f)
+        for x in range(G.N):
+            sx = h + math.floor((x - h) / f)
+            if 0 <= sy < G.N and 0 <= sx < G.N:
+                out[y][x] = img[sy][sx]
+    return out
+
 def blob(level, d):
-    use_pby(LEVELS[level])
     G.NDIR = NDIR16
-    img = G.frame_color(d, 'navy')
+    if level == 0:                       # 低空(自機と同じ高さ)は細かく描く
+        use_pby(LEVELS[0])
+        img = G.frame_color(d, 'navy')
+    else:                                # 高い間は荒い元絵の引き伸ばし
+        use_pby(COARSE_PX)
+        img = upscale(G.frame_color(d, 'navy'), LEVELS[level] / COARSE_PX)
     nbody = sum(1 for c in range(16) if any(img[(c // 4) * 16 + y][(c % 4) * 16 + x] for y in range(16) for x in range(16)))
     chosen = G.pick_overlays(img, max(0, min(2, MB_SPR_MAX - 4 - nbody)))
     bm = om = 0
