@@ -13,3 +13,4 @@ GAME.BIN
 # デバッグ/一時
 GAME_DEBUG*.ROM
 *.ROM.tmp
+__pycache__/

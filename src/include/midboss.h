@@ -20,6 +20,10 @@
 #define OVL8_BANK      24   /* 中ボス用オーバレイ(通常面のものから主砲の弾幕を抜き、中ボスを足したもの) */
 #define MB_FRAMES_BANK 44   /* Fw 200 の 32 方向×1024B(44..47。1バンク8方向) */
 #define MB_NDIR        32
+#define OVL9_BANK      25   /* 2面の中ボス(PBY カタリナ)用オーバレイ。入口は ovlhead8.s を共用 */
+#define PBY_BANK       48   /* PBY の 6段階の大きさ×16方向×1024B(48..59。1バンク8件) */
+#define PBY_SH_BANK    60   /* PBY の影 16方向×128B */
+#define MB_SBUF        0xEB80   /* 影のパターン128B の置き場(0xEB00〜は DEBUG_PROF の計測 40B。その後ろ) */
 #define MB_BUF         0xE700   /* 向きのデータ1024B の置き場(ship_ram/fb_ram の番地。どちらも面の準備でしか使わない) */
 #define MB_SAVE_Y      168  /* page0: 借りる前のパターン行の退避先(247,248 → 168,169 / 250..253 → 170..173) */
 /* ★パターンは 16x16 を 22 枚ぶん借りる(本体16マス＋重ね6)。どれも戦艦の区間か 2面以降でしか使わない:
@@ -29,11 +33,18 @@
 #define MB_PAT_ROW_A   247
 #define MB_PAT_ROW_B   250
 #define MB_CELL_PAT(c) ((u8)((((c) < 8) ? SPR_BARREL0 : SPR_PLANE_S) + (((c) & 7) << 2)))
-#define MB_OV_PAT(j)   ((u8)(SPR_PLANE_M + ((j) << 2)))
+#define MB_OV_PAT(j)   ((u8)(SPR_PLANE_M + ((j) << 2)))   /* 2面は重ね j=0,1 と影 j=2..5 */
 
 extern u8 g_mb;
 extern u8 g_mb_n;     /* 中ボスがいま使っているスプライト枚数。32-g_mb_n 以降を使う(最低優先)。エンティティはその手前まで */
 extern u8 g_mb_req;   /* オーバレイ→常駐: 読んでほしい向き(0xFF=なし) */
 extern u8 g_mb_new;   /* 常駐→オーバレイ: MB_BUF に新しい向きが入った */
+extern u16 g_mb_bm, g_mb_om;   /* いま VRAM に載っている絵の 本体のマス / 重ねのマス(mb_upload が更新) */
+/* 常駐(両オーバレイ共用): MB_BUF の絵をパターン表へ書く。行A へ本体 256B、行B へ続く rowb バイト(本体の残り＋重ね＋影)。
+   影を書くときは sh=1(MB_SBUF の 128B を続けて書く)。マスの表を更新し、スプライト枚数(本体＋重ね＋sh?4:0)が変わったら
+   エンティティ側の色キャッシュを捨てる。g_mb_new を下ろす。 */
+void mb_upload(u16 rowb, u8 sh);
+/* 常駐(両オーバレイ共用): 中ボスの枠を全部隠して終わりを知らせる(g_mb=MB_RESTORE。以降は常駐が片付ける) */
+void mb_finish(void);
 
 #endif /* MIDBOSS_H */

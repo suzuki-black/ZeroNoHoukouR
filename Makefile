@@ -351,7 +351,29 @@ $(BUILD)/fw200.bin: tools/gen_fw200.py | $(BUILD)
 	python3 tools/gen_fw200.py bin $@
 ROMPACK_BANKS += --asset 44 $(BUILD)/fw200.bin --bank 24 $(BUILD)/ovl8.bin
 
-BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
+# 2面の中ボス(PBY カタリナ)用オーバレイ: 共通部分は ovl8 と同じ .rel を同じ順で、入口表も ovlhead8 を共用。中ボス本体だけ差し替え。
+OVL9_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_pby.rel
+$(BUILD)/ovl9.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_pby.c $(HDRS) $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_pby.c -o $(BUILD)/ovl_mb_pby.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
+	     $(BUILD)/ovlhead8.rel $(OVL9_RELS) $(BUILD)/resident_syms.rel -o $@
+$(BUILD)/ovl9.bin: $(BUILD)/ovl9.ihx tools/ihx2bin.mjs
+	@node tools/ihx2bin.mjs $(BUILD)/ovl9.ihx 0xA000 $@; \
+	 SZ=$$(wc -c < $@ | tr -d ' '); \
+	 if [ "$$SZ" -gt 8192 ]; then \
+	   echo "ERROR: ovl9.bin=$${SZ}B が オーバレイ枠 8192B を超過。"; exit 3; \
+	 fi; \
+	 echo "  ovl9.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"; \
+	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl9.map | head -1); \
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl9 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
+# PBY の絵(6段階×16方向×1024B=12バンク)と影(16方向×128B)
+$(BUILD)/pby.bin: tools/gen_pby.py tools/gen_fw200.py | $(BUILD)
+	python3 tools/gen_pby.py bin $@ $(BUILD)/pby_sh.bin
+$(BUILD)/pby_sh.bin: $(BUILD)/pby.bin
+	@true
+ROMPACK_BANKS += --bank 25 $(BUILD)/ovl9.bin --asset 48 $(BUILD)/pby.bin --bank 60 $(BUILD)/pby_sh.bin
+
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 

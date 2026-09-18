@@ -545,12 +545,41 @@ u8  burn_coma[BURN_MAX];  /* ★各炎が現在Bへ焼込み済みのコマ(0/1)
 u8  nburn;
 /* ★中ボスの向き g_mb_req のデータ(1024B)を ROM から MB_BUF へ。data_read は複写の間ずっと割込みを止めるので、
    1KB を一度に読むと走査線分割と VBLANK が止まり、スプライトが数コマ消えた(openMSX)。128B ずつに分けて割込みを通す。 */
+static u8 mb_bank, mb_sbank;   /* 中ボスの絵のバンク(1面=Fw 200 / 2面=PBY)と影のバンク(2面だけ) */
 static void mb_fetch(void) {
     u8 k;
     u16 off = (u16)((u16)(g_mb_req & 7) << 10);
     for (k = 0; k < 8; k++)
-        data_read((u8)(MB_FRAMES_BANK + (g_mb_req >> 3)), (u16)(off + ((u16)k << 7)), (u8 *)(MB_BUF + ((u16)k << 7)), 128);
+        data_read((u8)(mb_bank + (g_mb_req >> 3)), (u16)(off + ((u16)k << 7)), (u8 *)(MB_BUF + ((u16)k << 7)), 128);
+    if (mb_sbank) data_read(mb_sbank, (u16)((u16)(g_mb_req & 15) << 7), (u8 *)MB_SBUF, 128);
     g_mb_req = 0xFF; g_mb_new = 1;
+}
+
+void mb_upload(u16 rowb, u8 sh) {
+    const u8 *p = (const u8 *)(MB_BUF + 4);
+    u16 i;
+    u8 n = (u8)(sh ? 4 : 0);
+    vdp_write_addr((u16)((u16)MB_PAT_ROW_A << 7));
+    for (i = 0; i < 256; i++) vdp_data(*p++);
+    vdp_write_addr((u16)((u16)MB_PAT_ROW_B << 7));
+    for (i = 0; i < rowb; i++) vdp_data(*p++);
+    if (sh) { p = (const u8 *)MB_SBUF; for (i = 0; i < 128; i++) vdp_data(*p++); }
+    g_mb_bm = *(u16 *)MB_BUF; g_mb_om = *(u16 *)(MB_BUF + 2);
+    for (i = g_mb_bm; i; i >>= 1) n += (u8)(i & 1);
+    for (i = g_mb_om; i; i >>= 1) n += (u8)(i & 1);
+    if (n != g_mb_n) {                  /* 枚数が変われば枠の割り当てがずれる=エンティティ側の色キャッシュも捨てる */
+        ent_spr_cache_inval((u8)(32 - ((n > g_mb_n) ? n : g_mb_n)));
+        g_mb_n = n;
+    }
+    g_mb_new = 0;
+}
+
+void mb_finish(void) {
+    u8 sl;
+    for (sl = g_spr_used; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
+    ent_spr_cache_inval((u8)(32 - g_mb_n));
+    g_mb_n = 0;
+    g_mb = MB_RESTORE;
 }
 
 /* 炎球1個を艦バッファBへ透過焼込み。src=page0の火球コマ列位置(fb_px添字)。 */
@@ -1028,7 +1057,7 @@ u8 stage_update(void) {
 #endif
         /* ★1面の中ボス: 艦が見える手前で出す。戦っている間は海を流し続けるため、カメラを 256(=16行)ずつ巻き戻す。
            リング上の位置も R#23 も変わらない＝描き直し無し(海は16行周期)。世界に置いた増槽だけ一緒にずらす。 */
-        if (curstage == 0 && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;
+        if (curstage < 2 && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;   /* 1面 Fw 200 / 2面 PBY */
         /* 終わったら逆に 256 進め、巻き戻したぶん待たされずに艦が出てくるようにする。 */
         { s16 d = (g_mb == MB_ACTIVE && cam <= SC_CAM_SHIP + 32) ? 256
                 : (g_mb == MB_OVER && cam >= SC_CAM_SHIP + 304) ? -256 : 0;
@@ -1205,7 +1234,8 @@ u8 stage_update(void) {
     /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
-        overlay_load(OVL8_BANK);
+        overlay_load(curstage ? OVL9_BANK : OVL8_BANK);
+        mb_bank = curstage ? PBY_BANK : MB_FRAMES_BANK; mb_sbank = curstage ? PBY_SH_BANK : 0;
         if (g_ovl_ok) {
             vdp_copy(0, MB_PAT_ROW_A, 0, MB_SAVE_Y, 256, 2);            /* 借りるパターン6行を page0 へ退避 */
             vdp_copy(0, MB_PAT_ROW_B, 0, (u16)(MB_SAVE_Y + 2), 256, 4);

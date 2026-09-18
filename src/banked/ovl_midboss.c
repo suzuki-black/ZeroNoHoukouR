@@ -23,8 +23,6 @@
 #include "sound.h"
 #include "midboss.h"
 
-__sfr __at(0x98) MB_DAT;
-
 extern u8 rnd(void);
 
 #define MB_HP       200     /* 半分単位(通常弾 2)=通常弾で100発(400 は1面には硬すぎた) */
@@ -44,13 +42,13 @@ static const s8 hx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };   /* 向き直る間の�
 static const s8 hy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
 static u8  st, st_t, d8, fcur, flast, flash, coldirty, hurt;
-static u16 t, hp, bm, om;   /* bm=本体のマス / om=重ねのマス(いま VRAM に載っている向き) */
+static u16 t, hp;   /* bm=本体のマス / om=重ねのマス(いま VRAM に載っている向き) */
 static s16 bx, by;          /* 64x64 の左上(画面座標) */
 
 void ovl_mb_init(void) {
     st = ST_ENTER; t = 0; hp = MB_HP;
     bx = 96; by = -64;
-    fcur = 16; flast = 16; flash = 0; bm = 0; om = 0; coldirty = 1; hurt = 0;
+    fcur = 16; flast = 16; flash = 0;  coldirty = 1; hurt = 0;
     g_mb_n = 0; g_mb_req = 16; g_mb_new = 0;   /* 最初の向き(真下)は常駐がすぐ読む */
 }
 
@@ -66,7 +64,7 @@ static void put_sprites(void) {
     for (sl = g_spr_used; sl < s0; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
     sl = s0;
     for (pass = 0; pass < 2; pass++) {
-        u16 m = pass ? bm : om;
+        u16 m = pass ? g_mb_bm : g_mb_om;
         for (c = 0; c < 16; c++) {
             s16 x, y;
             u8 off;
@@ -169,14 +167,7 @@ void ovl_mb_frame(void) {
         if (t >= 60) st = ST_DONE;
         break;
     }
-    if (st == ST_DONE) {
-        u8 sl;
-        for (sl = g_spr_used; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
-        ent_spr_cache_inval((u8)(32 - g_mb_n));
-        g_mb_n = 0;
-        g_mb = MB_RESTORE;
-        return;
-    }
+    if (st == ST_DONE) { mb_finish(); return; }
     if (st == ST_AIM && t >= MB_TIMEOUT) st = ST_LEAVE;
     if (st == ST_AIM || st == ST_DASH) {   /* 胴体に触れたら被弾(翼は当たらない。宙返り中は ent_player_hit が無視する) */
         s16 dx = (s16)(bx + 24 - g_player_x), dy = (s16)(by + 24 - g_player_y);
@@ -202,22 +193,6 @@ void ovl_mb_frame(void) {
     }
     turn_to(tgt);
     if (fcur != flast && g_mb_req == 0xFF && !g_mb_new) { flast = fcur; g_mb_req = fcur; }   /* 読み込み中は待つ */
-    if (g_mb_new) {                         /* 常駐が読んだ向き: パターン(本体16＋重ね6)を書き、マスの表を差し替える */
-        const u8 *p = (const u8 *)(MB_BUF + 4);
-        u16 i;
-        u8 n = 0;
-        vdp_write_addr((u16)((u16)MB_PAT_ROW_A << 7));
-        for (i = 0; i < 256; i++) MB_DAT = *p++;
-        vdp_write_addr((u16)((u16)MB_PAT_ROW_B << 7));
-        for (i = 0; i < 448; i++) MB_DAT = *p++;
-        bm = *(u16 *)MB_BUF; om = *(u16 *)(MB_BUF + 2);
-        for (i = bm; i; i >>= 1) n += (u8)(i & 1);
-        for (i = om; i; i >>= 1) n += (u8)(i & 1);
-        if (n != g_mb_n) {                  /* 枚数が変われば枠の割り当てがずれる=エンティティ側の色キャッシュも捨てる */
-            ent_spr_cache_inval((u8)(32 - ((n > g_mb_n) ? n : g_mb_n)));
-            g_mb_n = n;
-        }
-        g_mb_new = 0; coldirty = 1;
-    }
+    if (g_mb_new) { mb_upload(448, 0); coldirty = 1; }   /* 常駐が読んだ絵をパターン表へ(midboss.h) */
     put_sprites();
 }
