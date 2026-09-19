@@ -452,14 +452,19 @@ static void hit_test(void) {
 static void finish(void) {
     u8 i;
     for (i = 0; i < PB_N; i++) if (pbv[i].on) pb_erase(&pbv[i]);
-    sea_rows(1, 16); sea_rows(190, 16);
-    g_sea_skip = 0;
+    /* ★等倍へ戻す切替はここで一気に済ませる。HUD の色だけ先に戻すと、枠0〜8 に居た自機や爆発が白く化け、
+       次のフレームの描画(オーバレイの入れ替えで数フレーム遅れる)まで HUD も消えていた(openMSX のコマ送りで確認) */
+    mb_finish();                                    /* 中ボスの枠を隠す */
     vdp_wreg(1, (u8)(RG1SAV & 0xFE));               /* 拡大を切る */
     vdp_wreg(6, 0x0F);                              /* 絵の表Aへ */
-    ent_spr_cache_inval(0);
-    hud_colors();
     if (kpts) scorepop_add((s16)(cx - 8), (s16)(cy - 8), kpts);   /* ★撃墜の点数: 拡大中に出すと数字が2倍に見えた(実機で指摘) */
-    mb_finish();
+    ent_spr_cache_inval(0);
+    g_spr_base = HUD_SLOTS; g_spr_limit = 32; g_spr_hide_to = 0;
+    ent_draw_all();                                 /* いつもの並び(HUD の後ろ)で描き直す */
+    hud_colors();
+    hud_draw(g_score, g_lives);
+    sea_rows(1, 16); sea_rows(190, 16);             /* 背景に描いた HUD を消すのは、スプライトの HUD を出した後(消えるコマを作らない) */
+    g_sea_skip = 0;
 }
 
 void ovl_mb_frame(void) {
