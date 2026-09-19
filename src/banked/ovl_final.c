@@ -335,13 +335,12 @@ u8 ovl_final_frame(void) {
         for (i = 0; i < 6; i++) {
             Entity *w = wp[i];
             if (!w || !w->active) continue;
-            if (w->h) hit = 1;
-            if (w->hp && w->hp < wp_php[i]) sfx(2, SFX_HIT);   /* ★毎発の軽い被弾音(壊した瞬間は既存の爆発音) */
+            if (w->hp < wp_php[i]) { hit = 1; if (w->hp) sfx(2, SFX_HIT); }   /* ★毎発の軽い被弾音(壊した瞬間は既存の爆発音) */
             wp_php[i] = w->hp;
         }
-        if (hit) glow_t = 8;                           /* ★被弾中は全体を光らせる(点滅はちらつきに見える)。 */
-        else if (glow_t) glow_t--;                     /*   連射の間に消えないよう少し持たせる=光りっぱなしに見える */
-        glow = (u8)(glow_t != 0);
+        if (hit && !glow_t) glow_t = 4;                /* ★被弾した瞬間の1フレームだけ光る。その後3フレームは光らせない */
+        else if (glow_t) glow_t--;                     /*   (以前は光りっぱなしにしていたが、もっと速く戻すよう指摘=中ボスと同じ) */
+        glow = (u8)(glow_t == 4);
         if ((tick % 150) == 75) ring_volley();
         if (g_lturret == 0) { st = ST_DEATH; dtick = 0; fr = BOSS_F_DEATH0; glow = 0; glow_t = 0; sfx(2, SFX_BOOM); }
     } else if (st == ST_DEATH) {

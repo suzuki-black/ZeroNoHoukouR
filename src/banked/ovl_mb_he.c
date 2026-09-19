@@ -14,7 +14,7 @@
    ★影: 海面に 30 ドット(2x2)。低空なので右下へ HE_SH_OFF だけ。上の機の影も 106 行より上に収まる(中心 y≦70)。
      ★最初は朝霧を理由に省いたが「影が無い」と実機で指摘されて足した。
    ★中ボス共通の決まり(ROADMAP「中ボス共通の決まり」。面ごとに違うのは駄目=実機で指摘):
-     被弾=当たった機だけ2フレーム白く光る＋火花＋音 / 予告=白く明滅 / 手負い(耐久半分)=エンジン炎上＋速く / 影は変えない。
+     被弾=当たった機だけ1フレーム白く光る＋火花＋音(その後3フレームは光らせない) / 予告=白く明滅 / 手負い(耐久半分)=エンジン炎上＋速く / 影は変えない。
      白くしたあと元の色へすぐ戻せるよう、各機の色を colbuf(オーバレイの後ろの RAM)に持つ。
    ★片方を落とすと残った1機が怒る(向き直り倍速・待ち半分・突進 4px/f)。45秒で上下へ逃げる。
      1機 300点、2機とも落とすと残り時間ボーナス＋メガクラッシュ1回。メガクラッシュの間は2機を隠す(下の帯の絵の表が合わないため)。 */
@@ -51,13 +51,14 @@ static const s8 hx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 static const s8 hy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
 static u8  st, st_t, d8, fcur, hurt, cur, gone, fogc;   /* fogc=霧の間の機体の色 */   /* gone: bit0=上の機 / bit1=下の機 が落ちた */
+static u8  hcool[2];                               /* 白く光った後、次の白を出さない残り */
 static u8  ldir[2], dt[2], hf[2], nc[2];           /* hf=白く光っている残り / nc=機体(重ね＋本体)の枚数。その後ろ4枚が影 */                         /* 各機の VRAM に載っている向き / 墜落の残りフレーム */
 static u16 t, hp[2], bm[2], om[2];
 static s16 cx, cy;                                 /* 上の機(=動きの主)の中心 */
 
 void ovl_mb_init(void) {
     st = ST_FOG; st_t = 0; t = 0; hurt = 0; gone = 0;
-    hp[0] = hp[1] = HE_HP; dt[0] = dt[1] = 0; hf[0] = hf[1] = 0; nc[0] = nc[1] = 0; bm[0] = bm[1] = om[0] = om[1] = 0;
+    hp[0] = hp[1] = HE_HP; dt[0] = dt[1] = 0; hf[0] = hf[1] = 0; hcool[0] = hcool[1] = 0; nc[0] = nc[1] = 0; bm[0] = bm[1] = om[0] = om[1] = 0;
     cx = 56; cy = 44; fcur = 8;                    /* 上の機は左上で右向き / 下の機は右下で左向き */
     ldir[0] = ldir[1] = 0xFF;
     vdp_copy(0, 240, 0, 64, 256, 16);              /* 絵の表A(0x7800)→表B(0x2000)。自機や弾の絵を下の帯でも使う */
@@ -127,7 +128,7 @@ static void paint(u8 k, u8 c) {
     vdp_write_addr((u16)((k ? 0x7000 : 0x7400) + HE_SLOT0 * 16));
     for (i = (u16)nc[k] << 4; i; i--) HE_DAT = c ? c : *p++;
 }
-static void flash(u8 k) { if (!hf[k]) paint(k, 15); hf[k] = 2; }   /* 2フレーム白く(続けて当たれば延びる) */
+static void flash(u8 k) { if (!hf[k] && !hcool[k]) { paint(k, 15); hf[k] = 1; hcool[k] = 4; } }   /* 白は1フレームだけ(次のフレームの頭で戻す) */
 
 static void hit_test(u8 k) {
     u8 i;
@@ -165,6 +166,10 @@ void ovl_mb_frame(void) {
     u8 tgt = fcur, k, crush = g_crush_t;
     if (st == ST_DONE) return;
     t++;
+    for (k = 0; k < 2; k++) {                     /* 前のフレームで白くした機を本来の色へ(白は1フレームだけ) */
+        if (hf[k]) { hf[k] = 0; paint(k, 0); }
+        if (hcool[k]) hcool[k]--;
+    }
     switch (st) {
     case ST_FOG:                                   /* 霧から浮かび上がる: 霧の色 → 灰 → 本来の色(読み直し) */
         move(1, 0);
@@ -182,7 +187,7 @@ void ovl_mb_frame(void) {
         break; }
     case ST_DASH:                                  /* 予告(白く明滅)のあと、一直線に突っ込む */
         if (++st_t <= HE_WARN_T) {
-            if ((st_t & 3) == 1 && !crush) { flash(0); flash(1); }   /* 2フレーム白→戻る、を繰り返す=明滅 */
+            if ((st_t & 3) == 1 && !crush) { hcool[0] = hcool[1] = 0; flash(0); flash(1); }   /* 1フレーム白→戻る、を繰り返す=明滅 */
         } else if (move(dx8[d8], dy8[d8]) || (hurt && move(hx8[d8], hy8[d8])) || st_t >= HE_WARN_T + HE_DASH_T) aim();
         break;
     case ST_LEAVE:                                 /* 上の機は上へ、下の機は(鏡写しで)下へ抜ける */
@@ -243,10 +248,7 @@ void ovl_mb_frame(void) {
         if (ldir[0] != want0) { cur = 0; ldir[0] = want0; g_mb_req = want0; }
         else if (ldir[1] != want1) { cur = 1; ldir[1] = want1; g_mb_req = want1; }
     }
-    for (k = 0; k < 2; k++) {
-        if (hf[k] && !--hf[k]) paint(k, 0);       /* 白から本来の色へ */
-        put(k, (u8)(!(gone & (1 << k)) && !crush));
-    }
+    for (k = 0; k < 2; k++) put(k, (u8)(!(gone & (1 << k)) && !crush));
 }
 
 /* 分割表: 先頭=スプライト表A＋絵の表A / 106 行=スプライト表B＋絵の表B の2本だけ。

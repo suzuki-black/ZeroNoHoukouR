@@ -6,7 +6,7 @@
    ★絵(tools/gen_dd.py, 176x24, 0=透明)は ROM(bank60 の後半)にあり、中ボスの仕組み(g_mb_req→常駐が MB_BUF へ 1KB)で読む。
      透明の画素に今の海を残すため、行ごとに VRAM から海を読み、重ねて書き戻す(登場の演出=2行ずつ現れる)。
      その行は SEA13(海の波の塗り直し)から外す(g_sea_skip)。
-   ★中ボス共通の決まり: 被弾=艦が2フレーム白く光る(甲板の色 9 番を中ボスの間だけ艦専用にし、パレットで白へ=g_dd_flash) /
+   ★中ボス共通の決まり: 被弾=艦が1フレーム白く光る(その後3フレームは光らせない)(甲板の色 9 番を中ボスの間だけ艦専用にし、パレットで白へ=g_dd_flash) /
      予告=斉射の前に白く明滅 / 手負い=煙突から黒煙・蛇行が速く / 撃墜=爆発して沈む / 影は無い(艦)。
    ★砲塔4基の砲身はスプライト(SPR_BARREL0 の8方向)で、自機の方を向いて撃つ。枠は末尾の4枚。
    ★衝撃波はこの中ボスの間は出ない(うねりの帯とぶつかる)。 */
@@ -47,6 +47,7 @@ enum { ST_DRAW, ST_FIGHT, ST_WARN, ST_SINK, ST_DONE };
 static const u8 tur_x[4] = { 129, 115, 33, 48 };   /* 砲塔の x(絵の左端から) */
 static const u8 fun_x[2] = { 82, 67 };             /* 煙突 */
 
+static u8 dcool;                                    /* 白く光った後、次の白を出さない残り */
 u8 g_dd_flash;                                      /* >0: パレット 9(艦)を白に(ovl_palette.c の OVL_DD) */
 static u8  st, st_t, hurt, row, fire_k, zig;
 static u16 t, hp;
@@ -56,7 +57,7 @@ static u8  wph;                                     /* うねりの位相 */
 
 void ovl_mb_init(void) {
     st = ST_DRAW; st_t = 0; t = 0; hp = DD_HP; hurt = 0; row = 0; fire_k = 0; zig = 0;
-    sx = 0; sxq = 0; vx = 8; wph = 0; g_dd_flash = 0;
+    sx = 0; sxq = 0; vx = 8; wph = 0; g_dd_flash = 0; dcool = 0;
     g_mb_n = 4;
     g_mb_req = DD_REQ0; g_mb_new = 0;
     vdp_wreg(25, 0x02);                            /* MSK: 左端 8 ドットを隠す(横にずらした帯の切れ目) */
@@ -111,7 +112,7 @@ static u8 draw_rows(void) {
     return 1;
 }
 
-static void flash(u8 f) { if (g_dd_flash < f) g_dd_flash = f; }
+static void flash(void) { if (!dcool) { g_dd_flash = 1; dcool = 4; } }   /* 白は1フレームだけ(当て続けてもチカチカ) */
 
 static void shoot(u8 k, u8 spread) {
     s16 ox = (s16)(DD_X0 + tur_x[k] + sx - 8), oy = (s16)(DD_Y0 + DD_H / 2 - 8);
@@ -132,7 +133,7 @@ static void hit_test(void) {
         if (e->ax == (s16)DD_PIERCE) continue;
         if (g_pwr < PWR_MAX) e->active = 0; else e->ax = (s16)DD_PIERCE;
         hp = (hp > e->hp) ? (u16)(hp - e->hp) : 0;
-        flash(2);
+        flash();
         if ((t & 3) == 0) { ent_spawn_spark(e->x, e->y); sfx(1, SFX_HIT); }
     }
 }
@@ -171,6 +172,7 @@ void ovl_mb_frame(void) {
     if (st == ST_DONE) return;
     t++; wph++;
     if (g_dd_flash) g_dd_flash--;
+    if (dcool) dcool--;
     switch (st) {
     case ST_DRAW:                                    /* 嵐の中から現れる(2行ずつ描く) */
         if (draw_rows()) { st = ST_FIGHT; st_t = 0; }
@@ -185,7 +187,7 @@ void ovl_mb_frame(void) {
         hit_test();
         break;
     case ST_WARN:                                    /* 斉射の予告: 白く明滅 → 4基から3方向ずつ */
-        if ((++st_t & 3) == 1) flash(2);
+        if ((++st_t & 3) == 1) { dcool = 0; flash(); }
         if (st_t >= DD_WARN_T) { u8 k; for (k = 0; k < 4; k++) shoot(k, 1); sfx(2, SFX_BOOM); st = ST_FIGHT; st_t = 0; }
         hit_test();
         break;

@@ -38,14 +38,14 @@ enum { ST_ENTER, ST_HIGH, ST_DIVE, ST_LOW, ST_CLIMB, ST_LEAVE, ST_DIE, ST_DONE }
 static const s8 vx16[16] = { 0, 3, 6, 7, 8, 7, 6, 3, 0, -3, -6, -7, -8, -7, -6, -3 };
 static const s8 vy16[16] = { -8, -7, -6, -3, 0, 3, 6, 7, 8, 7, 6, 3, 0, -3, -6, -7 };
 
-static u8  st, st_t, dir, alt, flast, flash, coldirty, hurt, hi;
+static u8  st, st_t, dir, alt, flast, flash, fcool, coldirty, hurt, hi;   /* fcool=白く光った後、次の白を出さない残り */
 static u16 t, hp, hp_low;   /* hp_low=低空に降りた時の耐久(逃げる判定) */
 static s16 qx, qy;          /* 機体の中心(1/4 ドット単位) */
 
 void ovl_mb_init(void) {
     st = ST_ENTER; t = 0; hp = PB_HP; hp_low = PB_HP; alt = 0; hi = 0;
     qx = 128 << 2; qy = -48 << 2; dir = 8;
-    flash = 0;  coldirty = 1; hurt = 0;
+    flash = 0; fcool = 0; coldirty = 1; hurt = 0;
     flast = 8;
     g_mb_n = 0; g_mb_req = flast; g_mb_new = 0;   /* 最初の絵(低空・下向き)は常駐がすぐ読む */
 }
@@ -109,8 +109,7 @@ static void hit_test(void) {
         if (e->ax == (s16)PB_PIERCE) continue;
         if (g_pwr < PWR_MAX) e->active = 0; else e->ax = (s16)PB_PIERCE;
         hp = (hp > e->hp) ? (u16)(hp - e->hp) : 0;
-        if (!flash) coldirty = 1;
-        flash = 2;
+        if (!fcool) { flash = 1; fcool = 4; coldirty = 1; }   /* 白は1フレームだけ。その後3フレームは光らせない(当て続けてもチカチカ) */
         if ((t & 3) == 0) { ent_spawn_spark(e->x, e->y); sfx(1, SFX_HIT); }
     }
 }
@@ -132,6 +131,7 @@ void ovl_mb_frame(void) {
     s16 px = (s16)(g_player_x + 8), py = (s16)(g_player_y + 8);
     if (st == ST_DONE) return;
     t++;
+    if (fcool) fcool--;
     if (flash && !--flash) coldirty = 1;
     switch (st) {
     case ST_ENTER:                          /* 低空で画面の上端から入ってくる */
@@ -162,7 +162,7 @@ void ovl_mb_frame(void) {
     case ST_DIVE:                           /* 予告(白く明滅)のあと自機へ降りてくる */
         tgt = aim16(px, py);
         fly();
-        if (++st_t <= PB_WARN_T) { if ((st_t & 3) == 1) { flash = 2; coldirty = 1; } }
+        if (++st_t <= PB_WARN_T) { if ((st_t & 3) == 1) { flash = 1; coldirty = 1; } }
         else if (alt > dv) alt -= dv;
         else { alt = 0; st = ST_LOW; st_t = 0; hp_low = hp; }
         hit_test();

@@ -42,14 +42,14 @@ static const s8 dy8[8] = { -3, -2, 0, 2, 3, 2, 0, -2 };
 static const s8 hx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };   /* 向き直る間の惰性(1px/f) */
 static const s8 hy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
-static u8  st, st_t, d8, fcur, flast, flash, coldirty, hurt;
+static u8  st, st_t, d8, fcur, flast, flash, fcool, coldirty, hurt;   /* fcool=白く光った後、次の白を出さない残り */
 static u16 t, hp;   /* bm=本体のマス / om=重ねのマス(いま VRAM に載っている向き) */
 static s16 bx, by;          /* 64x64 の左上(画面座標) */
 
 void ovl_mb_init(void) {
     st = ST_ENTER; t = 0; hp = MB_HP;
     bx = 96; by = -64;
-    fcur = 16; flast = 16; flash = 0;  coldirty = 1; hurt = 0;
+    fcur = 16; flast = 16; flash = 0; fcool = 0; coldirty = 1; hurt = 0;
     g_mb_n = 0; g_mb_req = 16; g_mb_new = 0;   /* 最初の向き(真下)は常駐がすぐ読む */
 }
 
@@ -101,8 +101,7 @@ static void hit_test(void) {
         if (e->ax == (s16)MB_PIERCE) continue;
         if (g_pwr < PWR_MAX) e->active = 0; else e->ax = (s16)MB_PIERCE;
         hp = (hp > e->hp) ? (u16)(hp - e->hp) : 0;
-        if (!flash) coldirty = 1;
-        flash = 2;
+        if (!fcool) { flash = 1; fcool = 4; coldirty = 1; }   /* 白は1フレームだけ。その後3フレームは光らせない(当て続けてもチカチカ) */
         if ((t & 3) == 0) { ent_spawn_spark(e->x, e->y); sfx(1, SFX_HIT); }
     }
 }
@@ -139,6 +138,7 @@ void ovl_mb_frame(void) {
     u8 tgt = fcur;
     if (st == ST_DONE) return;
     t++;
+    if (fcool) fcool--;
     if (flash && !--flash) coldirty = 1;
     switch (st) {
     case ST_ENTER:
@@ -156,7 +156,7 @@ void ovl_mb_frame(void) {
         break; }
     case ST_DASH:                           /* 予告(止まって明滅)のあと、一直線に突っ込む */
         if (++st_t <= MB_WARN_T) {
-            if ((st_t & 3) == 1) { flash = 2; coldirty = 1; }
+            if ((st_t & 3) == 1) { flash = 1; coldirty = 1; }
         } else if (move(dx8[d8], dy8[d8]) || (hurt && move(hx8[d8], hy8[d8])) || st_t >= MB_WARN_T + MB_DASH_T) aim();
         hit_test();
         break;
