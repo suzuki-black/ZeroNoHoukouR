@@ -1239,10 +1239,12 @@ u8 stage_update(void) {
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
         {   /* ★中ボスが出る瞬間に、残っている敵機・敵弾・爆発を消す(5面は拡大で仕掛けが見えてしまう=ユーザー指摘。全面で揃える)。
-               自機・自機の弾・増槽は残す */
+               自機・自機の弾・増槽と、艦に載っているもの(主砲の砲身・甲板の停泊機)は残す。
+               ★主砲まで消すと、中ボスの後の艦で砲身が無くなり、生存砲台の数も減らなくなった(実機で指摘) */
             u8 i; Entity *e = ent_pool();
             for (i = 0; i < ENT_MAX; i++, e++)
-                if (e->active && e->type != ET_PLAYER && e->type != ET_ITEM && !(e->type == ET_BULLET && e->team == TEAM_PLAYER)) e->active = 0;
+                if (e->active && e->type != ET_PLAYER && e->type != ET_ITEM && e->type != ET_TURRET && e->type != ET_PARKED
+                    && !(e->type == ET_BULLET && e->team == TEAM_PLAYER)) e->active = 0;
             /* ★属性表も今ここで空にする。中ボスは末尾の枠を ent_draw_all から取り上げるが、自分で書くのは読み込みの
                2〜3フレーム後。その間、枠に残った敵機・敵弾の属性が表示され、5面は拡大がかかって2倍で見えた(実機で指摘) */
             for (i = HUD_SLOTS; i < 32; i++) vdp_sprite_pos(i, 0, 220, 0);
