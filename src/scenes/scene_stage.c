@@ -1243,6 +1243,10 @@ u8 stage_update(void) {
             u8 i; Entity *e = ent_pool();
             for (i = 0; i < ENT_MAX; i++, e++)
                 if (e->active && e->type != ET_PLAYER && e->type != ET_ITEM && !(e->type == ET_BULLET && e->team == TEAM_PLAYER)) e->active = 0;
+            /* ★属性表も今ここで空にする。中ボスは末尾の枠を ent_draw_all から取り上げるが、自分で書くのは読み込みの
+               2〜3フレーム後。その間、枠に残った敵機・敵弾の属性が表示され、5面は拡大がかかって2倍で見えた(実機で指摘) */
+            for (i = HUD_SLOTS; i < 32; i++) vdp_sprite_pos(i, 0, 220, 0);
+            scorepop_reset();
         }
         if (curstage == 4) { g_shipargs.mode = 7; bcall_to(GEN_PLANES_BANK); }   /* 5面: 拡大用に絵の表を半分に縮めて表Bへ(ROM 実行) */
         {   static const u8 ovl[5]  = { OVL8_BANK, OVL9_BANK, OVL11_BANK, OVL10_BANK, OVL12_BANK };   /* 1面 Fw 200 / 2面 PBY / 3面 駆逐艦 / 4面 He 111 ×2 / 5面 P-61 */

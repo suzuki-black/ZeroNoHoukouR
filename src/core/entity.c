@@ -93,7 +93,7 @@ void scorepop_add(s16 sx, s16 sy, u16 val) {
     }
     spop_x[slot] = sx; spop_y[slot] = sy; spop_val[slot] = val; spop_t[slot] = SPOP_FRAMES;
 }
-static void scorepop_reset(void) { u8 i; for (i = 0; i < SPOP_MAX; i++) spop_t[i] = 0; }
+void scorepop_reset(void) { u8 i; for (i = 0; i < SPOP_MAX; i++) spop_t[i] = 0; }
 
 /* 敵弾/敵機が自機に当たったときの共通処理。
    ★CPU弾幕(ovl_curtain.c)からも呼ぶので独立関数にした。無敵中(被弾直後/設定)は無傷で抜ける。

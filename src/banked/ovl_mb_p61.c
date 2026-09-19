@@ -55,7 +55,7 @@ static const s8 sin64[64] = {
 u8 pb_ox, pb_oy, pb_nx, pb_ny, pb_w, pb_h, pb_oh, pb_oofs, pb_nofs, pb_cnt, pb_rowl, pb_r14, pb_col;
 
 static u8  st, st_t, hurt, fr, flast, flash, fcool, coldirty, sang, ph, hud_sc_dirty;
-static u16 t, hp, hud_last;
+static u16 t, hp, hud_last, kpts;
 static u8  hud_lv, hud_cr;
 static s16 cx, cy;
 
@@ -261,7 +261,7 @@ static s16 byy(void) { return (s16)(cy - 64); }
 
 void ovl_mb_init(void) {
     u8 i;
-    st = ST_ENTER; st_t = 0; t = 0; hp = P61_HP; hurt = 0; fr = 4; flast = 4; flash = 0; fcool = 0; coldirty = 1; sang = 0; ph = 16;
+    st = ST_ENTER; st_t = 0; t = 0; kpts = 0; hp = P61_HP; hurt = 0; fr = 4; flast = 4; flash = 0; fcool = 0; coldirty = 1; sang = 0; ph = 16;
     cx = 128; cy = -64;
     /* 絵の表A→表B の縮小は常駐が読み込みの前に済ませている(gen_planes.c の mag_table。枠のため ROM 実行) */
     /* 海のひな形(y=512..527)の左 16B を RAM へ(弾を消すとき用) */
@@ -458,6 +458,7 @@ static void finish(void) {
     vdp_wreg(6, 0x0F);                              /* 絵の表Aへ */
     ent_spr_cache_inval(0);
     hud_colors();
+    if (kpts) scorepop_add((s16)(cx - 8), (s16)(cy - 8), kpts);   /* ★撃墜の点数: 拡大中に出すと数字が2倍に見えた(実機で指摘) */
     mb_finish();
 }
 
@@ -517,7 +518,7 @@ void ovl_mb_frame(void) {
             u16 pts = (u16)(500 + (P61_TIMEOUT - t) / 3);
             st = ST_DIE; st_t = 0;
             g_score = (g_score > 65535u - pts) ? 65535u : (u16)(g_score + pts);
-            scorepop_add((s16)(cx - 8), (s16)(cy - 8), pts);
+            kpts = pts;                             /* 点数の表示は拡大を切ってから(finish) */
             if (g_crush < CRUSH_MAX) g_crush++;
             g_hitstop = 4; g_shake = 8;
             shock_at(cy);

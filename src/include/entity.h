@@ -75,6 +75,7 @@ u8      ent_count(u8 type);         /* active な type の数(撃破判定用) *
 Entity *ent_at(u8 i);               /* プールの i 番目(0..ENT_MAX-1)。active は呼び側で確認 */
 Entity *ent_pool(void);             /* プール先頭ポインタ(ポインタ加算で走査=添字乗算を避ける) */
 void    scorepop_add(s16 sx, s16 sy, u16 val);  /* ★破壊点数ポップアップ登録(画面座標＋加算点)。撃破サイトから呼ぶ */
+void    scorepop_reset(void);                   /* ★破壊点数ポップアップを全部消す(面開始・中ボス出現) */
 u8      ent_live_turrets(void);     /* 生存(hp>0)砲台の数(O(1)=g_lturretを返す)。撃破済みは active のまま炎上させるため別カウント */
 extern u8 g_lturret;                /* ★生存砲台のO(1)カウンタ。spawn_turretで++、当たり判定の撃破で--、stage_buildで0初期化 */
 
