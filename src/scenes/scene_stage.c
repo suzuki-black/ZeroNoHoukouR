@@ -1238,6 +1238,12 @@ u8 stage_update(void) {
     /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
+        {   /* ★中ボスが出る瞬間に、残っている敵機・敵弾・爆発を消す(5面は拡大で仕掛けが見えてしまう=ユーザー指摘。全面で揃える)。
+               自機・自機の弾・増槽は残す */
+            u8 i; Entity *e = ent_pool();
+            for (i = 0; i < ENT_MAX; i++, e++)
+                if (e->active && e->type != ET_PLAYER && e->type != ET_ITEM && !(e->type == ET_BULLET && e->team == TEAM_PLAYER)) e->active = 0;
+        }
         if (curstage == 4) { g_shipargs.mode = 7; bcall_to(GEN_PLANES_BANK); }   /* 5面: 拡大用に絵の表を半分に縮めて表Bへ(ROM 実行) */
         {   static const u8 ovl[5]  = { OVL8_BANK, OVL9_BANK, OVL11_BANK, OVL10_BANK, OVL12_BANK };   /* 1面 Fw 200 / 2面 PBY / 3面 駆逐艦 / 4面 He 111 ×2 / 5面 P-61 */
             static const u8 bank[5] = { MB_FRAMES_BANK, PBY_BANK, DD_BANK, HE_BANK, DD_BANK };      /* 5面の絵は bank60〜62 の後ろ半分(添字で引く) */

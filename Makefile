@@ -438,7 +438,7 @@ ROMPACK_BANKS += --bank 63 $(BUILD)/ovl11.bin
 
 # 5面の中ボス(P-61)用オーバレイ(bank3): パレットは -DOVL_P61(5面の1行だけ)、宙返りは -DOVL_MAG(半分に縮めて絵の表Bへ・枠 0..3)。
 # 衝撃波(ovl_shock)は入れない(枠のため。static を持たないので番地はずれない)。入口表は ovlhead12(slot14=ovl_p61_split)。
-# 0xBF00〜は海のひな形なので 7936B 以下。
+# 0xBC00〜は背景の弾の表(48発)、0xBF00〜は海のひな形なので 7168B 以下。
 # ★メガクラッシュ(ovl_crush, 2.4KB)も入れない: 津波自体が拡大(MAG)を使うので拡大中の中ボスとは相性が悪く、枠も足りない。中ボスの間はボムを使えない
 OVL12_RELS = $(BUILD)/ovl12_palette.rel $(BUILD)/ovl12_rot.rel $(BUILD)/ovl_mb_p61.rel
 $(BUILD)/ovl12.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_p61.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead12.rel $(BUILD)/resident_syms.rel
@@ -452,10 +452,10 @@ $(BUILD)/ovlhead12.rel: $(SRC)/banked/ovlhead12.s | $(BUILD)
 $(BUILD)/ovl12.bin: $(BUILD)/ovl12.ihx tools/ihx2bin.mjs
 	@node tools/ihx2bin.mjs $(BUILD)/ovl12.ihx 0xA000 $@; \
 	 SZ=$$(wc -c < $@ | tr -d ' '); \
-	 if [ "$$SZ" -gt 7936 ]; then \
-	   echo "ERROR: ovl12.bin=$${SZ}B が 7936B(0xA000-0xBEFF)を超過。0xBF00〜は海のひな形。"; exit 3; \
+	 if [ "$$SZ" -gt 7168 ]; then \
+	   echo "ERROR: ovl12.bin=$${SZ}B が 7168B(0xA000-0xBBFF)を超過。0xBC00〜は背景の弾の表と海のひな形。"; exit 3; \
 	 fi; \
-	 echo "  ovl12.bin=$${SZ}B / 7936B (残り$$((7936-SZ))B)"; \
+	 echo "  ovl12.bin=$${SZ}B / 7168B (残り$$((7168-SZ))B)"; \
 	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl12.map | head -1); \
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl12 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
 # P-61 の絵(9方向×1024B)を3つに分ける(bank60 の後ろ1件・bank61 の後ろ4件・bank62 の後ろ4件)

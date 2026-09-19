@@ -1,10 +1,11 @@
 /* ovl_mb_p61.c — 5面の中ボス P-61 ブラックウィドウ(米の双胴の夜間戦闘機, ROADMAP B4)。中ボス用オーバレイ(OVL12_BANK)で動く。
    ★見せ場: **スプライトの 2 倍拡大(MAG)で 128x128 の大きな中ボス**(ユーザー案)と、**背景に描く弾幕**(実機で 1発 0.13ms と測った差分描き)。
      MAG は全部のスプライトに掛かるので、自機・弾は半分に縮めた絵(絵の表B=0x2000、R#6=0x04)を拡大で元の大きさに見せる。
-     スコア・残機・ボム残数は数字を半分にすると読めないので、中ボスの間だけ背景に描く(HUD のスプライトは出さない)。
+     スコア・残機(アイコンと数)・ボム残数は数字を半分にすると読めないので、中ボスの間だけ背景に描く(HUD のスプライトは出さない)。
+     アイコンとボム棒は HUD のスプライトと同じ絵・同じ色(行ごとの色)で描く(bgspr)。
      戦艦の区間では拡大を切って元へ戻す。
    ★1〜4面との違い: 弾幕をかいくぐる。画面の上に居座って左右に動き、機首を自機へ向けながら渦巻きに弾をばらまく。
-     時々、白く明滅(予告)してから扇に撃つ。背景の弾は同時に PB_N 発まで。
+     時々、白く明滅(予告)してから扇に11発。背景の弾は同時に PB_N(48)発まで(20 では少ないと指摘)。
    ★中ボス共通の決まり: 被弾=1フレーム白く光る(その後3フレームは光らせない) / 予告=白く明滅 / 手負い=エンジン炎上・弾幕が濃く /
      撃墜=爆発して落ちる / 影は変えない(月明かりの影, 2x2 を拡大で 64x64)。
    ★絵(tools/gen_p61.py, 9方向)は影のバンクの後ろ半分に分けて置いてある(読み込みの添字 p61_req)。
@@ -20,6 +21,7 @@
 #include "aa_hot.h"     /* cam */
 #include "scroll.h"     /* g_sea_skip / SC_SEATMPL_Y */
 #include "hud.h"        /* hud_colors */
+#include "sprites.h"    /* SPR_ZERO */
 #include "raster.h"     /* g_ras */
 #include "midboss.h"
 
@@ -33,9 +35,9 @@ extern u8 rnd(void);
 #define P61_WARN_T  12
 #define P61_PIERCE  0x7AC0
 #define P61_SH_OFF  24      /* 影を右下へ(拡大後のドット) */
-#define PB_N        20      /* 背景の弾の最大数 */
-#define PB_TMPL     0xBF00  /* 海のひな形(左 32 ドット×16 行=256B)。オーバレイの後ろ=ovl12 は 7936B 以下(Makefile が検証) */
-#define PB_RAM      0xEB28  /* 背景の弾の表(20×9B)。0xEB00〜27 は DEBUG_PROF の計測。初期化では MB_SBUF(0xEB80)を作業に使うので、その後で消す */
+#define PB_N        48      /* 背景の弾の最大数(20 では「弾数少ない」と指摘) */
+#define PB_TMPL     0xBF00  /* 海のひな形(左 32 ドット×16 行=256B)。オーバレイの後ろ=ovl12 は 7168B 以下(Makefile が検証) */
+#define PB_RAM      0xBC00  /* 背景の弾の表(48×9B=432B)。オーバレイの後ろ(0xBC00〜0xBDAF) */
 #define RG1SAV      (*(volatile u8 *)0xF3E0)
 
 enum { ST_ENTER, ST_FIGHT, ST_WARN, ST_LEAVE, ST_DIE, ST_DONE };
@@ -271,11 +273,11 @@ void ovl_mb_init(void) {
             __asm ei __endasm;
             for (i = 0; i < 16; i++) *q++ = PB_DAT;
         } }
-    for (i = 0; i < PB_N; i++) pbv[i].on = 0;      /* 弾の表は MB_SBUF と重なるので、作業が済んでから消す */
+    for (i = 0; i < PB_N; i++) pbv[i].on = 0;
     /* スコア等を描く行を海の波の塗り直しから外す */
-    g_sea_skip |= (u16)(1u << (((u8)(cam + 2)) >> 4)) | (u16)(1u << (((u8)(cam + 9)) >> 4))
-                | (u16)(1u << (((u8)(cam + 190)) >> 4)) | (u16)(1u << (((u8)(cam + 203)) >> 4));
-    hud_last = 0xFFFF; hud_lv = 0xFF; hud_cr = 0xFF;
+    g_sea_skip |= (u16)(1u << (((u8)(cam + 1)) >> 4)) | (u16)(1u << (((u8)(cam + 16)) >> 4))
+                | (u16)(1u << (((u8)(cam + 190)) >> 4)) | (u16)(1u << (((u8)(cam + 205)) >> 4));
+    hud_last = 0xFFFF; hud_lv = 0xFF; hud_cr = 0xFF; hud_sc_dirty = 0;
     g_mb_n = 22;
     g_mb_req = p61_req[fr]; g_mb_new = 0;
 }
@@ -301,30 +303,61 @@ static void glyph(u8 x, u8 y, u8 ch, u8 fg) {
 static void sea_rows(u8 y, u8 n) {   /* 画面 y から n 行を海へ戻す */
     for (; n; n--, y++) { u8 ry = (u8)(cam + y); vdp_copy(0, (u16)(SC_SEATMPL_Y + (ry & 15)), 0, (u16)(256 + ry), 256, 1); }
 }
+static void sea_box(u8 x, u8 y, u8 w, u8 n) {   /* 画面 (x,y) から w ドット×n 行だけ海へ戻す(同じ行のほかの字は残す) */
+    for (; n; n--, y++) { u8 ry = (u8)(cam + y); vdp_copy(x, (u16)(SC_SEATMPL_Y + (ry & 15)), x, (u16)(256 + ry), w, 1); }
+}
+/* 16x16 のスプライトの絵(32B)を、海と重ねて背景へ描く。rc=行ごとの色(NULL なら c1 の1色)。x は偶数 */
+static void bgspr(u8 x, u8 y, const u8 *pat, const u8 *rc, u8 c1) {
+    u8 r, i, b[8];
+    for (r = 0; r < 16; r++) {
+        u16 a = (u16)(((u16)(256 + (u8)(cam + y + r)) << 7) + (x >> 1));
+        u16 bits = (u16)(((u16)pat[r] << 8) | pat[16 + r]);
+        u8 fg = rc ? rc[r] : c1;
+        if (!bits) continue;
+        vdp_read_addr(a);
+        for (i = 0; i < 8; i++) b[i] = PB_DAT;
+        vdp_write_addr(a);
+        for (i = 0; i < 8; i++, bits <<= 2) {
+            u8 v = b[i];
+            if (bits & 0x8000) v = (u8)((v & 0x0F) | (fg << 4));
+            if (bits & 0x4000) v = (u8)((v & 0xF0) | fg);
+            PB_DAT = v;
+        }
+    }
+}
+/* ★HUD と同じ絵・同じ色(hud.c の crush_pattern / hud_colors の crush_col)。ボム棒: 幅4の棒を6おきに bars 本、行 1..14 */
+static const u8 crush_col[16] = { 15,15,15, 12,12,12, 11,11,11,11,11, 12,12,12, 15,15 };
+static void crush_bg(u8 bars) {
+    u8 pat[32], r, l = 0xF0, rt = 0x00;
+    if (bars >= 2) { l |= 0x03; rt |= 0xC0; }
+    if (bars >= 3) { rt |= 0x0F; }
+    for (r = 0; r < 16; r++) { u8 on = (u8)(r >= 1 && r <= 14); pat[r] = on ? l : 0; pat[16 + r] = on ? rt : 0; }
+    bgspr(8, 190, pat, crush_col, 0);
+}
 static void hud_bg(void) {
+    if (!hud_sc_dirty) {                             /* 最初の1回: 残機のアイコン(零戦のシルエット, 緑)。絵は表Aの SPR_ZERO をそのまま */
+        u8 pat[32], i;
+        hud_sc_dirty = 1;
+        vdp_cmd_wait();
+        vdp_read_addr((u16)(0x7800 + SPR_ZERO * 8));
+        for (i = 0; i < 32; i++) pat[i] = PB_DAT;
+        bgspr(212, 1, pat, (const u8 *)0, 3);
+    }
     if (g_score != hud_last) {
         u16 v = g_score; u8 i, d[5];
         hud_last = v;
         for (i = 5; i; ) { d[--i] = (u8)(v % 10); v /= 10; }
-        sea_rows(2, 8);
+        sea_box(8, 2, 40, 8);
         vdp_cmd_wait();
         for (i = 0; i < 5; i++) glyph((u8)(8 + i * 8), 2, (u8)('0' + d[i]), 15);
-        hud_lv = 0xFF;                               /* 同じ行なので残機も描き直す */
     }
-    if (g_lives != hud_lv) { hud_lv = g_lives; vdp_cmd_wait(); glyph(234, 2, (u8)('0' + (g_lives % 10)), 11); }
-    if (g_crush != hud_cr) {                         /* ボム残数(画面下): 橙の棒を本数ぶん。4以上は数字 */
-        u8 k;
+    if (g_lives != hud_lv) { hud_lv = g_lives; sea_box(234, 2, 8, 8); vdp_cmd_wait(); glyph(234, 2, (u8)('0' + (g_lives % 10)), 11); }
+    if (g_crush != hud_cr) {                         /* ボム残数(画面下): 1〜3 は棒の本数、4以上は棒1本＋数字(HUD と同じ) */
         hud_cr = g_crush;
-        sea_rows(190, 14);
+        sea_box(8, 190, 32, 16);
         vdp_cmd_wait();
-        if (g_crush > 3) glyph(8, 192, (u8)('0' + (g_crush % 10)), 12);
-        else {                                       /* 棒: 幅 4 ドット×12 行(リングの行へ直接。行ごとに番地を置く=リングの折り返しに強い) */
-            u8 r;
-            for (r = 0; r < 12; r++) {
-                u16 a = (u16)(((u16)(256 + (u8)(cam + 191 + r)) << 7) + 4);
-                for (k = 0; k < g_crush; k++) { vdp_write_addr((u16)(a + k * 3)); PB_DAT = 0xCC; PB_DAT = 0xCC; }
-            }
-        }
+        if (g_crush) crush_bg((u8)(g_crush <= 3 ? g_crush : 1));
+        if (g_crush > 3) glyph(28, 192, (u8)('0' + (g_crush % 10)), 15);
     }
 }
 
@@ -419,7 +452,7 @@ static void hit_test(void) {
 static void finish(void) {
     u8 i;
     for (i = 0; i < PB_N; i++) if (pbv[i].on) pb_erase(&pbv[i]);
-    sea_rows(2, 8); sea_rows(190, 14);
+    sea_rows(1, 16); sea_rows(190, 16);
     g_sea_skip = 0;
     vdp_wreg(1, (u8)(RG1SAV & 0xFE));               /* 拡大を切る */
     vdp_wreg(6, 0x0F);                              /* 絵の表Aへ */
@@ -443,7 +476,8 @@ void ovl_mb_frame(void) {
         if (cy >= 60) { st = ST_FIGHT; st_t = 0; }
         break;
     case ST_FIGHT:
-        if ((++st_t & (hurt ? 3 : 7)) == 0) { pb_spawn(cx - 2, cy + 44, sang, 10); sang += 7; }   /* 機首から渦巻き */
+        if ((++st_t & (hurt ? 1 : 3)) == 0) {       /* 機首から2本の腕の渦巻き */
+            pb_spawn(cx - 2, cy + 44, sang, 10); pb_spawn(cx - 2, cy + 44, (u8)(sang + 32), 10); sang += 5; }
         if (st_t >= 150) { st = ST_WARN; st_t = 0; }
         if (t >= P61_TIMEOUT) st = ST_LEAVE;
         hit_test();
@@ -452,7 +486,7 @@ void ovl_mb_frame(void) {
         if ((++st_t & 3) == 1) { flash = 1; coldirty = 1; }
         if (st_t >= P61_WARN_T) {
             u8 a = (u8)(aim_dir((s16)(cx - 8), (s16)(cy + 36), g_player_x, g_player_y) << 1), k;
-            for (k = 0; k < 7; k++) pb_spawn(cx - 2, cy + 44, (u8)(a - 9 + k * 3), hurt ? 16 : 13);
+            for (k = 0; k < 11; k++) pb_spawn(cx - 2, cy + 44, (u8)(a - 15 + k * 3), hurt ? 16 : 13);
             sfx(2, SFX_BOOM);
             st = ST_FIGHT; st_t = 0;
         }
