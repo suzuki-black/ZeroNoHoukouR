@@ -26,6 +26,7 @@
 #define PBY_SH_BANK    60   /* PBY の影 16方向×128B を2周(常駐は 添字&31 で引く) */
 #define OVL10_BANK     26   /* 4面の中ボス(He 111 ×2)用オーバレイ */
 #define OVL11_BANK     63   /* 3面の中ボス(駆逐艦)用オーバレイ */
+#define OVL12_BANK     3    /* 5面の中ボス(P-61)用オーバレイ(最後の空きバンク。スワップ窓の既定ページだが --bank 3 は可) */
 #define DD_BANK        60   /* 駆逐艦の絵は bank60 の 4096〜(前半は PBY の影) */
 #define HE_BANK        20   /* He 111 の 32方向×1024B(20..23) */
 #define HE_SH_BANK     61   /* He 111 の影 32方向×128B */

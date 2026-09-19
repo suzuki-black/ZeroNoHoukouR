@@ -351,7 +351,7 @@ $(BUILD)/fw200.bin: tools/gen_fw200.py | $(BUILD)
 	python3 tools/gen_fw200.py bin $@ $(BUILD)/fw200_sh.bin
 $(BUILD)/fw200_sh.bin: $(BUILD)/fw200.bin
 	@true
-ROMPACK_BANKS += --asset 44 $(BUILD)/fw200.bin --bank 24 $(BUILD)/ovl8.bin --bank 62 $(BUILD)/fw200_sh.bin
+ROMPACK_BANKS += --asset 44 $(BUILD)/fw200.bin --bank 24 $(BUILD)/ovl8.bin --bank 62 $(BUILD)/bank62.bin
 
 # 2面の中ボス(PBY カタリナ)用オーバレイ: 共通部分は ovl8 と同じ .rel を同じ順で、入口表も ovlhead8 を共用。中ボス本体だけ差し替え。
 OVL9_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_pby.rel
@@ -376,9 +376,10 @@ $(BUILD)/pby_sh.bin: $(BUILD)/pby.bin
 # bank60 = PBY の影(4096B)＋駆逐艦の絵(3072B)
 $(BUILD)/dd.bin: tools/gen_dd.py | $(BUILD)
 	python3 tools/gen_dd.py bin $@
-$(BUILD)/bank60.bin: $(BUILD)/pby_sh.bin $(BUILD)/dd.bin
+$(BUILD)/bank60.bin: $(BUILD)/pby_sh.bin $(BUILD)/dd.bin $(BUILD)/p61_a.bin
 	@SZ=$$(wc -c < $(BUILD)/pby_sh.bin | tr -d ' '); if [ "$$SZ" -ne 4096 ]; then echo "ERROR: pby_sh.bin が 4096B でない($$SZ)"; exit 3; fi
-	cat $(BUILD)/pby_sh.bin $(BUILD)/dd.bin > $@
+	@SZ=$$(wc -c < $(BUILD)/dd.bin | tr -d ' '); if [ "$$SZ" -ne 3072 ]; then echo "ERROR: dd.bin が 3072B でない($$SZ)"; exit 3; fi
+	cat $(BUILD)/pby_sh.bin $(BUILD)/dd.bin $(BUILD)/p61_a.bin > $@
 ROMPACK_BANKS += --bank 25 $(BUILD)/ovl9.bin --asset 48 $(BUILD)/pby.bin --bank 60 $(BUILD)/bank60.bin
 
 # 4面の中ボス(He 111 ×2)用オーバレイ: 共通部分は同じ順。宙返り(ovl_rot)だけ -DOVL_TWIN(下の帯の絵の表Bにも写す)。
@@ -407,7 +408,12 @@ $(BUILD)/he111.bin: tools/gen_he111.py tools/gen_fw200.py | $(BUILD)
 	python3 tools/gen_he111.py bin $@ $(BUILD)/he111_sh.bin
 $(BUILD)/he111_sh.bin: $(BUILD)/he111.bin
 	@true
-ROMPACK_BANKS += --bank 26 $(BUILD)/ovl10.bin --asset 20 $(BUILD)/he111.bin --bank 61 $(BUILD)/he111_sh.bin
+# bank61 = He 111 の影(4096B)＋P-61 の絵4件 / bank62 = Fw 200 の影(4096B)＋P-61 の絵4件(ROM に空きバンクが無いので半分ずつ使う)
+$(BUILD)/bank61.bin: $(BUILD)/he111_sh.bin $(BUILD)/p61_b.bin
+	cat $^ > $@
+$(BUILD)/bank62.bin: $(BUILD)/fw200_sh.bin $(BUILD)/p61_c.bin
+	cat $^ > $@
+ROMPACK_BANKS += --bank 26 $(BUILD)/ovl10.bin --asset 20 $(BUILD)/he111.bin --bank 61 $(BUILD)/bank61.bin
 
 # 3面の中ボス(駆逐艦)用オーバレイ: パレット処理は -DOVL_DD(3面の1行だけ・9 番を艦の色に)。宙返りは通常版。
 # 入口表は ovlhead11(slot14 を ovl_dd_split=艦の帯の横ずれと荒天のうねりへ)。衝撃波(ovl_shock)は入れない。
@@ -430,7 +436,36 @@ $(BUILD)/ovl11.bin: $(BUILD)/ovl11.ihx tools/ihx2bin.mjs
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl11 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
 ROMPACK_BANKS += --bank 63 $(BUILD)/ovl11.bin
 
-BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/fw200_sh.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/ovl11.bin $(BUILD)/bank60.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
+# 5面の中ボス(P-61)用オーバレイ(bank3): パレットは -DOVL_P61(5面の1行だけ)、宙返りは -DOVL_MAG(半分に縮めて絵の表Bへ・枠 0..3)。
+# 衝撃波(ovl_shock)は入れない(枠のため。static を持たないので番地はずれない)。入口表は ovlhead12(slot14=ovl_p61_split)。
+# 0xBF00〜は海のひな形なので 7936B 以下。
+# ★メガクラッシュ(ovl_crush, 2.4KB)も入れない: 津波自体が拡大(MAG)を使うので拡大中の中ボスとは相性が悪く、枠も足りない。中ボスの間はボムを使えない
+OVL12_RELS = $(BUILD)/ovl12_palette.rel $(BUILD)/ovl12_rot.rel $(BUILD)/ovl_mb_p61.rel
+$(BUILD)/ovl12.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_p61.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead12.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DOVL_P61 $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl12_palette.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DOVL_MAG $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl12_rot.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_p61.c -o $(BUILD)/ovl_mb_p61.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
+	     $(BUILD)/ovlhead12.rel $(OVL12_RELS) $(BUILD)/resident_syms.rel -o $@
+$(BUILD)/ovlhead12.rel: $(SRC)/banked/ovlhead12.s | $(BUILD)
+	sdasz80 -o $@ $<
+$(BUILD)/ovl12.bin: $(BUILD)/ovl12.ihx tools/ihx2bin.mjs
+	@node tools/ihx2bin.mjs $(BUILD)/ovl12.ihx 0xA000 $@; \
+	 SZ=$$(wc -c < $@ | tr -d ' '); \
+	 if [ "$$SZ" -gt 7936 ]; then \
+	   echo "ERROR: ovl12.bin=$${SZ}B が 7936B(0xA000-0xBEFF)を超過。0xBF00〜は海のひな形。"; exit 3; \
+	 fi; \
+	 echo "  ovl12.bin=$${SZ}B / 7936B (残り$$((7936-SZ))B)"; \
+	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl12.map | head -1); \
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl12 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
+# P-61 の絵(9方向×1024B)を3つに分ける(bank60 の後ろ1件・bank61 の後ろ4件・bank62 の後ろ4件)
+$(BUILD)/p61_a.bin: tools/gen_p61.py tools/gen_fw200.py | $(BUILD)
+	python3 tools/gen_p61.py bin $@ $(BUILD)/p61_b.bin $(BUILD)/p61_c.bin
+$(BUILD)/p61_b.bin $(BUILD)/p61_c.bin: $(BUILD)/p61_a.bin
+	@true
+ROMPACK_BANKS += --bank 3 $(BUILD)/ovl12.bin
+
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/fw200_sh.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/ovl11.bin $(BUILD)/bank60.bin $(BUILD)/bank61.bin $(BUILD)/bank62.bin $(BUILD)/ovl12.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 

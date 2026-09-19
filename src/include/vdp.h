@@ -18,6 +18,7 @@ void vdp_write_addr(u16 a);
 
 /* VRAM データポートへ1バイト(vdp_write_addr 後に使う)。 */
 void vdp_data(u8 v);
+u8   vdp_read_data(void);   /* vdp_read_addr の後に1バイト読む */
 
 /* SCREEN5(GRAPHIC4, 256x212 16色)へ切替(BIOS CHGMOD)。 */
 void vdp_screen5(void);

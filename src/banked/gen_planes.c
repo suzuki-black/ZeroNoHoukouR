@@ -199,7 +199,28 @@ static void card_text_impl(u8 stage, const char *nm) {
     vdp_text_s((u8)(128 - n * 8), 176, 15, 1, 2, nm);
 }
 
+/* ★5面の中ボス(P-61)の準備: スプライトを全部 2 倍に拡大(MAG)するので、絵の表A(0x7800)の64枚を半分(左上 8x8)に
+   縮めて絵の表B(0x2000)へ置く(2x2 画素の OR=細い弾も消えない)。オーバレイの枠が足りないので、1回きりのこの処理はここ(ROM 実行)。
+   宙返りのコマは ovl_rot(OVL_MAG) が毎回同じ縮め方で書く。 */
+static void mag_table(void) {
+    u8 p, r, i, src[32];
+    vdp_cmd_wait();
+    for (p = 0; p < 64; p++) {
+        vdp_read_addr((u16)(0x7800 + ((u16)p << 5)));
+        for (i = 0; i < 32; i++) src[i] = vdp_read_data();
+        vdp_write_addr((u16)(0x2000 + ((u16)p << 5)));
+        for (r = 0; r < 8; r++) {
+            u16 s = (u16)(((u16)(src[r * 2] | src[r * 2 + 1]) << 8) | (u8)(src[16 + r * 2] | src[16 + r * 2 + 1]));
+            u8 d = 0, m;
+            for (m = 0x80; m; m >>= 1) { if (s & 0xC000) d |= m; s <<= 2; }   /* ★0x80>>i の形は、このバンクの版で i のずらしが効かず全行 0x80 になった */
+            vdp_data(d);
+        }
+        for (r = 8; r < 32; r++) vdp_data(0);
+    }
+}
+
 void banked_entry(void) {
+    if (g_shipargs.mode == 7) { mag_table(); return; }
     if (g_shipargs.mode == 5) { results_impl((const char *)g_shipargs.ops); return; }
     if (g_shipargs.mode == 6) { card_text_impl(g_shipargs.hull, (const char *)g_shipargs.ops); return; }
     load_planes(g_shipargs.hull);

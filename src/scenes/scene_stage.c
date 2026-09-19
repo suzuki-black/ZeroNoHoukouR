@@ -1006,12 +1006,13 @@ u8 stage_update(void) {
             g_loop_cd = LOOP_CD;
             sfx(0, SFX_SHOT);                  /* 引き起こしの合図(専用音は後で) */
         }
-      } else if (g_crush) {                    /* B単押し = メガクラッシュ */
+      } else if (g_crush && !(g_mb == MB_ACTIVE && curstage == 4)) {   /* B単押し = メガクラッシュ(★5面の中ボスの間は使えない: 拡大中) */
         g_crush--;
         g_crush_t = CRUSH_FRAMES;
         arm_plain_split();               /* ★クラッシュ中は分割表を組み直さない(揺れと古い帯が干渉する) */
-        if (g_mb == MB_ACTIVE && curstage == 3) {   /* ★4面の中ボス: クラッシュ中は絵の表を切り替えない=下の機の絵が合わないので隠す */
-            u8 sl; for (sl = 14; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, 0);
+        if (g_mb == MB_ACTIVE && curstage >= 3) {   /* ★4面・5面の中ボス: クラッシュ中は絵の表Aだけを使う=中ボスの絵が合わないので隠す */
+            u8 sl; for (sl = 10; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, 0);
+            vdp_wreg(6, 0x0F);
         }
         bgm_stop();                      /* ★BGMを止めて雷鳴だけを聴かせる(バンキング=ホット区間の外) */
         sfx(2, SFX_THUNDER);             /* noise C の雷鳴(鋭い炸裂→深い轟き) */
@@ -1067,7 +1068,7 @@ u8 stage_update(void) {
         /* ★中ボス: 艦が見える手前で出す。戦っている間は縦スクロールを止める(全部の中ボス共通=ユーザー判断)。
            海の波の動き(SEA13 の列の塗り直し)は止めないので、海は動いて見える。
            (以前はカメラを 256 ずつ巻き戻して海を流し続けていた) */
-        if (curstage < 4 && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;   /* 1〜4面(5面はまだ) */
+        if (curstage < 5 && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;   /* 1〜5面 */
         if (g_mb == MB_ACTIVE || g_mb == MB_LOAD) vstep = 0;
         if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= vstep) ? (u16)(cam - vstep) : SC_CAM_SHIP; }
         scroll_to(cam);
@@ -1135,7 +1136,7 @@ u8 stage_update(void) {
     /* HUD は R#23(縦スクロール)設定直後・エンティティ描画より前に確定させる。
        画面最上部のHUDは最もラスタ競合しやすく、重い ent_draw_all の後に書くと
        ラスタが既に上端を通過→R#23とズレて1px上下振動する(旧版で残っていた不具合)。 */
-    hud_draw(g_score, g_lives);
+    if (!(g_mb == MB_ACTIVE && curstage == 4)) hud_draw(g_score, g_lives);   /* ★5面の中ボスの間は拡大(MAG)なので HUD は背景に描く */
 
     /* ★スプライト分割をゲームに統合: 行 CURTAIN_SPLIT_LINE で R#5 をセットBへ切替える。
        両セットには ent_draw_all の内容が丸ごとミラーされている(g_spr_dual)ので、
@@ -1213,7 +1214,7 @@ u8 stage_update(void) {
             }
         }
     }
-    g_spr_base = (u8)(g_loop_t ? (HUD_SLOTS + 4) : HUD_SLOTS);
+    g_spr_base = (u8)((g_loop_t ? 4 : 0) + ((g_mb == MB_ACTIVE && curstage == 4) ? 0 : HUD_SLOTS));   /* 5面の中ボスの間は HUD の枠も使う */
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (g_mb == MB_ACTIVE) g_spr_limit = (u8)(32 - g_mb_n);   /* ★中ボスは末尾の枠(最低優先) */
     g_spr_hide_to = (g_mb == MB_ACTIVE) ? g_spr_limit : 0;   /* ★その手前に停止マーカを置かない(vdp.c) */
@@ -1237,9 +1238,10 @@ u8 stage_update(void) {
     /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
-        {   static const u8 ovl[4]  = { OVL8_BANK, OVL9_BANK, OVL11_BANK, OVL10_BANK };     /* 1面 Fw 200 / 2面 PBY / 3面 駆逐艦 / 4面 He 111 ×2 */
-            static const u8 bank[4] = { MB_FRAMES_BANK, PBY_BANK, DD_BANK, HE_BANK };
-            static const u8 sh[4]   = { FW_SH_BANK, PBY_SH_BANK, 0, HE_SH_BANK };
+        if (curstage == 4) { g_shipargs.mode = 7; bcall_to(GEN_PLANES_BANK); }   /* 5面: 拡大用に絵の表を半分に縮めて表Bへ(ROM 実行) */
+        {   static const u8 ovl[5]  = { OVL8_BANK, OVL9_BANK, OVL11_BANK, OVL10_BANK, OVL12_BANK };   /* 1面 Fw 200 / 2面 PBY / 3面 駆逐艦 / 4面 He 111 ×2 / 5面 P-61 */
+            static const u8 bank[5] = { MB_FRAMES_BANK, PBY_BANK, DD_BANK, HE_BANK, DD_BANK };      /* 5面の絵は bank60〜62 の後ろ半分(添字で引く) */
+            static const u8 sh[5]   = { FW_SH_BANK, PBY_SH_BANK, 0, HE_SH_BANK, 0 };
             overlay_load(ovl[curstage]); mb_bank = bank[curstage]; mb_sbank = sh[curstage]; }
         if (g_ovl_ok) {
             vdp_copy(0, MB_PAT_ROW_A, 0, MB_SAVE_Y, 256, 2);            /* 借りるパターン6行を page0 へ退避 */

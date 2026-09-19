@@ -41,6 +41,8 @@ void vdp_data(u8 v) {
     VDP_DAT = v;
 }
 
+u8 vdp_read_data(void) { return VDP_DAT; }   /* vdp_read_addr の後の連続読み(バンクのコード用) */
+
 /* ★VRAM 読み出しアドレスの設定。書込みと違い**上位バイトの bit6 を立てない**(0x40=書込み)。
    以降 VDP_DAT を読むと自動インクリメントで連続読みできる。
    ★用途: 既に VRAM にあるスプライトパターンを RAM へ取り出す(アフィン回転の元絵)。
