@@ -23,6 +23,11 @@
 #define OVL9_BANK      25   /* 2面の中ボス(PBY カタリナ)用オーバレイ。入口は ovlhead8.s を共用 */
 #define PBY_BANK       48   /* PBY の 6段階の大きさ×16方向×1024B(48..59。1バンク8件) */
 #define PBY_SH_BANK    60   /* PBY の影 16方向×128B */
+#define OVL10_BANK     26   /* 4面の中ボス(He 111 ×2)用オーバレイ */
+#define HE_BANK        20   /* He 111 の 32方向×1024B(20..23) */
+#define MB_TWIN_SPLIT  106  /* 4面: 2機は画面の中心(106行)について点対称=分割線はいつもここ */
+#define MB_PATB        0x2000   /* 4面: 下の帯の絵の表(page0 の 64..79 行。R#6=0x04) */
+#define MB_R6_B        0x04
 #define MB_SBUF        0xEB80   /* 影のパターン128B の置き場(0xEB00〜は DEBUG_PROF の計測 40B。その後ろ) */
 #define MB_BUF         0xE700   /* 向きのデータ1024B の置き場(ship_ram/fb_ram の番地。どちらも面の準備でしか使わない) */
 #define MB_SAVE_Y      168  /* page0: 借りる前のパターン行の退避先(247,248 → 168,169 / 250..253 → 170..173) */
@@ -39,6 +44,7 @@ extern u8 g_mb;
 extern u8 g_mb_n;     /* 中ボスがいま使っているスプライト枚数。32-g_mb_n 以降を使う(最低優先)。エンティティはその手前まで */
 extern u8 g_mb_req;   /* オーバレイ→常駐: 読んでほしい向き(0xFF=なし) */
 extern u8 g_mb_new;   /* 常駐→オーバレイ: MB_BUF に新しい向きが入った */
+extern u16 g_mb_pat_off;       /* mb_upload が書くパターン表の番地に足す量(0=表A / 4面の2機目は MB_PATB-0x7800) */
 extern u16 g_mb_bm, g_mb_om;   /* いま VRAM に載っている絵の 本体のマス / 重ねのマス(mb_upload が更新) */
 /* 常駐(両オーバレイ共用): MB_BUF の絵をパターン表へ書く。行A へ本体 256B、行B へ続く rowb バイト(本体の残り＋重ね＋影)。
    影を書くときは sh=1(MB_SBUF の 128B を続けて書く)。マスの表を更新し、スプライト枚数(本体＋重ね＋sh?4:0)が変わったら

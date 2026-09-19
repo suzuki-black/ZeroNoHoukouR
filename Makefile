@@ -212,7 +212,7 @@ $(BUILD)/gen_planes.ihx: $(SRC)/banked/gen_planes.c $(HDRS) $(BUILD)/bankhead.re
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/gen_planes.rel $(BUILD)/resident_syms.rel -o $@
 
-# DEBUG_PROF の冷たい側(自己診断画面・区間別µs表示)を bank20 へ。常駐リクレイムのため prof.c から移設。
+# DEBUG_PROF の冷たい側(自己診断画面・区間別µs表示)を bank29 へ(20〜23 は4面の中ボスの絵)。常駐リクレイムのため prof.c から移設。
 # 通常ビルドでは一切作らない(バンクも消費しない)。
 # ★-Wl-b_HOME: このバンクだけ u32 の乗除算(acc_us)を使うので SDCC の long ランタイム(_HOME 領域)が
 #   リンクされる。既定では _DATA(0xE000)の後ろに置かれ、バンク窓(0xA000-0xBFFF)の外へ落ちて
@@ -373,7 +373,32 @@ $(BUILD)/pby_sh.bin: $(BUILD)/pby.bin
 	@true
 ROMPACK_BANKS += --bank 25 $(BUILD)/ovl9.bin --asset 48 $(BUILD)/pby.bin --bank 60 $(BUILD)/pby_sh.bin
 
-BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
+# 4面の中ボス(He 111 ×2)用オーバレイ: 共通部分は同じ順。宙返り(ovl_rot)だけ -DOVL_TWIN(下の帯の絵の表Bにも写す)。
+# 入口表は ovlhead10(slot14 の衝撃波の分割表を ovl_twin_shock へ差し替え)。
+OVL10_RELS = $(BUILD)/ovl10_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl10_rot.rel $(BUILD)/ovl_mb_he.rel
+$(BUILD)/ovl10.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_he.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead10.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl10_palette.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl10_rot.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_he.c -o $(BUILD)/ovl_mb_he.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
+	     $(BUILD)/ovlhead10.rel $(OVL10_RELS) $(BUILD)/resident_syms.rel -o $@
+$(BUILD)/ovlhead10.rel: $(SRC)/banked/ovlhead10.s | $(BUILD)
+	sdasz80 -o $@ $<
+$(BUILD)/ovl10.bin: $(BUILD)/ovl10.ihx tools/ihx2bin.mjs
+	@node tools/ihx2bin.mjs $(BUILD)/ovl10.ihx 0xA000 $@; \
+	 SZ=$$(wc -c < $@ | tr -d ' '); \
+	 if [ "$$SZ" -gt 8192 ]; then \
+	   echo "ERROR: ovl10.bin=$${SZ}B が オーバレイ枠 8192B を超過。"; exit 3; \
+	 fi; \
+	 echo "  ovl10.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"; \
+	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl10.map | head -1); \
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl10 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
+# He 111 の絵(32方向×1024B=4バンク)
+$(BUILD)/he111.bin: tools/gen_he111.py tools/gen_fw200.py | $(BUILD)
+	python3 tools/gen_he111.py bin $@
+ROMPACK_BANKS += --bank 26 $(BUILD)/ovl10.bin --asset 20 $(BUILD)/he111.bin
+
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 
@@ -381,13 +406,13 @@ BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bi
 ifdef MAGTEST
   DEFS          += -DMAGTEST
   BANK_IHX      += $(BUILD)/scene_magtest.ihx
-  ROMPACK_BANKS += --bank 21 $(BUILD)/scene_magtest.ihx
+  ROMPACK_BANKS += --bank 30 $(BUILD)/scene_magtest.ihx
 endif
 # ── 実機検証: 走査線途中の 横スクロール(R#26/R#27) 切替テスト: make clean && make HSTEST=1
 ifdef HSTEST
   DEFS          += -DHSTEST
   BANK_IHX      += $(BUILD)/scene_hstest.ihx
-  ROMPACK_BANKS += --bank 22 $(BUILD)/scene_hstest.ihx
+  ROMPACK_BANKS += --bank 31 $(BUILD)/scene_hstest.ihx
 endif
 # ── 実機検証: 背景に描く弾の発数と FPS: make clean && make BGTEST=1 DEBUG_FPS=1
 #    ★本番の弾はホット区間(page1/2 を RAM へ差し替えた状態)で動くので、**ゲーム本体の海の区間に混ぜて**測る。
@@ -397,7 +422,7 @@ ifdef BGTEST
 endif
 ifdef DEBUG_PROF
   BANK_IHX      += $(BUILD)/prof_bank.ihx
-  ROMPACK_BANKS += --bank 20 $(BUILD)/prof_bank.ihx
+  ROMPACK_BANKS += --bank 29 $(BUILD)/prof_bank.ihx
 endif
 
 GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk assets/cards.bin

@@ -559,9 +559,9 @@ void mb_upload(u16 rowb, u8 sh) {
     const u8 *p = (const u8 *)(MB_BUF + 4);
     u16 i;
     u8 n = (u8)(sh ? 4 : 0);
-    vdp_write_addr((u16)((u16)MB_PAT_ROW_A << 7));
+    vdp_write_addr((u16)(((u16)MB_PAT_ROW_A << 7) + g_mb_pat_off));
     for (i = 0; i < 256; i++) vdp_data(*p++);
-    vdp_write_addr((u16)((u16)MB_PAT_ROW_B << 7));
+    vdp_write_addr((u16)(((u16)MB_PAT_ROW_B << 7) + g_mb_pat_off));
     for (i = 0; i < rowb; i++) vdp_data(*p++);
     if (sh) { p = (const u8 *)MB_SBUF; for (i = 0; i < 128; i++) vdp_data(*p++); }
     g_mb_bm = *(u16 *)MB_BUF; g_mb_om = *(u16 *)(MB_BUF + 2);
@@ -1010,6 +1010,9 @@ u8 stage_update(void) {
         g_crush--;
         g_crush_t = CRUSH_FRAMES;
         arm_plain_split();               /* ★クラッシュ中は分割表を組み直さない(揺れと古い帯が干渉する) */
+        if (g_mb == MB_ACTIVE && curstage == 3) {   /* ★4面の中ボス: クラッシュ中は絵の表を切り替えない=下の機の絵が合わないので隠す */
+            u8 sl; for (sl = 14; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, 0);
+        }
         bgm_stop();                      /* ★BGMを止めて雷鳴だけを聴かせる(バンキング=ホット区間の外) */
         sfx(2, SFX_THUNDER);             /* noise C の雷鳴(鋭い炸裂→深い轟き) */
         return SCENE_NONE;
@@ -1063,7 +1066,7 @@ u8 stage_update(void) {
 #endif
         /* ★1面の中ボス: 艦が見える手前で出す。戦っている間は海を流し続けるため、カメラを 256(=16行)ずつ巻き戻す。
            リング上の位置も R#23 も変わらない＝描き直し無し(海は16行周期)。世界に置いた増槽だけ一緒にずらす。 */
-        if (curstage < 2 && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;   /* 1面 Fw 200 / 2面 PBY */
+        if ((curstage < 2 || curstage == 3) && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;   /* 1面 Fw 200 / 2面 PBY / 4面 He 111 ×2 */
         /* 終わったら逆に 256 進め、巻き戻したぶん待たされずに艦が出てくるようにする。 */
         { s16 d = (g_mb == MB_ACTIVE && cam <= SC_CAM_SHIP + 32) ? 256
                 : (g_mb == MB_OVER && cam >= SC_CAM_SHIP + 304) ? -256 : 0;
@@ -1240,8 +1243,8 @@ u8 stage_update(void) {
     /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
-        overlay_load(curstage ? OVL9_BANK : OVL8_BANK);
-        mb_bank = curstage ? PBY_BANK : MB_FRAMES_BANK; mb_sbank = curstage ? PBY_SH_BANK : 0;
+        overlay_load((curstage == 3) ? OVL10_BANK : curstage ? OVL9_BANK : OVL8_BANK);
+        mb_bank = (curstage == 3) ? HE_BANK : curstage ? PBY_BANK : MB_FRAMES_BANK; mb_sbank = (curstage == 1) ? PBY_SH_BANK : 0;
         if (g_ovl_ok) {
             vdp_copy(0, MB_PAT_ROW_A, 0, MB_SAVE_Y, 256, 2);            /* 借りるパターン6行を page0 へ退避 */
             vdp_copy(0, MB_PAT_ROW_B, 0, (u16)(MB_SAVE_Y + 2), 256, 4);

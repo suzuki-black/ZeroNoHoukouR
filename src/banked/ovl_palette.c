@@ -38,6 +38,11 @@ static const u8 pal_stage[1][16][3] = {
     { {0,0,0},{1,4,5},{2,5,6},{1,3,1},{3,3,3},{2,2,2},{6,5,3},{0,1,3},
       {2,5,2},{3,3,1},{4,6,4},{7,1,1},{7,4,0},{1,1,1},{4,4,5},{7,7,7} } };
 #define PAL_STAGE_IDX 0
+#elif defined(OVL_TWIN)
+/* ★4面の中ボスのオーバレイも枠が狭いので、4面(朝霧)の1面分だけ持つ */
+#define PAL_ONLY_STAGE 3
+#include "stage_grade.h"
+#define PAL_STAGE_IDX 0
 #else
 #include "stage_grade.h"
 #define PAL_STAGE_IDX ((curstage < 5) ? curstage : 0)
@@ -116,7 +121,7 @@ void ovl_pal_update(void) {
 #endif
     shimmer++;
     /* ★3面(荒天): ときどき稲光。数秒おきに「白→少し戻る→また光る→消える」を 4 フレームで。 */
-#ifndef OVL_FINAL
+#if !defined(OVL_FINAL) && !defined(OVL_TWIN)   /* 3面の稲光(最終面/4面の中ボスのオーバレイには要らない) */
     if (curstage == 2 && !w) {
         if (storm_t) storm_t--;
         else { storm_t = (u8)(90 + (rnd() & 127)); storm_f = 4; sfx(2, SFX_THUNDER); }

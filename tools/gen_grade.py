@@ -74,11 +74,17 @@ def preview(inp, outp):
     sheet.save(outp)
 
 def header(outp):
-    L = ['/* stage_grade.h — tools/gen_grade.py が生成(手で直さない)。面ごとの時間帯・天候の基準パレット [面][色][r,g,b] */',
-         'static const u8 pal_stage[5][16][3] = {']
+    L = ['/* stage_grade.h — tools/gen_grade.py が生成(手で直さない)。面ごとの時間帯・天候の基準パレット [面][色][r,g,b]',
+         '   PAL_ONLY_STAGE を定義すると、その面の1行だけの表になる(枠の狭いオーバレイ用。4面の中ボス)。 */',
+         '#ifdef PAL_ONLY_STAGE',
+         'static const u8 pal_stage[1][16][3] = {']
+    for s in range(5):
+        L.append('#%s PAL_ONLY_STAGE == %d' % ('if' if s == 0 else 'elif', s))
+        L.append('  { ' + ', '.join('{%d,%d,%d}' % c for c in grade(s)) + ' },')
+    L += ['#endif', '};', '#else', 'static const u8 pal_stage[5][16][3] = {']
     for s in range(5):
         L.append('  { ' + ', '.join('{%d,%d,%d}' % c for c in grade(s)) + ' },')
-    L.append('};')
+    L += ['};', '#endif']
     open(outp, 'w').write('\n'.join(L) + '\n')
 
 if __name__ == '__main__':

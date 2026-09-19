@@ -122,7 +122,8 @@ def cell_rows(img, c):
         cnt = Counter(img[qy + y][qx + x] for x in range(16) if img[qy + y][qx + x])
         if not cnt:
             rows.append((0, 0)); continue
-        base = cnt.most_common(1)[0][0]
+        plain = [(c, n) for c, n in cnt.most_common() if c not in (XB, XW)]
+        base = plain[0][0] if plain else cnt.most_common(1)[0][0]   # 標識の色は行の地にしない(多数派になると行全体が白/黒の線になった)
         ov = 0
         for mark in (XB, XW):
             if base != mark and cnt.get(mark):

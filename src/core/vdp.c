@@ -464,10 +464,12 @@ void vdp_sprite_init(void) {
     }
 }
 
+u8 g_spr_patb;   /* 1=絵の表B(0x2000。4面の中ボスの間だけ下の帯で使う)にも同じ絵を書く */
 void vdp_sprite_pattern(u8 patnum, const u8 *d32) {
     u8 i;
     vdp_write_addr(SPR_PAT + (u16)patnum * 8);
     for (i = 0; i < 32; i++) VDP_DAT = d32[i];
+    if (g_spr_patb) { vdp_write_addr((u16)(0x2000 + (u16)patnum * 8)); for (i = 0; i < 32; i++) VDP_DAT = d32[i]; }
 }
 /* スプライトパターン(32B=16x16 1枚)を VRAM から読み出す。 */
 void vdp_sprite_pattern_read(u8 patnum, u8 *d32) {
