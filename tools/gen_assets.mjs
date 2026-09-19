@@ -130,27 +130,25 @@ const TRACKS = [
     melLoop:14, basLoop:48,
     basStep:12, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:4,
   },
-  (() => {   // 9: 中ボス(元ネタ: ベートーヴェン 交響曲第9番 第4楽章 終盤の Prestissimo。ただし**ニ短調で悲壮に**。2/2・四分=12f)
-    //   A 突進: 和声的短音階の駆け上がりと分散和音。途中で B♭ へ落として翳らせる
-    //   B 哀歌: 下降するラメント・バス(D→C→B♭→A)の上に長い音
-    //   C 緊張: 減七(C#-E-G-B♭)の分散和音で煽り、B♭→A の溜め息で落とす
-    //   D 終結: ニ短調と A7 の打ち合い→ニ短調の連打。明るく解決させずに先頭へ(32小節)
+  (() => {   // 9: 中ボス(元ネタ: ベートーヴェン 交響曲第9番 第4楽章 終盤の Prestissimo。**ニ短調で悲壮に**。2/2・四分=14f)
+    //   1〜8   嘆き: 半音ずつ下がるベース(D→C#→C→B→B♭→A)の上で、上から一段下りる「溜め息」を重ねる
+    //   9〜16  焦燥: 駆け上がっては落ちる。ナポリの E♭ で翳らせ、A の上の F→E(短6度の溜め息)で締める
+    //   17〜24 頂点: B♭→A の溜め息、減七(G#-B-D-F)を転げ落ちる
+    //   25〜32 終結: E♭ と減七を経てニ短調の分散和音で低く崩れ、A の弔鐘で先頭へ(明るく解決させない)
     //   ★有名な旋律(歓喜の歌)の引用は入れない=曲の空気を壊す(ユーザー指摘)
-    const E = 6, Q = 12, DQ = 18, H = 24, W = 48;
-    const secA = `D4:${E} E4:${E} F4:${E} G4:${E} A4:${E} A#4:${E} C#5:${E} D5:${E}  A5:${Q} F5:${Q} D5:${Q} A4:${Q}
-                  E4:${E} F4:${E} G4:${E} A4:${E} A#4:${E} C#5:${E} D5:${E} E5:${E}  C#5:${Q} E5:${Q} A5:${H}
-                  D5:${E} E5:${E} F5:${E} G5:${E} A5:${E} G5:${E} F5:${E} E5:${E}  D5:${Q} F5:${Q} A5:${Q} D5:${Q}
-                  G5:${Q} E5:${Q} C#5:${Q} A4:${Q}  A4:${Q} C#5:${Q} E5:${Q} G5:${Q}`;
-    const secB = `A5:${H} A5:${H}  G5:${H} F5:${H}  F5:${H} D5:${H}  E5:${W}
-                  F5:${H} A5:${H}  A#5:${H} G5:${H}  E5:${Q} F5:${Q} G5:${Q} A#5:${Q}  A5:${DQ} G5:${E} F5:${Q} E5:${Q}`;
-    const secC = `C#5:${E} E5:${E} G5:${E} A#5:${E} G5:${E} E5:${E} C#5:${E} E5:${E}  D5:${E} F5:${E} A5:${E} F5:${E} D5:${E} F5:${E} A5:${E} F5:${E}
-                  A#4:${E} D5:${E} F5:${E} A#5:${E} F5:${E} D5:${E} A#4:${E} D5:${E}  A4:${E} C#5:${E} E5:${E} A5:${E} E5:${E} C#5:${E} A4:${E} C#5:${E}
-                  A#5:${H} A5:${H}  G5:${H} F5:${H}  E5:${Q} F5:${Q} E5:${Q} D5:${Q}  C#5:${H} E5:${H}`;
-    const secD = `A4:${H} C#5:${H}  E5:${H} G5:${H}  F5:${Q} F5:${Q} D5:${Q} D5:${Q}  A5:${Q} A5:${Q} F5:${Q} F5:${Q}
-                  E5:${H} C#5:${H}  D5:${H} F5:${H}  A5:${Q} E5:${Q} A5:${Q} C#5:${Q}  D5:${Q} -:${Q} D5:${Q} -:${Q}`;
-    const { mel, mln } = line([secA, secB, secC, secD].join(' '));
-    const bas = pump('D D A A D A# A A  D C A# A D G A A  A D A# A G A# A A  A A D D A D A D');
-    return { mel, mln, bas, basStep:12, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:5 };
+    const E = 7, Q = 14, DQ = 21, H = 28, W = 56;
+    const sec1 = `F5:${H} E5:${H}  E5:${H} D5:${Q} C#5:${Q}  D5:${H} C5:${H}  F5:${H} E5:${Q} D5:${Q}
+                  D5:${DQ} E5:${E} F5:${Q} G5:${Q}  A5:${H} G5:${H}  G5:${H} F5:${H}  E5:${W}`;
+    const sec2 = `D5:${E} E5:${E} F5:${E} G5:${E} A5:${Q} A5:${Q}  A#5:${Q} A5:${Q} G5:${Q} F5:${Q}
+                  G5:${E} A5:${E} A#5:${E} A5:${E} G5:${Q} D5:${Q}  F5:${Q} E5:${Q} D5:${H}
+                  G5:${DQ} F5:${E} D#5:${H}  A#5:${H} G5:${H}  C#5:${DQ} D5:${E} E5:${Q} G5:${Q}  F5:${H} E5:${H}`;
+    const sec3 = `F5:${Q} G5:${Q} A5:${Q} A#5:${Q}  A#5:${H} A5:${H}  F5:${Q} D5:${Q} B4:${Q} G#4:${Q}  A4:${H} C#5:${Q} E5:${Q}
+                  F5:${H} A5:${H}  G5:${H} E5:${H}  D5:${H} F5:${H}  E5:${H} C#5:${H}`;
+    const sec4 = `D5:${H} F5:${H}  A5:${DQ} G5:${E} F5:${Q} E5:${Q}  D#5:${H} G5:${H}  A#5:${H} G5:${H}
+                  F5:${H} D5:${H}  C#5:${H} E5:${H}  D5:${Q} A4:${Q} F4:${Q} D4:${Q}  A4:${Q} -:${Q} A4:${Q} -:${Q}`;
+    const { mel, mln } = line([sec1, sec2, sec3, sec4].join(' '));
+    const bas = pump('D C# C B A# A A# A  D D G G D# D# A A  A# A# G# A D C# A# A  D D D# D# G# A D A');
+    return { mel, mln, bas, basStep:Q, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:5 };
   })(),
 ];
 
@@ -341,7 +339,7 @@ const DRUM_STYLES = [
   { pat:[1,3,2,3, 1,1,2,3, 1,3,2,3, 2,2,1,3], v0:[0,15,15,8], tempo:8 },  // 2 重い戦闘(空母)
   { pat:[1,2,1,2, 1,2,1,2, 1,2,1,2, 1,2,2,2], v0:[0,10, 9,4], tempo:6 },  // 3 激しい刻み(フッド/アイオワ)
   { pat:[1,3,3,1, 2,3,1,3, 1,3,3,1, 2,3,2,2], v0:[0,15,13,5], tempo:6 },  // 4 最終面(重いキック＋小節末のスネア連打)
-  { pat:[1,3,2,3, 1,3,2,3, 1,3,2,3, 1,3,2,2], v0:[0,15,13,7], tempo:6 },  // 5 中ボス(2/2 の速い行進。八分刻みのシンバル＝トルコ風の打楽器)
+  { pat:[1,3,3,3, 2,3,3,3, 1,3,1,3, 2,3,2,2], v0:[0,15,14,5], tempo:7 },  // 5 中ボス(2/2 の重い打ち。1拍目キック・3拍目スネア、2小節目の終わりで詰める)
 ];
 // 各style を 32B ストライドにパディング(オフセット計算を *21→<<5 にして常駐のmul回避)。
 const drumBlob = Buffer.from(DRUM_STYLES.flatMap((s) => {
