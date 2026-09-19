@@ -13,8 +13,9 @@
      予告の明滅や霧のあとは絵を読み直して色を戻す。
    ★影: 海面に 30 ドット(2x2)。低空なので右下へ HE_SH_OFF だけ。上の機の影も 106 行より上に収まる(中心 y≦70)。
      ★最初は朝霧を理由に省いたが「影が無い」と実機で指摘されて足した。
-   ★被弾: 当たった機だけ数フレームちらつく(消える)。2機一緒に白く光るのは突進の予告だけ
-     (★当初は被弾の表示が無く、予告の明滅が「片方に当てたのに両方点滅」に見えた=実機で指摘)。
+   ★中ボス共通の決まり(ROADMAP「中ボス共通の決まり」。面ごとに違うのは駄目=実機で指摘):
+     被弾=当たった機だけ2フレーム白く光る＋火花＋音 / 予告=白く明滅 / 手負い(耐久半分)=エンジン炎上＋速く / 影は変えない。
+     白くしたあと元の色へすぐ戻せるよう、各機の色を colbuf(オーバレイの後ろの RAM)に持つ。
    ★片方を落とすと残った1機が怒る(向き直り倍速・待ち半分・突進 4px/f)。45秒で上下へ逃げる。
      1機 300点、2機とも落とすと残り時間ボーナス＋メガクラッシュ1回。メガクラッシュの間は2機を隠す(下の帯の絵の表が合わないため)。 */
 #include "types.h"
@@ -40,6 +41,7 @@ extern u8 rnd(void);
 #define HE_SLOT0    14      /* 各帯の中ボスの枠 14..31 */
 #define HE_PIERCE   0x7ABE
 #define HE_SH_OFF   12      /* 影を右下へずらす量 */
+#define HE_COLBUF   0xBD00  /* 2機の機体の色(最大14枚×16B×2)。オーバレイ(0xA000〜)の後ろ=ovl10 は 7424B 以下であること(Makefile が検証) */
 
 enum { ST_FOG, ST_AIM, ST_DASH, ST_LEAVE, ST_DONE };
 
@@ -49,13 +51,13 @@ static const s8 hx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 static const s8 hy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
 static u8  st, st_t, d8, fcur, hurt, cur, gone, fogc;   /* fogc=霧の間の機体の色 */   /* gone: bit0=上の機 / bit1=下の機 が落ちた */
-static u8  ldir[2], dt[2], hb[2], nc[2];           /* hb=被弾のちらつきの残り / nc=機体(重ね＋本体)の枚数。その後ろ4枚が影 */                         /* 各機の VRAM に載っている向き / 墜落の残りフレーム */
+static u8  ldir[2], dt[2], hf[2], nc[2];           /* hf=白く光っている残り / nc=機体(重ね＋本体)の枚数。その後ろ4枚が影 */                         /* 各機の VRAM に載っている向き / 墜落の残りフレーム */
 static u16 t, hp[2], bm[2], om[2];
 static s16 cx, cy;                                 /* 上の機(=動きの主)の中心 */
 
 void ovl_mb_init(void) {
     st = ST_FOG; st_t = 0; t = 0; hurt = 0; gone = 0;
-    hp[0] = hp[1] = HE_HP; dt[0] = dt[1] = 0; hb[0] = hb[1] = 0; nc[0] = nc[1] = 0; bm[0] = bm[1] = om[0] = om[1] = 0;
+    hp[0] = hp[1] = HE_HP; dt[0] = dt[1] = 0; hf[0] = hf[1] = 0; nc[0] = nc[1] = 0; bm[0] = bm[1] = om[0] = om[1] = 0;
     cx = 56; cy = 44; fcur = 8;                    /* 上の機は左上で右向き / 下の機は右下で左向き */
     ldir[0] = ldir[1] = 0xFF;
     vdp_copy(0, 240, 0, 64, 256, 16);              /* 絵の表A(0x7800)→表B(0x2000)。自機や弾の絵を下の帯でも使う */
@@ -93,10 +95,8 @@ static void aim(void) {
 static s16 kx(u8 k) { return k ? BX() : cx; }
 static s16 ky(u8 k) { return k ? BY() : cy; }
 
-/* 機 k の枠(14..31)へ、絵のあるマスを 重ね→本体→影 の順に。show=0 で全部隠す。
-   body=0 は機体だけ隠して影は残す(被弾のちらつき。★影は光らない・消えない・色も変わらない=実機で指摘)。
-   機体を隠すときも枠の並びは変えない(枠ごとの色がずれるため)。 */
-static void put(u8 k, u8 show, u8 body) {
+/* 機 k の枠(14..31)へ、絵のあるマスを 重ね→本体→影 の順に。show=0 で全部隠す。 */
+static void put(u8 k, u8 show) {
     u8 c, j = 0, pass, n = 0, hy = (u8)(220 + g_vscroll - 1);
     s16 bx = (s16)(kx(k) - 32), by = (s16)(ky(k) - 32);
     if (hy == 216) hy = 215;
@@ -112,7 +112,7 @@ static void put(u8 k, u8 show, u8 body) {
             y = (s16)(by + ((c >> 2) << 4));
             yy = (u8)(y + g_vscroll - 1);
             if (yy == 216) yy = 215;
-            if (x < 0 || x > 240 || y < -16 || y > 212 || (pass < 2 && !body)) { yy = hy; x = 0; }
+            if (x < 0 || x > 240 || y < -16 || y > 212) { yy = hy; x = 0; }
             HE_DAT = yy; HE_DAT = (u8)x; HE_DAT = (pass == 1) ? MB_CELL_PAT(c) : MB_OV_PAT(j); HE_DAT = 0;
             j++; n++;
         }
@@ -120,15 +120,14 @@ static void put(u8 k, u8 show, u8 body) {
     for (; n < 18; n++) { HE_DAT = hy; HE_DAT = 0; HE_DAT = MB_CELL_PAT(0); HE_DAT = 0; }
 }
 
-static void color_all(u8 c) {                      /* 2機の機体(影は除く)を1色に。帯ごとの色表へ直接書く */
-    u8 k;
+/* 機 k の機体(影は除く)の色を書く。c=0 なら colbuf の本来の色、それ以外はその1色。帯ごとの色表へ直接書く。 */
+static void paint(u8 k, u8 c) {
+    const u8 *p = (const u8 *)(HE_COLBUF + (k ? 224 : 0));
     u16 i;
-    for (k = 0; k < 2; k++) {
-        vdp_write_addr((u16)((k ? 0x7000 : 0x7400) + HE_SLOT0 * 16));
-        for (i = (u16)nc[k] << 4; i; i--) HE_DAT = c;
-    }
-    ldir[0] = ldir[1] = 0xFF;                       /* 後で絵を読み直して色を戻す */
+    vdp_write_addr((u16)((k ? 0x7000 : 0x7400) + HE_SLOT0 * 16));
+    for (i = (u16)nc[k] << 4; i; i--) HE_DAT = c ? c : *p++;
 }
+static void flash(u8 k) { if (!hf[k]) paint(k, 15); hf[k] = 2; }   /* 2フレーム白く(続けて当たれば延びる) */
 
 static void hit_test(u8 k) {
     u8 i;
@@ -142,7 +141,7 @@ static void hit_test(u8 k) {
         if (e->ax == (s16)(HE_PIERCE + k)) continue;
         if (g_pwr < PWR_MAX) e->active = 0; else e->ax = (s16)(HE_PIERCE + k);
         hp[k] = (hp[k] > e->hp) ? (u16)(hp[k] - e->hp) : 0;
-        hb[k] = 6;
+        flash(k);
         if ((t & 3) == 0) { ent_spawn_spark(e->x, e->y); sfx(1, SFX_HIT); }
     }
     {   /* 胴体に触れたら被弾 */
@@ -170,8 +169,8 @@ void ovl_mb_frame(void) {
     case ST_FOG:                                   /* 霧から浮かび上がる: 霧の色 → 灰 → 本来の色(読み直し) */
         move(1, 0);
         if (st_t == 0) fogc = 2;                   /* 色は絵を読み込むたびに fogc で塗る(登場の瞬間はまだ絵が無い) */
-        else if (st_t == HE_FOG_T / 2) { fogc = 4; color_all(4); }
-        if (++st_t >= HE_FOG_T) { ldir[0] = ldir[1] = 0xFF; aim(); }   /* 本来の色を読み直す */
+        else if (st_t == HE_FOG_T / 2) { fogc = 4; paint(0, 4); paint(1, 4); }
+        if (++st_t >= HE_FOG_T) { paint(0, 0); paint(1, 0); aim(); }   /* 本来の色へ */
         break;
     case ST_AIM: {
         u8 f8 = (u8)(((fcur + 2) >> 2) & 7);
@@ -183,7 +182,7 @@ void ovl_mb_frame(void) {
         break; }
     case ST_DASH:                                  /* 予告(白く明滅)のあと、一直線に突っ込む */
         if (++st_t <= HE_WARN_T) {
-            if ((st_t & 3) == 1 && !crush) color_all(15);   /* 白くしたら読み直しで本来の色へ戻る=明滅 */
+            if ((st_t & 3) == 1 && !crush) { flash(0); flash(1); }   /* 2フレーム白→戻る、を繰り返す=明滅 */
         } else if (move(dx8[d8], dy8[d8]) || (hurt && move(hx8[d8], hy8[d8])) || st_t >= HE_WARN_T + HE_DASH_T) aim();
         break;
     case ST_LEAVE:                                 /* 上の機は上へ、下の機は(鏡写しで)下へ抜ける */
@@ -202,6 +201,12 @@ void ovl_mb_frame(void) {
             continue;
         }
         if (st != ST_FOG && st != ST_LEAVE && !crush) hit_test(k);
+        if (hp[k] && hp[k] < HE_HP / 2) {          /* 手負い: 内側エンジンが燃え、動きが速くなる(共通の決まり) */
+            u8 f8 = (u8)((((k ? fcur + 16 : fcur) + 2) >> 2) & 7), l8 = (u8)((f8 + 6) & 7);
+            if (!hurt) { hurt = 1; g_shake = 8; sfx(2, SFX_BOOM); }
+            if ((t & 7) == (k << 2))
+                ent_spawn_explosion((s16)(kx(k) - 8 + dx8[f8] * 3 + dx8[l8] * 6), (s16)(ky(k) - 8 + dy8[f8] * 3 + dy8[l8] * 6));
+        }
         if (!hp[k]) {                              /* 撃墜 */
             u16 pts = 300;
             dt[k] = 40;
@@ -228,8 +233,9 @@ void ovl_mb_frame(void) {
         for (i = bm[cur]; i; i >>= 1) n += (u16)(i & 1);
         for (i = om[cur]; i; i >>= 1) n += (u16)(i & 1);
         nc[cur] = (u8)n;
-        vdp_write_addr((u16)((cur ? 0x7000 : 0x7400) + HE_SLOT0 * 16));
-        for (n <<= 4; n; n--) HE_DAT = (st == ST_FOG) ? fogc : *p++;
+        {   u8 *q = (u8 *)(HE_COLBUF + (cur ? 224 : 0));   /* 本来の色を控える */
+            for (i = n << 4; i; i--) *q++ = *p++; }
+        paint(cur, (st == ST_FOG) ? fogc : hf[cur] ? 15 : 0);
         for (n = 64; n; n--) HE_DAT = 13;              /* 影4枚(いつも同じ色) */
     }
     if (g_mb_req == 0xFF && !g_mb_new) {   /* 向きが変わった機の絵を読みに行く(上の機が先) */
@@ -238,8 +244,8 @@ void ovl_mb_frame(void) {
         else if (ldir[1] != want1) { cur = 1; ldir[1] = want1; g_mb_req = want1; }
     }
     for (k = 0; k < 2; k++) {
-        if (hb[k]) hb[k]--;
-        put(k, (u8)(!(gone & (1 << k)) && !crush), (u8)!(hb[k] & 2));   /* 被弾した機だけちらつく(影は残す) */
+        if (hf[k] && !--hf[k]) paint(k, 0);       /* 白から本来の色へ */
+        put(k, (u8)(!(gone & (1 << k)) && !crush));
     }
 }
 
