@@ -38,6 +38,12 @@ static const u8 pal_stage[1][16][3] = {
     { {0,0,0},{1,4,5},{2,5,6},{1,3,1},{3,3,3},{2,2,2},{6,5,3},{0,1,3},
       {2,5,2},{3,3,1},{4,6,4},{7,1,1},{7,4,0},{1,1,1},{4,4,5},{7,7,7} } };
 #define PAL_STAGE_IDX 0
+#elif defined(OVL_DD)
+/* ★3面の中ボス(駆逐艦)のオーバレイ: 3面(荒天)の1面分だけ。9 番は艦の甲板の灰(被弾で白)に差し替える */
+#define PAL_ONLY_STAGE 2
+#include "stage_grade.h"
+#define PAL_STAGE_IDX 0
+extern u8 g_dd_flash;
 #elif defined(OVL_TWIN)
 /* ★4面の中ボスのオーバレイも枠が狭いので、4面(朝霧)の1面分だけ持つ */
 #define PAL_ONLY_STAGE 3
@@ -139,6 +145,9 @@ void ovl_pal_update(void) {
             else if (ph < 16) { }
             else if (ph < 24) { if (b) b--; }
         }
+#ifdef OVL_DD
+        if (i == 9) { if (g_dd_flash) r = g = b = 7; else { r = 3; g = 3; b = 3; } }   /* 駆逐艦の甲板(中ボス専用の色) */
+#endif
         if (w) { r = mix(r, tr, w); g = mix(g, tg, w); b = mix(b, tb, w); }
         if (!pal_valid || pal_cur[i][0] != r || pal_cur[i][1] != g || pal_cur[i][2] != b) {
             vdp_set_pal(i, r, g, b);

@@ -1067,7 +1067,7 @@ u8 stage_update(void) {
         /* ★中ボス: 艦が見える手前で出す。戦っている間は縦スクロールを止める(全部の中ボス共通=ユーザー判断)。
            海の波の動き(SEA13 の列の塗り直し)は止めないので、海は動いて見える。
            (以前はカメラを 256 ずつ巻き戻して海を流し続けていた) */
-        if ((curstage < 2 || curstage == 3) && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;   /* 1面 Fw 200 / 2面 PBY / 4面 He 111 ×2 */
+        if (curstage < 4 && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;   /* 1〜4面(5面はまだ) */
         if (g_mb == MB_ACTIVE || g_mb == MB_LOAD) vstep = 0;
         if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= vstep) ? (u16)(cam - vstep) : SC_CAM_SHIP; }
         scroll_to(cam);
@@ -1237,8 +1237,10 @@ u8 stage_update(void) {
     /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
-        overlay_load((curstage == 3) ? OVL10_BANK : curstage ? OVL9_BANK : OVL8_BANK);
-        mb_bank = (curstage == 3) ? HE_BANK : curstage ? PBY_BANK : MB_FRAMES_BANK; mb_sbank = (curstage == 1) ? PBY_SH_BANK : (curstage == 3) ? HE_SH_BANK : FW_SH_BANK;
+        {   static const u8 ovl[4]  = { OVL8_BANK, OVL9_BANK, OVL11_BANK, OVL10_BANK };     /* 1面 Fw 200 / 2面 PBY / 3面 駆逐艦 / 4面 He 111 ×2 */
+            static const u8 bank[4] = { MB_FRAMES_BANK, PBY_BANK, DD_BANK, HE_BANK };
+            static const u8 sh[4]   = { FW_SH_BANK, PBY_SH_BANK, 0, HE_SH_BANK };
+            overlay_load(ovl[curstage]); mb_bank = bank[curstage]; mb_sbank = sh[curstage]; }
         if (g_ovl_ok) {
             vdp_copy(0, MB_PAT_ROW_A, 0, MB_SAVE_Y, 256, 2);            /* 借りるパターン6行を page0 へ退避 */
             vdp_copy(0, MB_PAT_ROW_B, 0, (u16)(MB_SAVE_Y + 2), 256, 4);
@@ -1250,6 +1252,7 @@ u8 stage_update(void) {
             overlay_load(OVL_BANK); g_mb = MB_OVER;
         }
     } else if (g_mb == MB_RESTORE) {
+        vdp_set_hscroll(0, 0); vdp_wreg(25, 0); g_sea_skip = 0;   /* 3面: 帯の横ずれ・左端の MSK・海の塗り直しの除外を戻す */
         vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_ROW_A, 256, 2);            /* 砲身と艦載機のパターンを戻す */
         vdp_copy(0, (u16)(MB_SAVE_Y + 2), 0, MB_PAT_ROW_B, 256, 4);
         overlay_load(OVL_BANK);

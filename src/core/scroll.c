@@ -100,11 +100,12 @@ void sea_set_ship(u8 stage) {
    ★以前 端接地帯を YMMM(0xE0) 化したが残留VDP状態に敏感でソフトリセット後に崩れたため HMMM に戻した。 */
 static u16 sea_vy;
 static u8  sea_p, sea_si, sea_total;
+u16 g_sea_skip;   /* ★塗り直さないリングの帯(bit=16行の帯)。3面の中ボス(背景に描いた駆逐艦)の行 */
 void sea_begin(void) {
     sea_vy = (u16)(PAGE1_Y + (u16)sea_strip * 16);
     sea_p  = (u8)(sea_phase & 15);
     sea_si = 0;
-    sea_total = (u8)(sea_nranges * 2);           /* 各range 2コピー(上+wrap。wrapはp=0で空発行) */
+    sea_total = (g_sea_skip & (1u << sea_strip)) ? 0 : (u8)(sea_nranges * 2);   /* 各range 2コピー(上+wrap。wrapはp=0で空発行) */
     sea_strip = (u8)((sea_strip + 7) & 15);       /* 歩幅7(16と互素)=掃引を散らす。進行はbeginで1回だけ */
     if (++sea_acc >= 8) { sea_acc = 0; sea_phase += 1; }   /* 0.125px/f */
 }
