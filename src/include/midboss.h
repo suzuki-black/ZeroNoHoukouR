@@ -19,6 +19,7 @@
 
 #define OVL8_BANK      24   /* 中ボス用オーバレイ(通常面のものから主砲の弾幕を抜き、中ボスを足したもの) */
 #define MB_FRAMES_BANK 44   /* Fw 200 の 32 方向×1024B(44..47。1バンク8方向) */
+#define FW_SH_BANK     62   /* Fw 200 の影 32方向×128B */
 #define MB_NDIR        32
 #define OVL9_BANK      25   /* 2面の中ボス(PBY カタリナ)用オーバレイ。入口は ovlhead8.s を共用 */
 #define PBY_BANK       48   /* PBY の 6段階の大きさ×16方向×1024B(48..59。1バンク8件) */

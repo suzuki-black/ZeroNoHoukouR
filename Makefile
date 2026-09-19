@@ -348,8 +348,10 @@ $(BUILD)/ovl8.bin: $(BUILD)/ovl8.ihx tools/ihx2bin.mjs
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl8 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
 # Fw 200(1面の中ボス, 64x64・迷彩＋重ね)の 32 方向×1024B(4バンク)
 $(BUILD)/fw200.bin: tools/gen_fw200.py | $(BUILD)
-	python3 tools/gen_fw200.py bin $@
-ROMPACK_BANKS += --asset 44 $(BUILD)/fw200.bin --bank 24 $(BUILD)/ovl8.bin
+	python3 tools/gen_fw200.py bin $@ $(BUILD)/fw200_sh.bin
+$(BUILD)/fw200_sh.bin: $(BUILD)/fw200.bin
+	@true
+ROMPACK_BANKS += --asset 44 $(BUILD)/fw200.bin --bank 24 $(BUILD)/ovl8.bin --bank 62 $(BUILD)/fw200_sh.bin
 
 # 2面の中ボス(PBY カタリナ)用オーバレイ: 共通部分は ovl8 と同じ .rel を同じ順で、入口表も ovlhead8 を共用。中ボス本体だけ差し替え。
 OVL9_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_pby.rel
@@ -401,7 +403,7 @@ $(BUILD)/he111_sh.bin: $(BUILD)/he111.bin
 	@true
 ROMPACK_BANKS += --bank 26 $(BUILD)/ovl10.bin --asset 20 $(BUILD)/he111.bin --bank 61 $(BUILD)/he111_sh.bin
 
-BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/fw200_sh.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 

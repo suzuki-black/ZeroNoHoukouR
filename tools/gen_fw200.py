@@ -5,7 +5,7 @@
      コマが4倍になり VRAM の置き場(page0)に 64 方向は入らないので 32 方向。
    使い方: python3 tools/gen_fw200.py preview <out.png>   … 見本(8方向, 単色)
            python3 tools/gen_fw200.py color <out.png>     … 多色化の見本(1枚だけ/重ね6枚/灰/制約なし)
-           python3 tools/gen_fw200.py bin <out.bin>       … ROM 用 32768B(32方向×1024B, 迷彩＋重ね6枚)
+           python3 tools/gen_fw200.py bin <out.bin> <sh.bin> … ROM 用 32768B(32方向×1024B, 迷彩＋重ね2枚)と影 32方向×128B
    ★多色化(実機で「1色だといかにもMSX」「旋回すると色が変わる」と指摘): 部位ごとの色(迷彩/エンジン/ガラス/国籍標識)を
      機体座標で塗って回転し、16x16 のマスごとに「本体(1行1色)」＋最大6マスだけ「重ね(1行1色)」で表す(1行に最大6枚)。
    1方向=1024B: [0,1]=本体のマス(bit c) [2,3]=重ねのマス [4..259]=本体 c=0..7 のパターン(砲身の枠)
@@ -259,9 +259,13 @@ def cell_bytes(bits16):
             out.append(v)
     return out
 
+FW_SPR_MAX = 18   # 本体＋重ね(最大2)＋影4。★影を入れるため重ねを 6→2 に減らした(迷彩の細かさより影=ユーザー判断)
+
 def dir_blob(k):
     img = frame_color(k, 'olive')
-    chosen = pick_overlays(img, MAX_OV)
+    nbody = sum(1 for c in range(16) if any(img[(c // 4) * 16 + y][(c % 4) * 16 + x] for y in range(16) for x in range(16)))
+    assert nbody <= FW_SPR_MAX - 4, (k, nbody)
+    chosen = pick_overlays(img, min(2, FW_SPR_MAX - 4 - nbody))
     bm = om = 0
     pat_base, col_base, pat_ov, col_ov = [bytes(32)] * 16, {}, [], []
     for c in range(16):
@@ -287,5 +291,21 @@ def dir_blob(k):
 
 if __name__ == '__main__' and sys.argv[1] == 'color':
     color_preview(sys.argv[2])
-if __name__ == '__main__' and sys.argv[1] == 'bin':
+def shadow_bytes(k):
+    """影: 半分の大きさ(約 31 ドット)の影絵を 2x2(マス 5,6,9,10)で 128B"""
+    global PX_M
+    keep = PX_M
+    PX_M = keep / 2
+    f = frame(k)
+    PX_M = keep
+    out = bytearray()
+    for c in range(16):
+        if c not in (5, 6, 9, 10):
+            assert not any(f[(c // 4) * 16 + y][(c % 4) * 16 + x] for y in range(16) for x in range(16)), (k, c)
+    for c in (5, 6, 9, 10):
+        out += cell_bytes([[f[(c // 4) * 16 + y][(c % 4) * 16 + x] for x in range(16)] for y in range(16)])
+    return bytes(out)
+
+if __name__ == '__main__' and sys.argv[1] == 'bin':             # bin <frames.bin> <shadow.bin>
     open(sys.argv[2], 'wb').write(b''.join(dir_blob(k) for k in range(NDIR)))
+    open(sys.argv[3], 'wb').write(b''.join(shadow_bytes(k) for k in range(NDIR)))

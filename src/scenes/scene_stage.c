@@ -1244,7 +1244,7 @@ u8 stage_update(void) {
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
         overlay_load((curstage == 3) ? OVL10_BANK : curstage ? OVL9_BANK : OVL8_BANK);
-        mb_bank = (curstage == 3) ? HE_BANK : curstage ? PBY_BANK : MB_FRAMES_BANK; mb_sbank = (curstage == 1) ? PBY_SH_BANK : (curstage == 3) ? HE_SH_BANK : 0;
+        mb_bank = (curstage == 3) ? HE_BANK : curstage ? PBY_BANK : MB_FRAMES_BANK; mb_sbank = (curstage == 1) ? PBY_SH_BANK : (curstage == 3) ? HE_SH_BANK : FW_SH_BANK;
         if (g_ovl_ok) {
             vdp_copy(0, MB_PAT_ROW_A, 0, MB_SAVE_Y, 256, 2);            /* 借りるパターン6行を page0 へ退避 */
             vdp_copy(0, MB_PAT_ROW_B, 0, (u16)(MB_SAVE_Y + 2), 256, 4);

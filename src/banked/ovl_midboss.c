@@ -2,7 +2,7 @@
    ★大きさは 64x64(16x16 を 4x4)。32x32 では「中ボスの迫力が無い」、2機にしても同じと実機で指摘された。
    ★回転は 32 方向。色は部位ごと(迷彩/エンジン/ガラス/国籍標識)で、向きごとに焼いてある(tools/gen_fw200.py)。
      1色だと「いかにもMSX」、画面の行で陰影を付けると「旋回で色が変わる」と実機で指摘された。
-     16x16 のマスごとに本体(1行1色)＋最大6マスだけ重ね(1行1色)。1行に最大6枚。
+     16x16 のマスごとに本体(1行1色)＋最大2マスだけ重ね(1行1色)＋影4(2x2)。1面も影を付ける(中ボス共通の決まり)ため重ねを6→2に減らした。
    ★向きのデータは ROM にあり、オーバレイからは読めない: 向きを変えるときは g_mb_req に置き、常駐がフレームの終わりに
      MB_BUF へ読む。次のフレームでここがパターン・色・位置をまとめて書く(midboss.h)。
    ★スプライトは最低優先の末尾(32-n..31)。重ねを前(優先)、本体を後ろに、絵のあるマスだけ詰める(16〜18枚)。
@@ -32,6 +32,7 @@ extern u8 rnd(void);
 #define MB_WARN_T   12      /* 突進の予告(止まって明滅)のフレーム数。突進のフレームに含まない */
 #define MB_HURT     (MB_HP / 2)   /* これを切ったら手負い */
 #define MB_PIERCE   0x7ABC  /* 貫通弾に付ける印(同じ弾が毎フレーム当たらないように) */
+#define MB_SH_OFF   12      /* 影を右下へずらす量(低空) */
 
 enum { ST_ENTER, ST_AIM, ST_DASH, ST_LEAVE, ST_DIE, ST_DONE };
 
@@ -57,26 +58,33 @@ static void turn_to(u8 tgt) {
     if (d && ((t & 1) || hurt)) fcur = (u8)((fcur + ((d < 16) ? 1 : 31)) & 31);
 }
 
-/* ent_draw_all の後に呼ぶ: 重ね→本体の順に末尾の枠へ置き、エンティティとの間の枠は隠して停止マーカを消す。 */
+/* ent_draw_all の後に呼ぶ: 重ね→本体→影の順に末尾の枠へ置き、エンティティとの間の枠は隠して停止マーカを消す。
+   影はいつも同じ色(13)。被弾や予告で白くなるのは機体だけ(中ボス共通の決まり)。 */
 static void put_sprites(void) {
     u8 c, j = 0, pass, sl, s0 = (u8)(32 - g_mb_n);
     const u8 *col = (const u8 *)(MB_BUF + 708);
     for (sl = g_spr_used; sl < s0; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
     sl = s0;
-    for (pass = 0; pass < 2; pass++) {
-        u16 m = pass ? g_mb_bm : g_mb_om;
+    for (pass = 0; pass < 3; pass++) {
+        u16 m = (pass == 0) ? g_mb_om : (pass == 1) ? g_mb_bm : 0x0660;   /* 影は 2x2(マス 5,6,9,10) */
         for (c = 0; c < 16; c++) {
             s16 x, y;
             u8 off;
             if (!(m & (1u << c))) continue;
-            x = (s16)(bx + ((c & 3) << 4));
-            y = (s16)(by + ((c >> 2) << 4));
-            if (coldirty) { if (flash) vdp_sprite_color(sl, 15); else vdp_sprite_color_tab(sl, col); }   /* 被弾=白 */
-            col += 16;
+            x = (s16)(bx + ((c & 3) << 4) + ((pass == 2) ? MB_SH_OFF : 0));
+            y = (s16)(by + ((c >> 2) << 4) + ((pass == 2) ? MB_SH_OFF : 0));
+            if (coldirty) {
+                if (pass == 2) vdp_sprite_color(sl, 13);
+                else if (flash) vdp_sprite_color(sl, 15);   /* 被弾/予告=白 */
+                else vdp_sprite_color_tab(sl, col);
+            }
+            if (pass < 2) col += 16;
             off = (u8)(x < 0 || x > 240 || y < -16 || y > 212);
-            vdp_sprite_pos(sl, off ? 0 : (u8)x, off ? 220 : (u8)y, pass ? MB_CELL_PAT(c) : MB_OV_PAT(j));
+            vdp_sprite_pos(sl, off ? 0 : (u8)x, off ? 220 : (u8)y,
+                           (pass == 0) ? MB_OV_PAT(j) : (pass == 1) ? MB_CELL_PAT(c) : MB_OV_PAT(j));
             j++; sl++;
         }
+        if (pass == 1) j = 2;                      /* 影の絵は重ねの後ろ(中くらいの艦載機の枠 2..5) */
     }
     coldirty = 0;
 }
@@ -193,6 +201,6 @@ void ovl_mb_frame(void) {
     }
     turn_to(tgt);
     if (fcur != flast && g_mb_req == 0xFF && !g_mb_new) { flast = fcur; g_mb_req = fcur; }   /* 読み込み中は待つ */
-    if (g_mb_new) { mb_upload(448, 0); coldirty = 1; }   /* 常駐が読んだ絵をパターン表へ(midboss.h) */
+    if (g_mb_new) { mb_upload(320, 1); coldirty = 1; }   /* 常駐が読んだ絵をパターン表へ(midboss.h) */
     put_sprites();
 }
