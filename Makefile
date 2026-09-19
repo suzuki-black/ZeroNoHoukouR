@@ -211,6 +211,8 @@ $(BUILD)/gen_planes.ihx: $(SRC)/banked/gen_planes.c $(HDRS) $(BUILD)/bankhead.re
 	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/gen_planes.c -o $(BUILD)/gen_planes.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/gen_planes.rel $(BUILD)/resident_syms.rel -o $@
+	@DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/gen_planes.map | head -1); \
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: gen_planes の static が $$((16#$$DL))B。0xE000〜0xE0FF(256B)を超えると 0xE100 の曲データを踏む"; rm -f $@; exit 3; fi
 
 # DEBUG_PROF の冷たい側(自己診断画面・区間別µs表示)を bank29 へ(20〜23 は4面の中ボスの絵)。常駐リクレイムのため prof.c から移設。
 # 通常ビルドでは一切作らない(バンクも消費しない)。

@@ -75,7 +75,8 @@ static const u8 aa_sml_hp[STAGE_COUNT] = {  8,  9, 10, 12, 14 };   /* 小型対�
 
 /* ★海イントロ共通BGM(gen_assets track7=スロー渋・予感)。海(敵艦未出現)の間だけ鳴らし、敵艦が見えたら面別へ切替。 */
 #define BGM_SEA_INTRO 7
-#define BGM_MIDBOSS   9   /* 中ボス(第九 第4楽章 終盤が元ネタ。ニ短調で悲壮に)。倒した後も艦が見えて面別BGMに替わるまで鳴らし続ける */
+#define BGM_ALERT     10  /* 警報(敵艦発見/敵大将発見)。2音のサイレン */
+#define BGM_MIDBOSS   9   /* 中ボス(第九 第4楽章 終盤が元ネタ。ニ短調で悲壮に)。中ボスが終わって海2 に戻ったら海の曲へ */
 /* 敵機の行別カラー(陰影16B)は面別にデータバンク(fighter_ctab_off)へ置き、stage_build で当該面の
    16BをRAMへ読む(常駐節約)。海イントロ機／艦載機の coltab に使う。 */
 static u8 cur_ctab[16];
@@ -197,6 +198,12 @@ static s8  wdir;
 static u8  dmode;     /* 撃破演出モード(0=通常 / 1=炎上スペクタクル中) */
 static u8  dtimer;    /* 撃破演出の残フレーム */
 static u8  raided;    /* 1=戦艦出現時に空襲(戦闘機/敵弾)を一掃済み */
+/* ★海モードの段取り(1〜5面): 海1 → フェード → 中ボス → 海2(カメラを巻き戻して同じ長さ) → フェード → 警報 → 艦。
+   最終面は警報(敵大将発見)から始める。フェードは ovl_power.c、警報の文字は bank19(gen_planes.c)。 */
+enum { SEQ_SEA1, SEQ_FADE1, SEQ_BOSS, SEQ_SEA2, SEQ_FADE2, SEQ_ALERT, SEQ_GO };
+static u8  seq;
+static const u8 seq_flags[7] = { 3, 0, 0, 3, 0, 0, 1 };   /* bit0=前進する / bit1=戦闘機が湧く */
+#define SEA_REWIND (SC_CAM_START - SC_CAM_SHIP - 16)       /* 海2 の巻き戻し量(144=16の倍数=海の模様が継ぎ目なく続く) */
 static u8  final_over;   /* 1=最終面のボスが落ちきった(結果画面へ) */
 #ifdef DEBUG_FPS
 u8 g_dbgmask;   /* ★デバッグ: bit1=海/bit2=AA/bit4=更新/bit8=衝突/bit16=描画 を個別停止。M(TRIGB)でプリセット巡回。hud_drawが値表示 */
@@ -757,6 +764,9 @@ static void stage_build(void) {
     g_pinv = 0;
     g_miss = 0;
     dmode = 0; dtimer = 0; raided = 0; final_over = 0;
+    g_fade = 0; g_alert = 0;
+    seq = g_ovl_ok ? SEQ_SEA1 : SEQ_GO;      /* ★オーバレイが無い機械では中ボスもフェードも出せない=すぐ艦へ */
+    if (curstage == STAGE_FINAL) { seq = SEQ_FADE2; g_alert = 1; }   /* ★最終面: 無音→敵大将発見の警報→イントロ付きの曲 */
     g_mb = MB_NONE;        /* ★中ボスは挑戦ごとに出し直す(オーバレイと砲身の枠は上の overlay_load / sprites_load で元に戻っている) */
 
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
@@ -801,10 +811,16 @@ static void stage_begin_display(void) {
     g_shake = 0; g_hitstop = 0; sfresh = SFRESH_HOLD;   /* ★出だしの誤揺れ抑止(stage_update冒頭でも数フレーム強制0) */
 }
 
+/* 面の始まりの曲。最終面は無音で始め、敵大将発見の警報の後にイントロ付きの曲(段取りの SEQ_ALERT の終わり) */
+static void stage_music(void) {
+    if (curstage == STAGE_FINAL) bgm_stop();
+    else bgm_play(BGM_SEA_INTRO);
+}
+
 /* ミス再挑戦: 開始カード/ファンファーレ無しで即再構築。海(phase0)から再開なので海イントロ共通BGMへ戻す。 */
 static void stage_setup(void) {
     stage_build();
-    bgm_play((curstage == STAGE_FINAL) ? FINAL_BGM : BGM_SEA_INTRO);
+    stage_music();
     stage_begin_display();
 }
 
@@ -834,7 +850,7 @@ static void stage_intro(void) {
     stage_build();                          /* ★カードの裏でゲーム本体の艦をバッファBへ生成(重い) */
     play_fanfare_open();                    /* 開始ファンファーレ(BGM無音でこれだけ鳴る) */
     for (f = 0; f < 40; f++) vdp_wait_frame();     /* 少し余韻(旧版と同じ40フレーム) */
-    bgm_play((curstage == STAGE_FINAL) ? FINAL_BGM : BGM_SEA_INTRO);   /* まず海イントロ共通BGM(敵艦が見えたら面別へ切替)。最終面はイントロ付きの専用曲 */
+    stage_music();                          /* まず海イントロ共通BGM(敵艦が見えたら面別へ切替)。最終面は無音(警報の後に専用曲) */
     stage_begin_display();                   /* 地形を表示=ゲーム開始 */
 }
 
@@ -1011,7 +1027,7 @@ u8 stage_update(void) {
             g_loop_cd = LOOP_CD;
             sfx(0, SFX_SHOT);                  /* 引き起こしの合図(専用音は後で) */
         }
-      } else if (g_crush && !(g_mb == MB_ACTIVE && curstage == 4)) {   /* B単押し = メガクラッシュ(★5面の中ボスの間は使えない: 拡大中) */
+      } else if (g_crush && !(g_mb == MB_ACTIVE && curstage == 4) && !g_alert) {   /* B単押し = メガクラッシュ(★5面の中ボスの間は使えない: 拡大中) */
         g_crush--;
         g_crush_t = CRUSH_FRAMES;
         arm_plain_split();               /* ★クラッシュ中は分割表を組み直さない(揺れと古い帯が干渉する) */
@@ -1066,15 +1082,14 @@ u8 stage_update(void) {
         /* 海のみ: ゆっくり前進。★毎フレーム1pxで動かす=停止フレームを作らない(整数スクロールで
            滑らかに出せる最も遅い一定速度)。旧実装は4/5コマだけ動かす=停止コマがカクつき「フレームレート
            低下」に見えていた。1px/f は蛇行(1.6px/f)より遅く、かつ完全に一定速度=滑らか。蛇行なし。 */
-        vstep = 1;
+        vstep = (u8)(seq_flags[seq] & 1);   /* フェード・中ボス・警報の間は止める(海の波の動きは止めない) */
 #ifdef BGTEST
         vstep = 0;   /* ★実機検証: 海の区間で止めて測る(艦が出てこない=条件を一定に) */
 #endif
-        /* ★中ボス: 艦が見える手前で出す。戦っている間は縦スクロールを止める(全部の中ボス共通=ユーザー判断)。
-           海の波の動き(SEA13 の列の塗り直し)は止めないので、海は動いて見える。
-           (以前はカメラを 256 ずつ巻き戻して海を流し続けていた) */
-        if (curstage < 5 && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;   /* 1〜5面 */
-        if (g_mb == MB_ACTIVE || g_mb == MB_LOAD) vstep = 0;
+        /* ★段取り: 海1/海2 の終わり(艦が見える手前)で敵をフェードアウトさせ、消えきったら中ボス(海1)/警報(海2)。
+           中ボスが終わったら(下の常駐区間)カメラを巻き戻して海2 を海1 と同じ長さにする(ユーザー指定) */
+        if ((seq == SEQ_SEA1 || seq == SEQ_SEA2) && cam <= SC_CAM_SHIP + 16) { seq++; g_fade = FADE_T; }
+        if (seq == SEQ_FADE1 && !g_fade) { seq = SEQ_BOSS; g_mb = MB_LOAD; }
         if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= vstep) ? (u16)(cam - vstep) : SC_CAM_SHIP; }
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
@@ -1082,7 +1097,7 @@ u8 stage_update(void) {
 #ifdef BGTEST
         if (0) {     /* ★実機検証: 敵機も出さない(背景弾だけの負荷を測る) */
 #else
-        if (cam > SC_CAM_SHIP && g_mb != MB_ACTIVE && g_mb != MB_LOAD && (++ftick % diff_interval((u8)(fighter_iv[curstage] >> 1))) == 0) {
+        if ((seq_flags[seq] & 2) && (++ftick % diff_interval((u8)(fighter_iv[curstage] >> 1))) == 0) {   /* 海1/海2 の間だけ */
 #endif  /* ★出現間隔を半分=海モードの戦闘機を倍増 */
             Entity *f = ent_spawn(ET_FIGHTER);
             if (f) {
@@ -1176,7 +1191,7 @@ u8 stage_update(void) {
        aa_collide は撃破時 burn_add(VDPコマンド)を出すので、その前に海を完全ドレイン(cmd_wait)する。
        ★SEASCRL区間は分散のため計測不可(=0表示)。海のVDP待ちは挟んだ区間へ吸収される。 */
     { u8 sea_on = 0;
-      if (DBG_ON(1) && curstage != STAGE_FINAL) {   /* bit1=海アニ停止。★最終面は海の模様を変えない(背景弾の消去が模様を前提にする) */
+      if (DBG_ON(1) && curstage != STAGE_FINAL && !g_alert) {   /* bit1=海アニ停止。★警報の間も止める(文字を塗り潰す)。★最終面は海の模様を変えない(背景弾の消去が模様を前提にする) */
           if (phase != 0) { if (++seatick & 1) sea_on = 1; }        /* phase1: 2フレームに1回 */
           else if (++seatick >= SEA0_DIV) { seatick = 0; sea_on = 1; }
       }
@@ -1278,6 +1293,21 @@ u8 stage_update(void) {
         overlay_load(OVL_BANK);
         player_shadow(1);
         g_mb = MB_OVER;
+    }
+    /* ★段取りのうちバンクを切り替えるもの(曲・警報の文字)はここ(ホット区間の外)で */
+    if (seq == SEQ_BOSS && g_mb == MB_OVER) {          /* 中ボスが終わった → 海2(海の曲に戻し、カメラを巻き戻す) */
+        seq = SEQ_SEA2;
+        bgm_play(BGM_SEA_INTRO);
+        cam = (u16)(cam + SEA_REWIND); scroll_rebase(SEA_REWIND);
+    } else if (seq == SEQ_FADE2 && !g_fade) {          /* 消えきった → 警報(曲を止めてサイレンと大きな文字) */
+        seq = SEQ_ALERT; g_alert = 1;
+        bgm_play(BGM_ALERT);
+        g_shipargs.mode = 8; g_shipargs.hull = (u8)(curstage == STAGE_FINAL); bcall_to(GEN_PLANES_BANK);
+    } else if (seq == SEQ_ALERT && (u16)(snd_ticks - g_bgm_t0) >= ALERT_TICKS) {   /* 警報おわり(サイレンの頭から一定時間)→ 文字を消す。
+                                                         最終面はここでイントロ付きの曲(ボスの登場はこれに合わせる) */
+        seq = SEQ_GO; g_alert = 0;
+        scroll_repaint_all();
+        if (curstage == STAGE_FINAL) bgm_play(FINAL_BGM); else bgm_stop();
     }
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。

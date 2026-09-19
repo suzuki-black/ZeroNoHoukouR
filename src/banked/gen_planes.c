@@ -13,6 +13,8 @@
 #include "raster.h"
 #include "gamestate.h"   /* g_score / g_hiscore */
 #include "assets_data.h" /* PANEL_W / PANEL_WB / PANEL_H */
+#include "scroll.h"      /* g_cam(警報パネルを表示リングの行へ直す) */
+#include "panel_alert.h" /* 敵艦発見 / 敵大将発見(gen_alert.py) */
 
 /* ===== 敵戦闘機/艦載機の8方向スプライトを手続き生成(旧版 build_plane_pattern 移植・常駐) =====
    胴体＋主翼＋尾翼＋エンジンを線分で描く。8方向×3サイズ(小/中/大)を面別に生成しVRAMへ。setup時=cartで実行。
@@ -146,6 +148,62 @@ static void blit_panel_t(u16 dstx, u16 dsty, u8 oncol) {
     }
 }
 
+/* ---- 警報(敵艦発見 / 敵大将発見)。ゲーム画面(表示リング page1)へ透過で描く ----
+   画面の行 sy は、縦スクロール(R#23 = g_cam の下位)を足してリングの行へ直す(リングの継ぎ目で折り返す)。
+   消すのは常駐の scroll_repaint_all(海の正本から引き直す)。描いている間は海の塗り直しと縦スクロールを止める。 */
+#define ALERT_Y 70      /* 漢字の上端(画面の行)。英語はその 50 行下 */
+/* ★1行ぶんの作業場は固定番地 0xE700(ship_ram / 中ボスの MB_BUF。どちらも警報の間は使っていない)。
+   このバンクの static は 0xE000〜で、0xE100 からは曲データ(bgm_ram)。128B の static を置いたら曲を踏み潰し、
+   サイレンの代わりに変な音が鳴った(openMSX の録音で確認) */
+#define alert_line ((u8 *)0xE700)
+static void alert_bits(const u8 *row, u8 wb, u16 x, u8 sy, u8 col) {
+    /* 1行ぶん(左から 8*wb ドット)を「VRAM から読む→立っているドットだけ色を差す→書き戻す」で重ねる。
+       ★ランごとに塗り命令を出す方式(blit_panel_t)は、この大きさだと 2 秒以上かかり画面が止まって見えた */
+    u8 k, n = (u8)(wb << 2);                                   /* 1バイト=2ドット */
+    u16 a = (u16)((u16)(256 + (u8)((u8)g_cam + sy)) * 128 + (x >> 1));
+    vdp_read_addr(a);
+    for (k = 0; k < n; k++) alert_line[k] = vdp_read_data();
+    {   /* ビット列1バイト(8ドット)= VRAM 4バイト。2ドットずつ「どちらのドットに差すか」のマスクで混ぜる。空のバイトは飛ばす */
+        static const u8 m2[4] = { 0x00, 0x0F, 0xF0, 0xFF };   /* 2ビット(左,右) → VRAM 1バイト内のマスク */
+        u8 cc = (u8)(col * 0x11), *b = alert_line;
+        for (k = 0; k < wb; k++, b += 4) {
+            u8 v = row[k];
+            if (!v) continue;
+            { u8 m = m2[v >> 6];       b[0] = (u8)((b[0] & (u8)~m) | (cc & m)); }
+            { u8 m = m2[(v >> 4) & 3]; b[1] = (u8)((b[1] & (u8)~m) | (cc & m)); }
+            { u8 m = m2[(v >> 2) & 3]; b[2] = (u8)((b[2] & (u8)~m) | (cc & m)); }
+            { u8 m = m2[v & 3];        b[3] = (u8)((b[3] & (u8)~m) | (cc & m)); }
+        }
+    }
+    vdp_write_addr(a);
+    for (k = 0; k < n; k++) vdp_data(alert_line[k]);
+}
+static void alert_panel(const u8 *p, u16 x, u8 sy, u8 col) {
+    u8 y, wb = p[0], h = p[1];
+    const u8 *row = p + 2;
+    for (y = 0; y < h; y++, row += wb) alert_bits(row, wb, x, (u8)(sy + y), col);
+}
+static void alert_text(const char *m, u16 x, u8 sy, u8 col) {
+    for (; *m; m++, x += 8) {
+        const u8 *g = vdp_glyph((u8)*m);
+        u8 y;
+        for (y = 0; y < 8; y++) alert_bits(&g[y], 1, x, (u8)(sy + y), col);
+    }
+}
+static void alert_impl(u8 which) {
+    const u8 *p = which ? alert_tai : alert_kan;
+    vdp_cmd_wait();                                   /* 海の塗り直し(VDP コマンド)が済んでから読む */
+    const char *m = which ? "ENEMY FLAGSHIP SIGHTED" : "ENEMY FLEET SIGHTED";
+    u16 x = (u16)((256 - ((u16)p[0] << 3)) >> 1);
+    u8 n = 0;
+    while (m[n]) n++;
+    alert_panel(p, x + 4, ALERT_Y + 2, 13);          /* 影(ほぼ黒)を右下へずらして先に(x は偶数=1バイト2ドット) */
+    alert_panel(p, x, ALERT_Y, 11);                   /* 本体=赤 */
+    x = (u16)((256 - (u16)n * 8) >> 1);
+    alert_text(m, x + 2, ALERT_Y + 51, 13);
+    alert_text(m, x, ALERT_Y + 50, 15);               /* 英語=白 */
+}
+
 /* 撃破結果画面(page0)＋勝ちどきファンファーレ＋トリガ待ち。パネルは g_card_ram、撃沈文は ops。 */
 static void results_impl(const char *m) {
     u8 f, n = 0;
@@ -221,6 +279,7 @@ static void mag_table(void) {
 
 void banked_entry(void) {
     if (g_shipargs.mode == 7) { mag_table(); return; }
+    if (g_shipargs.mode == 8) { alert_impl(g_shipargs.hull); return; }   /* 警報パネル(hull=0 敵艦発見 / 1 敵大将発見) */
     if (g_shipargs.mode == 5) { results_impl((const char *)g_shipargs.ops); return; }
     if (g_shipargs.mode == 6) { card_text_impl(g_shipargs.hull, (const char *)g_shipargs.ops); return; }
     load_planes(g_shipargs.hull);

@@ -4,6 +4,7 @@
 #include "sound.h"
 #include "bank.h"       /* data_read(曲データをバンク→RAM) */
 #include "vdp.h"        /* vdp_wait_frame(ファンファーレの前景同期) */
+#define ASSETS_BGM          /* ★BGM の表だけを取り込む(艦などの表の複製を作らない) */
 #include "assets_data.h"   /* 自動生成: bgm_notetp[48] / bgm_off[] / bgm_len[] / BGM_BANK / BGM_RAM_MAX */
 
 /* ---- PSG ポートI/O(規約非依存にファイルスコープ変数経由) ----

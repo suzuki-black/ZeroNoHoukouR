@@ -17,9 +17,41 @@
 
 static const u8 tank_col[16] = { 14,15,15,14, 14,11,11,14, 14,14,14,14, 14,4,4,4 };
 
+/* 増槽を取った: 段階を上げる。最高段階なら高得点 */
+static void take(Entity *e) {
+    e->active = 0;
+    if (g_pwr < PWR_MAX) g_pwr++;
+    else {                                                      /* ★最高段階でさらに取ったら高得点 */
+        g_score = (g_score > 65535u - PWR_BONUS) ? 65535u : (u16)(g_score + PWR_BONUS);
+        scorepop_add(e->x, e->y, PWR_BONUS);
+        sfx(2, SFX_BOOM);
+    }
+    sfx(1, SFX_HIT);
+}
+
+/* ★中ボスの前と戦艦の前: 敵機・敵弾・爆発を色を落としながら消す(いきなり消すと唐突=ユーザー指摘)。
+   8フレームごとに 淡灰→中灰→海の明→海の地 と沈め、g_fade が 0 になった瞬間に消す。撃つのも影もやめる。
+   主砲・停泊機(艦に載っているもの)は触らない。画面に残っている増槽は取ったことにする(取り逃しを無駄にしない)。 */
+static const u8 fade_col[4] = { 1, 2, 4, 14 };   /* 段(残り 0〜7 / 8〜15 / 16〜23 / 24〜31)ごとの色 */
+static void fade_frame(void) {
+    u8 i, col;
+    Entity *e = ent_pool();
+    col = fade_col[(u8)(g_fade - 1) >> 3];
+    g_fade--;
+    for (i = 0; i < ENT_MAX; i++, e++) {
+        u8 ty = e->type;
+        if (!e->active || ty == ET_PLAYER || ty == ET_TURRET || ty == ET_PARKED) continue;
+        if (ty == ET_BULLET && e->team == TEAM_PLAYER) continue;
+        if (ty == ET_ITEM) { take(e); continue; }
+        if (!g_fade) { e->active = 0; continue; }
+        e->fire = (const u8 *)0; e->shadow = 0; e->coltab = (const u8 *)0; e->color = col;
+    }
+}
+
 void ovl_power_frame(void) {
     u8 i;
     Entity *e;
+    if (g_fade) fade_frame();
     if (g_drop) {
         g_drop = 0;
         e = ent_spawn(ET_ITEM);
@@ -37,15 +69,6 @@ void ovl_power_frame(void) {
         dx = e->x - (s16)g_player_x; dy = e->y - (s16)g_player_y;
         if (dx < 0) dx = -dx;
         if (dy < 0) dy = -dy;
-        if (dx < 12 && dy < 12) {
-            e->active = 0;
-            if (g_pwr < PWR_MAX) g_pwr++;
-            else {                                                      /* ★最高段階でさらに取ったら高得点 */
-                g_score = (g_score > 65535u - PWR_BONUS) ? 65535u : (u16)(g_score + PWR_BONUS);
-                scorepop_add(e->x, e->y, PWR_BONUS);
-                sfx(2, SFX_BOOM);
-            }
-            sfx(1, SFX_HIT);
-        }
+        if (dx < 12 && dy < 12) take(e);
     }
 }

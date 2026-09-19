@@ -57,6 +57,10 @@ extern u8  g_pwr;
 extern u8  g_pdmg;         /* 今の段階の威力(半分単位)。発砲時に g_pwr から決める(対空砲の当たり判定はこれを見る) */
 #define PWR_MAX 3
 extern u8  g_drop;         /* 1=銀の敵機が落ちた(g_drop_x/y にその位置)。増槽はオーバレイが出す */
+extern u8  g_fade;         /* 0 以外: 敵をフェードアウト中(残りフレーム。FADE_T から数える)。0 になった瞬間に消す */
+extern u8  g_alert;        /* 1=警報の表示中。縦スクロールと海の塗り直しを止める(最終面は面の頭から立てておく) */
+#define FADE_T  32         /* フェードアウトの長さ(8フレームずつ 4 段) */
+#define ALERT_TICKS 150    /* 警報の長さ(60Hz の割込みで数える=2.5秒。文字を描く時間も含む。ゲームの重さに左右されない) */
 extern s16 g_drop_x, g_drop_y;
 extern u8  g_crush_t;      /* >0=発動中の残りフレーム。パレットエンジンが雷光の強さに使う */
 

@@ -150,6 +150,12 @@ const TRACKS = [
     const bas = pump('D C# C B A# A A# A  D D G G D# D# A A  A# A# G# A D C# A# A  D D D# D# G# A D A');
     return { mel, mln, bas, basStep:Q, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:5 };
   })(),
+  { // 10: 警報(敵艦発見 / 敵大将発見)。BGM を止めてこれだけを鳴らす。増4度(A-D#)の2音サイレンを
+    //     メロディとベース(1オクターブ下)で重ねて繰り返す。ドラム無し。
+    mel: [45, 39], mln: [12, 12],
+    bas: [33, 27], basStep: 12,
+    melPeak: 14, melSus: 13, melVib: 0, basPeak: 12, basSus: 10, drum: 0,
+  },
 ];
 
 function packTrack(t) {
@@ -420,12 +426,17 @@ const h = [
   `#define BGM_BANK ${BGM_BANK}`,
   `#define BGM_TRACK_COUNT ${TRACKS.length}`,
   `#define BGM_RAM_MAX ${bgmRamMax}`,
+  '/* ★表は static なので、取り込んだ各ファイルに実体が複製される。BGM の表は sound.c(ASSETS_BGM を定義)だけ、',
+  '   艦などの表はそれ以外だけに出す(常駐で約270B の無駄だった) */',
+  '#ifdef ASSETS_BGM',
   `static const unsigned int bgm_notetp[48] = { ${notetp.join(',')} };`,
   `static const unsigned int bgm_off[BGM_TRACK_COUNT] = { ${bgmOff.join(',')} };`,
   `static const unsigned int bgm_len[BGM_TRACK_COUNT] = { ${bgmBlobs.map((b) => b.length).join(',')} };`,
+  '#endif',
   '/* --- 艦体 OPS(面ごと。data_read で SHIP_OPS_RAM_MAX の RAM へ読み ship_render で解釈) --- */',
   `#define STAGE_COUNT ${SHIPS.length}`,
   `#define SHIP_OPS_RAM_MAX ${shipRamMax}`,
+  '#ifndef ASSETS_BGM',
   `static const unsigned int ship_ops_off[STAGE_COUNT]  = { ${shipOpsOff.join(',')} };`,
   `static const unsigned int ship_ops_len[STAGE_COUNT]  = { ${SHIPS.map((s) => s.ops.length).join(',')} };`,
   `static const unsigned int ship_ops2_off[STAGE_COUNT] = { ${shipOps2Off.join(',')} };`,
@@ -436,29 +447,34 @@ const h = [
   `static const unsigned int ship_bowyb[STAGE_COUNT]   = { ${SHIPS.map((s) => s.bowYb).join(',')} };`,
   `static const unsigned char ship_aagtbl[STAGE_COUNT] = { ${SHIPS.map((s) => s.aagTbl).join(',')} };`,
   `static const unsigned char ship_aagp[STAGE_COUNT][4] = { ${SHIPS.map((s) => `{${s.aagP.join(',')}}`).join(', ')} };`,
+  '#endif',
   '/* --- 撃破エンプレの炎上火球(丸, 2コマ×3サイズ=6枚。box×box/2 byte, 色0=透明)。 --- */',
   `#define FB_COUNT ${fbBlobs.length}`,          /* 6 = 3サイズ×2コマ, 順[s0f0,s0f1,s1f0,...] */
   `#define FB_RAM_MAX ${Math.max(...fbBlobs.map((b) => b.length))}`,
+  '#ifndef ASSETS_BGM',
   `static const unsigned int fb_off[FB_COUNT] = { ${fbOff.join(',')} };`,
+  '#endif',
   '/* --- 撃破!! パネル(1bpp)。常駐節約のためデータバンクへ。results_and_fanfare が data_read して blit。 --- */',
   `#define PANEL_W ${panelW}`,
   `#define PANEL_WB ${panelWB}`,
   `#define PANEL_H ${panelH}`,
   `#define PANEL_LEN ${panelBlob.length}`,
-  `static const unsigned int panel_off = ${panelOff};`,
+  `#define panel_off ((unsigned int)(${panelOff}))`,
   '/* --- 面別ドラム(スタイル1-3)。各21B=[pat16,v0(4),tempo]。bgm_play が p[8]=style で当該21BをRAMへ。 --- */',
   `#define DRUM_STYLE_BYTES 21`,
   `#define DRUM_STYLE_STRIDE 32`,
-  `static const unsigned int drum_off = ${drumOff};`,
+  `#define drum_off ((unsigned int)(${drumOff}))`,
   '/* --- 面名(開始カード)/撃沈メッセージ(結果画面)。各16Bスロット。stage_build で当該面をRAMへ。 --- */',
-  `static const unsigned int stagename_off = ${strOff};`,
-  `static const unsigned int sunk_off = ${strOff + STAGE_NAMES.length * 16};`,
-  `static const unsigned int fighter_ctab_off = ${fctabOff};`,
-  `static const unsigned int gun_off = ${gunOff};`,   /* 面別 [x0-3(u8),y0-3(u16)] = 12B */
+  `#define stagename_off ((unsigned int)(${strOff}))`,
+  `#define sunk_off ((unsigned int)(${strOff + STAGE_NAMES.length * 16}))`,
+  `#define fighter_ctab_off ((unsigned int)(${fctabOff}))`,
+  `#define gun_off ((unsigned int)(${gunOff}))`,   /* 面別 [x0-3(u8),y0-3(u16)] = 12B */
   '/* --- 開始カードの事前ベイク艦画像(64x48=48行x32byte)。bank4(旧demo跡)に5艦連結(assets/cards.bin)。 --- */',
   '#define SHIP_CARD_BANK 4',
   '#define SHIP_CARD_LEN 1536',
+  '#ifndef ASSETS_BGM',
   `static const unsigned int ship_card_off[STAGE_COUNT] = { ${SHIPS.map((_, i) => i * 1536).join(',')} };`,
+  '#endif',
   '#endif /* ASSETS_DATA_H */', '',
 ];
 writeFileSync(hdrOut, h.join('\n'));

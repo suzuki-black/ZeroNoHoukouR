@@ -14,6 +14,7 @@
 #include "player.h"
 #include "sprites.h"
 #include "aa_hot.h"     /* cam / aa_dead */
+#include "gamestate.h"  /* g_alert(敵大将発見の警報中はスクロールと登場を止める) */
 #include "final.h"
 #define BOSS_FRAME_TABLES
 #include "boss_frames.h"   /* 自動生成(tools/gen_boss.py) */
@@ -283,17 +284,21 @@ u8 ovl_final_frame(void) {
             for (k = 0; k < 8 * 16; k++) FV_DAT = ((k & 15) < 8) ? wall_col[k & 15] : 0;   /* 壁 slot24〜31 */
         }
     }
+    /* ★登場は曲の頭に合わせる。曲は「敵大将発見」の警報が終わってから鳴らす(scene_stage の段取り)ので、
+       待っている間は曲の頭を取り直し続ける */
+    if (st == ST_WAIT) t0 = g_bgm_t0;
     el = (u16)(snd_ticks - t0);
 
-    /* 前進: 1px/f。カメラが小さくなったら 512 巻き戻す(リング上の位置は同じ＝描き直しゼロ) */
-    cam--;
+    /* 前進: 1px/f。カメラが小さくなったら 512 巻き戻す(リング上の位置は同じ＝描き直しゼロ)。
+       ★警報の間は止める(警報の文字は表示リングに描いてある) */
+    if (!g_alert) cam--;
     if (cam < 64) { cam = (u16)(cam + 512); scroll_rebase(512); }
     scroll_to(cam);
     g_scroll_dy = 0;          /* ★敵弾を海と一緒に流さない(撃っているのは空のボス) */
 
     tick++;
     if (st == ST_WAIT) {
-        if (el >= 96) st = ST_ENTRY;
+        if (el >= 96 && !g_alert) st = ST_ENTRY;
     }
     if (st == ST_ENTRY) {
         u16 p = (u16)(el - 96);                       /* 0..480 */
