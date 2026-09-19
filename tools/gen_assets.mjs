@@ -26,6 +26,30 @@ for (let i = 0; i < 48; i++) {
   notetp.push(Math.round(111860.78125 / freq));
 }
 
+// ---- 音名で書くための小道具(中ボスの曲から)。n('F#5') → 音階index(0=C2..47=B5) / '-' → 休符 ----
+const NOTE_PC = { C:0, 'C#':1, D:2, 'D#':3, E:4, F:5, 'F#':6, G:7, 'G#':8, A:9, 'A#':10, B:11 };
+function n(name) {
+  if (name === '-') return 255;
+  const m = name.match(/^([A-G]#?)(\d)$/);
+  const i = NOTE_PC[m[1]] + (+m[2] - 2) * 12;
+  if (i < 0 || i > 47) throw new Error(`音域外: ${name}`);
+  return i;
+}
+// 'A5:12 F#5:12 ...' → { mel, mln }
+function line(str) {
+  const mel = [], mln = [];
+  for (const tok of str.trim().split(/\s+/)) { const [nm, len] = tok.split(':'); mel.push(n(nm)); mln.push(+len); }
+  return { mel, mln };
+}
+// ベース: 1小節=4拍(basStep=12)を根音と1オクターブ上で刻む。'D A G ...'(各1小節, 'A/D'=前半A後半D)
+function pump(str) {
+  const out = [];
+  for (const bar of str.trim().split(/\s+/)) {
+    const [a, b] = bar.split('/'); const ra = n(a + '2'), rb = n((b ?? a) + '2');
+    out.push(ra, ra + 12, rb, rb + 12);
+  }
+  return out;
+}
 // ---- 曲データ(旧cport bgm_tracks.h より移植。melody/bass=音階index, 255=休符) ----
 const TRACKS = [
   { // 0: タイトル(アレスタ2風, ニ短調, 四分16f)
@@ -106,10 +130,36 @@ const TRACKS = [
     melLoop:14, basLoop:48,
     basStep:12, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:4,
   },
+  (() => {   // 9: 中ボス(元ネタ: ベートーヴェン 交響曲第9番 第4楽章 終盤の Prestissimo。ただし**ニ短調で悲壮に**。2/2・四分=12f)
+    //   A 突進: 和声的短音階の駆け上がりと分散和音。途中で B♭ へ落として翳らせる
+    //   B 哀歌: 下降するラメント・バス(D→C→B♭→A)の上に長い音
+    //   C 緊張: 減七(C#-E-G-B♭)の分散和音で煽り、B♭→A の溜め息で落とす
+    //   D 終結: ニ短調と A7 の打ち合い→ニ短調の連打。明るく解決させずに先頭へ(32小節)
+    //   ★有名な旋律(歓喜の歌)の引用は入れない=曲の空気を壊す(ユーザー指摘)
+    const E = 6, Q = 12, DQ = 18, H = 24, W = 48;
+    const secA = `D4:${E} E4:${E} F4:${E} G4:${E} A4:${E} A#4:${E} C#5:${E} D5:${E}  A5:${Q} F5:${Q} D5:${Q} A4:${Q}
+                  E4:${E} F4:${E} G4:${E} A4:${E} A#4:${E} C#5:${E} D5:${E} E5:${E}  C#5:${Q} E5:${Q} A5:${H}
+                  D5:${E} E5:${E} F5:${E} G5:${E} A5:${E} G5:${E} F5:${E} E5:${E}  D5:${Q} F5:${Q} A5:${Q} D5:${Q}
+                  G5:${Q} E5:${Q} C#5:${Q} A4:${Q}  A4:${Q} C#5:${Q} E5:${Q} G5:${Q}`;
+    const secB = `A5:${H} A5:${H}  G5:${H} F5:${H}  F5:${H} D5:${H}  E5:${W}
+                  F5:${H} A5:${H}  A#5:${H} G5:${H}  E5:${Q} F5:${Q} G5:${Q} A#5:${Q}  A5:${DQ} G5:${E} F5:${Q} E5:${Q}`;
+    const secC = `C#5:${E} E5:${E} G5:${E} A#5:${E} G5:${E} E5:${E} C#5:${E} E5:${E}  D5:${E} F5:${E} A5:${E} F5:${E} D5:${E} F5:${E} A5:${E} F5:${E}
+                  A#4:${E} D5:${E} F5:${E} A#5:${E} F5:${E} D5:${E} A#4:${E} D5:${E}  A4:${E} C#5:${E} E5:${E} A5:${E} E5:${E} C#5:${E} A4:${E} C#5:${E}
+                  A#5:${H} A5:${H}  G5:${H} F5:${H}  E5:${Q} F5:${Q} E5:${Q} D5:${Q}  C#5:${H} E5:${H}`;
+    const secD = `A4:${H} C#5:${H}  E5:${H} G5:${H}  F5:${Q} F5:${Q} D5:${Q} D5:${Q}  A5:${Q} A5:${Q} F5:${Q} F5:${Q}
+                  E5:${H} C#5:${H}  D5:${H} F5:${H}  A5:${Q} E5:${Q} A5:${Q} C#5:${Q}  D5:${Q} -:${Q} D5:${Q} -:${Q}`;
+    const { mel, mln } = line([secA, secB, secC, secD].join(' '));
+    const bas = pump('D D A A D A# A A  D C A# A D G A A  A D A# A G A# A A  A A D D A D A D');
+    return { mel, mln, bas, basStep:12, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:5 };
+  })(),
 ];
 
 function packTrack(t) {
   if (t.mel.length !== t.mln.length) throw new Error('mel/mln length mismatch');
+  if (t.melLoop === undefined && t.drum === 5) {   /* ★中ボスの曲: メロディとベースの尺が一致しないと周回ごとにずれる */
+    const fm = t.mln.reduce((x, y) => x + y, 0), fb = t.bas.length * t.basStep;
+    if (fm !== fb) throw new Error(`中ボスの曲: メロディ ${fm}f とベース ${fb}f の尺が違う`);
+  }
   for (const v of [...t.mel, ...t.bas]) if (v < 0 || v > 255) throw new Error(`note out of range: ${v}`);
   return Buffer.from([
     t.mel.length, t.bas.length, t.basStep,
@@ -291,6 +341,7 @@ const DRUM_STYLES = [
   { pat:[1,3,2,3, 1,1,2,3, 1,3,2,3, 2,2,1,3], v0:[0,15,15,8], tempo:8 },  // 2 重い戦闘(空母)
   { pat:[1,2,1,2, 1,2,1,2, 1,2,1,2, 1,2,2,2], v0:[0,10, 9,4], tempo:6 },  // 3 激しい刻み(フッド/アイオワ)
   { pat:[1,3,3,1, 2,3,1,3, 1,3,3,1, 2,3,2,2], v0:[0,15,13,5], tempo:6 },  // 4 最終面(重いキック＋小節末のスネア連打)
+  { pat:[1,3,2,3, 1,3,2,3, 1,3,2,3, 1,3,2,2], v0:[0,15,13,7], tempo:6 },  // 5 中ボス(2/2 の速い行進。八分刻みのシンバル＝トルコ風の打楽器)
 ];
 // 各style を 32B ストライドにパディング(オフセット計算を *21→<<5 にして常駐のmul回避)。
 const drumBlob = Buffer.from(DRUM_STYLES.flatMap((s) => {

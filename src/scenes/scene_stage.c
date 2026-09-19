@@ -75,6 +75,7 @@ static const u8 aa_sml_hp[STAGE_COUNT] = {  8,  9, 10, 12, 14 };   /* 小型対�
 
 /* ★海イントロ共通BGM(gen_assets track7=スロー渋・予感)。海(敵艦未出現)の間だけ鳴らし、敵艦が見えたら面別へ切替。 */
 #define BGM_SEA_INTRO 7
+#define BGM_MIDBOSS   9   /* 中ボス(第九 第4楽章 終盤が元ネタ。ニ短調で悲壮に)。倒した後も艦が見えて面別BGMに替わるまで鳴らし続ける */
 /* 敵機の行別カラー(陰影16B)は面別にデータバンク(fighter_ctab_off)へ置き、stage_build で当該面の
    16BをRAMへ読む(常駐節約)。海イントロ機／艦載機の coltab に使う。 */
 static u8 cur_ctab[16];
@@ -580,9 +581,13 @@ static void player_shadow(u8 v) {
     for (i = 0; i < ENT_MAX; i++, e++) if (e->active && e->type == ET_PLAYER) e->shadow = v;
 }
 
+/* 枠 sl〜31 を画面外へ(中ボスの出現・退場で共用。常駐の節約) */
+static void spr_hide_from(u8 sl) {
+    for (; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, 0);
+}
+
 void mb_finish(void) {
-    u8 sl;
-    for (sl = g_spr_used; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
+    spr_hide_from(g_spr_used);
     ent_spr_cache_inval((u8)(32 - g_mb_n));
     g_mb_n = 0;
     g_mb = MB_RESTORE;
@@ -1238,6 +1243,7 @@ u8 stage_update(void) {
     /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
+        bgm_play(BGM_MIDBOSS);
         {   /* ★中ボスが出る瞬間に、残っている敵機・敵弾・爆発を消す(5面は拡大で仕掛けが見えてしまう=ユーザー指摘。全面で揃える)。
                自機・自機の弾・増槽と、艦に載っているもの(主砲の砲身・甲板の停泊機)は残す。
                ★主砲まで消すと、中ボスの後の艦で砲身が無くなり、生存砲台の数も減らなくなった(実機で指摘) */
@@ -1247,7 +1253,7 @@ u8 stage_update(void) {
                     && !(e->type == ET_BULLET && e->team == TEAM_PLAYER)) e->active = 0;
             /* ★属性表も今ここで空にする。中ボスは末尾の枠を ent_draw_all から取り上げるが、自分で書くのは読み込みの
                2〜3フレーム後。その間、枠に残った敵機・敵弾の属性が表示され、5面は拡大がかかって2倍で見えた(実機で指摘) */
-            for (i = HUD_SLOTS; i < 32; i++) vdp_sprite_pos(i, 0, 220, 0);
+            spr_hide_from(HUD_SLOTS);
             scorepop_reset();
         }
         if (curstage == 4) { g_shipargs.mode = 7; bcall_to(GEN_PLANES_BANK); }   /* 5面: 拡大用に絵の表を半分に縮めて表Bへ(ROM 実行) */
