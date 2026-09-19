@@ -1064,17 +1064,11 @@ u8 stage_update(void) {
 #ifdef BGTEST
         vstep = 0;   /* ★実機検証: 海の区間で止めて測る(艦が出てこない=条件を一定に) */
 #endif
-        /* ★1面の中ボス: 艦が見える手前で出す。戦っている間は海を流し続けるため、カメラを 256(=16行)ずつ巻き戻す。
-           リング上の位置も R#23 も変わらない＝描き直し無し(海は16行周期)。世界に置いた増槽だけ一緒にずらす。 */
+        /* ★中ボス: 艦が見える手前で出す。戦っている間は縦スクロールを止める(全部の中ボス共通=ユーザー判断)。
+           海の波の動き(SEA13 の列の塗り直し)は止めないので、海は動いて見える。
+           (以前はカメラを 256 ずつ巻き戻して海を流し続けていた) */
         if ((curstage < 2 || curstage == 3) && g_mb == MB_NONE && g_ovl_ok && cam <= SC_CAM_SHIP + 48) g_mb = MB_LOAD;   /* 1面 Fw 200 / 2面 PBY / 4面 He 111 ×2 */
-        /* 終わったら逆に 256 進め、巻き戻したぶん待たされずに艦が出てくるようにする。 */
-        { s16 d = (g_mb == MB_ACTIVE && cam <= SC_CAM_SHIP + 32) ? 256
-                : (g_mb == MB_OVER && cam >= SC_CAM_SHIP + 304) ? -256 : 0;
-          if (d) {
-              u8 i; Entity *it = ent_pool();
-              cam = (u16)(cam + d); scroll_rebase((u16)d);
-              for (i = 0; i < ENT_MAX; i++, it++) if (it->active && it->type == ET_ITEM) it->ay += d;
-          } }
+        if (g_mb == MB_ACTIVE || g_mb == MB_LOAD) vstep = 0;
         if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= vstep) ? (u16)(cam - vstep) : SC_CAM_SHIP; }
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
