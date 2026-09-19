@@ -2,7 +2,8 @@
    ★4面は双子艦なので中ボスも2機。2機は画面の中心(128,106)について**点対称**に動く(2機目の位置=中心について反転、向き=+180°)。
    ★1機 64x64 で2機ぶんのスプライトを出すため、106 行でスプライト表(R#5)と絵の表(R#6)を上下で切り替える。
      上の帯=表A(属性 0x7600 / 色 0x7400 / 絵 0x7800)に1機目、下の帯=表B(属性 0x7200 / 色 0x7000 / 絵 0x2000)に2機目。
-     2機はいつも 106 行の上下に分かれる(1機目の中心 y は 28..70 に留める)。分割表への足し込みは ovl_twin_shock(入口 slot14)。
+     2機はいつも 106 行の上下に分かれる(1機目の中心 y は 28..70 に留める)。分割表は ovl_twin_shock(入口 slot14)が組む
+     (この間は衝撃波のゆがみを出さない)。
      自機・弾・HUD は元から両方の表へ同じものを書いている(g_spr_dual)。絵の表Bは出現時に表Aを写し、その後の HUD の絵の
      書き換えは vdp_sprite_pattern が g_spr_patb で両方へ書く。宙返りのコマは ovl_rot(OVL_TWIN 版)が両方へ写す。
    ★動き: 1機目が「自機の点対称の位置」を狙って 8 方向で突っ込む(1面と同じ 向き直り→白い明滅の予告→突進)。
@@ -29,7 +30,6 @@
 __sfr __at(0x98) HE_DAT;
 
 extern u8 rnd(void);
-extern u8 ovl_shock_build(u8 split_line);
 
 #define HE_HP       120     /* 1機ぶん(半分単位=通常弾 60発) */
 #define HE_TIMEOUT  1350    /* 45秒で逃げる */
@@ -48,14 +48,14 @@ static const s8 dy8[8] = { -3, -2, 0, 2, 3, 2, 0, -2 };
 static const s8 hx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 static const s8 hy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
-static u8  st, st_t, d8, fcur, hurt, cur, gone;   /* gone: bit0=上の機 / bit1=下の機 が落ちた */
-static u8  ldir[2], dt[2], hb[2];                  /* hb=被弾のちらつきの残り */                         /* 各機の VRAM に載っている向き / 墜落の残りフレーム */
+static u8  st, st_t, d8, fcur, hurt, cur, gone, fogc;   /* fogc=霧の間の機体の色 */   /* gone: bit0=上の機 / bit1=下の機 が落ちた */
+static u8  ldir[2], dt[2], hb[2], nc[2];           /* hb=被弾のちらつきの残り / nc=機体(重ね＋本体)の枚数。その後ろ4枚が影 */                         /* 各機の VRAM に載っている向き / 墜落の残りフレーム */
 static u16 t, hp[2], bm[2], om[2];
 static s16 cx, cy;                                 /* 上の機(=動きの主)の中心 */
 
 void ovl_mb_init(void) {
     st = ST_FOG; st_t = 0; t = 0; hurt = 0; gone = 0;
-    hp[0] = hp[1] = HE_HP; dt[0] = dt[1] = 0; hb[0] = hb[1] = 0; bm[0] = bm[1] = om[0] = om[1] = 0;
+    hp[0] = hp[1] = HE_HP; dt[0] = dt[1] = 0; hb[0] = hb[1] = 0; nc[0] = nc[1] = 0; bm[0] = bm[1] = om[0] = om[1] = 0;
     cx = 56; cy = 44; fcur = 8;                    /* 上の機は左上で右向き / 下の機は右下で左向き */
     ldir[0] = ldir[1] = 0xFF;
     vdp_copy(0, 240, 0, 64, 256, 16);              /* 絵の表A(0x7800)→表B(0x2000)。自機や弾の絵を下の帯でも使う */
@@ -93,8 +93,10 @@ static void aim(void) {
 static s16 kx(u8 k) { return k ? BX() : cx; }
 static s16 ky(u8 k) { return k ? BY() : cy; }
 
-/* 機 k の枠(14..31)へ、絵のあるマスを 重ね→本体→影 の順に。隠すときは全部画面外へ。 */
-static void put(u8 k, u8 show) {
+/* 機 k の枠(14..31)へ、絵のあるマスを 重ね→本体→影 の順に。show=0 で全部隠す。
+   body=0 は機体だけ隠して影は残す(被弾のちらつき。★影は光らない・消えない・色も変わらない=実機で指摘)。
+   機体を隠すときも枠の並びは変えない(枠ごとの色がずれるため)。 */
+static void put(u8 k, u8 show, u8 body) {
     u8 c, j = 0, pass, n = 0, hy = (u8)(220 + g_vscroll - 1);
     s16 bx = (s16)(kx(k) - 32), by = (s16)(ky(k) - 32);
     if (hy == 216) hy = 215;
@@ -110,7 +112,7 @@ static void put(u8 k, u8 show) {
             y = (s16)(by + ((c >> 2) << 4));
             yy = (u8)(y + g_vscroll - 1);
             if (yy == 216) yy = 215;
-            if (x < 0 || x > 240 || y < -16 || y > 212) { yy = hy; x = 0; }
+            if (x < 0 || x > 240 || y < -16 || y > 212 || (pass < 2 && !body)) { yy = hy; x = 0; }
             HE_DAT = yy; HE_DAT = (u8)x; HE_DAT = (pass == 1) ? MB_CELL_PAT(c) : MB_OV_PAT(j); HE_DAT = 0;
             j++; n++;
         }
@@ -118,9 +120,13 @@ static void put(u8 k, u8 show) {
     for (; n < 18; n++) { HE_DAT = hy; HE_DAT = 0; HE_DAT = MB_CELL_PAT(0); HE_DAT = 0; }
 }
 
-static void color_all(u8 c) {                      /* 両方の帯の中ボスの枠を1色に(g_spr_dual で両方へ書かれる) */
-    u8 sl;
-    for (sl = HE_SLOT0; sl < 32; sl++) vdp_sprite_color(sl, c);
+static void color_all(u8 c) {                      /* 2機の機体(影は除く)を1色に。帯ごとの色表へ直接書く */
+    u8 k;
+    u16 i;
+    for (k = 0; k < 2; k++) {
+        vdp_write_addr((u16)((k ? 0x7000 : 0x7400) + HE_SLOT0 * 16));
+        for (i = (u16)nc[k] << 4; i; i--) HE_DAT = c;
+    }
     ldir[0] = ldir[1] = 0xFF;                       /* 後で絵を読み直して色を戻す */
 }
 
@@ -163,8 +169,8 @@ void ovl_mb_frame(void) {
     switch (st) {
     case ST_FOG:                                   /* 霧から浮かび上がる: 霧の色 → 灰 → 本来の色(読み直し) */
         move(1, 0);
-        if (st_t == 0) color_all(2);
-        else if (st_t == HE_FOG_T / 2) color_all(4);
+        if (st_t == 0) fogc = 2;                   /* 色は絵を読み込むたびに fogc で塗る(登場の瞬間はまだ絵が無い) */
+        else if (st_t == HE_FOG_T / 2) { fogc = 4; color_all(4); }
         if (++st_t >= HE_FOG_T) { ldir[0] = ldir[1] = 0xFF; aim(); }   /* 本来の色を読み直す */
         break;
     case ST_AIM: {
@@ -221,11 +227,10 @@ void ovl_mb_frame(void) {
         bm[cur] = g_mb_bm; om[cur] = g_mb_om;
         for (i = bm[cur]; i; i >>= 1) n += (u16)(i & 1);
         for (i = om[cur]; i; i >>= 1) n += (u16)(i & 1);
-        if (st != ST_FOG) {
-            vdp_write_addr((u16)((cur ? 0x7000 : 0x7400) + HE_SLOT0 * 16));
-            for (n <<= 4; n; n--) HE_DAT = *p++;
-            for (n = 64; n; n--) HE_DAT = 13;          /* 影4枚 */
-        }
+        nc[cur] = (u8)n;
+        vdp_write_addr((u16)((cur ? 0x7000 : 0x7400) + HE_SLOT0 * 16));
+        for (n <<= 4; n; n--) HE_DAT = (st == ST_FOG) ? fogc : *p++;
+        for (n = 64; n; n--) HE_DAT = 13;              /* 影4枚(いつも同じ色) */
     }
     if (g_mb_req == 0xFF && !g_mb_new) {   /* 向きが変わった機の絵を読みに行く(上の機が先) */
         u8 want0 = fcur, want1 = (u8)((fcur + 16) & 31);
@@ -234,18 +239,16 @@ void ovl_mb_frame(void) {
     }
     for (k = 0; k < 2; k++) {
         if (hb[k]) hb[k]--;
-        put(k, (u8)(!(gone & (1 << k)) && !crush && !(hb[k] & 2)));   /* 被弾した機だけちらつく */
+        put(k, (u8)(!(gone & (1 << k)) && !crush), (u8)!(hb[k] & 2));   /* 被弾した機だけちらつく(影は残す) */
     }
 }
 
-/* 分割表: 衝撃波ごと組んでから、分割線を 106 行へ・そこで絵の表も表Bへ、先頭で表Aへ戻す(line=0 を1本足す)。 */
+/* 分割表: 先頭=スプライト表A＋絵の表A / 106 行=スプライト表B＋絵の表B の2本だけ。
+   ★4面の中ボスの間は衝撃波のゆがみ(R#23 の帯)を出さない。衝撃波の組み立て(ovl_shock)をこのオーバレイから外して
+     枠を空けるため(8KB に収まらなかった)。画面の揺れとヒットストップは残る。R#23 は分割で動かさないので先頭で戻す必要も無い。 */
 u8 ovl_twin_shock(u8 split_line) {
-    u8 n = ovl_shock_build(MB_TWIN_SPLIT), i;
     (void)split_line;
-    if (n >= RAS_MAX) n = RAS_MAX - 1;
-    for (i = 0; i < n; i++)
-        if (g_ras[i].reg == 5 && g_ras[i].val == SPR_R5_B) { g_ras[i].reg2 = 6; g_ras[i].val2 = MB_R6_B; }
-    for (i = n; i > 1; i--) g_ras[i] = g_ras[i - 1];
-    g_ras[1].line = 0; g_ras[1].reg = 6; g_ras[1].val = 0x0F; g_ras[1].reg2 = RAS_NOREG; g_ras[1].pidx = RAS_NOPAL;
-    return (u8)(n + 1);
+    g_ras[0].line = 0;             g_ras[0].reg = 5; g_ras[0].val = SPR_R5_A; g_ras[0].reg2 = 6; g_ras[0].val2 = 0x0F; g_ras[0].pidx = RAS_NOPAL;
+    g_ras[1].line = MB_TWIN_SPLIT; g_ras[1].reg = 5; g_ras[1].val = SPR_R5_B; g_ras[1].reg2 = 6; g_ras[1].val2 = MB_R6_B; g_ras[1].pidx = RAS_NOPAL;
+    return 2;
 }

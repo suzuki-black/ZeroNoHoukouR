@@ -375,7 +375,8 @@ ROMPACK_BANKS += --bank 25 $(BUILD)/ovl9.bin --asset 48 $(BUILD)/pby.bin --bank 
 
 # 4面の中ボス(He 111 ×2)用オーバレイ: 共通部分は同じ順。宙返り(ovl_rot)だけ -DOVL_TWIN(下の帯の絵の表Bにも写す)。
 # 入口表は ovlhead10(slot14 の衝撃波の分割表を ovl_twin_shock へ差し替え)。
-OVL10_RELS = $(BUILD)/ovl10_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl10_rot.rel $(BUILD)/ovl_mb_he.rel
+# ★衝撃波(ovl_shock)は入れない(static を持たないので番地はずれない)。4面の中ボスの間は衝撃波のゆがみを出さない。
+OVL10_RELS = $(BUILD)/ovl10_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl10_rot.rel $(BUILD)/ovl_mb_he.rel
 $(BUILD)/ovl10.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_he.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead10.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl10_palette.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl10_rot.rel
