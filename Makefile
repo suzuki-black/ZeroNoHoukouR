@@ -399,10 +399,10 @@ $(BUILD)/ovlhead10.rel: $(SRC)/banked/ovlhead10.s | $(BUILD)
 $(BUILD)/ovl10.bin: $(BUILD)/ovl10.ihx tools/ihx2bin.mjs
 	@node tools/ihx2bin.mjs $(BUILD)/ovl10.ihx 0xA000 $@; \
 	 SZ=$$(wc -c < $@ | tr -d ' '); \
-	 if [ "$$SZ" -gt 7424 ]; then \
-	   echo "ERROR: ovl10.bin=$${SZ}B が 7424B(0xA000-0xBCFF)を超過。0xBD00〜は2機の色の控え(HE_COLBUF)。"; exit 3; \
+	 if [ "$$SZ" -gt 8192 ]; then \
+	   echo "ERROR: ovl10.bin=$${SZ}B が 8192B(0xA000-0xBFFF)を超過。"; exit 3; \
 	 fi; \
-	 echo "  ovl10.bin=$${SZ}B / 7424B (残り$$((7424-SZ))B)"; \
+	 echo "  ovl10.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"; \
 	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl10.map | head -1); \
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl10 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
 # He 111 の絵(32方向×1024B=4バンク)

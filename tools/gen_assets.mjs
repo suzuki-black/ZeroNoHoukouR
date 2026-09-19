@@ -417,6 +417,7 @@ writeFileSync(binOut, bin);
 
 const bgmRamMax = Math.max(...bgmBlobs.map((b) => b.length));
 if (bgmRamMax > 1536) throw new Error(`BGM 1曲 ${bgmRamMax}B が曲RAM(0xE100, 1536B)を超過`);
+if (bgmRamMax > 1024) throw new Error(`BGM 1曲 ${bgmRamMax}B が 1024B を超えた。0xE500〜は4面の中ボスの色の控え(ovl_mb_he.c の HE_COLBUF)`);
 const shipRamMax = Math.max(...shipBlobs.map((b) => b.length));
 const h = [
   '/* 自動生成(tools/gen_assets.mjs)。手で編集しない。BGM＋各面の艦体OPS をデータバンクへ。 */',

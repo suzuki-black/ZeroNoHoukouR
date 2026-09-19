@@ -1,5 +1,6 @@
 /* ovl_mb_p61.c — 5面の中ボス P-61 ブラックウィドウ(米の双胴の夜間戦闘機, ROADMAP B4)。中ボス用オーバレイ(OVL12_BANK)で動く。
-   ★見せ場: **スプライトの 2 倍拡大(MAG)で 128x128 の大きな中ボス**(ユーザー案)と、**背景に描く弾幕**(実機で 1発 0.13ms と測った差分描き)。
+   ★見せ場: **スプライトの 2 倍拡大(MAG)で 96x96 の大きな中ボス**(ユーザー案)と、
+     (最初は 64x64 の絵を拡大して 128x128。最終面のボスの印象が薄れると実機で指摘 → 48x48(3x3 マス)の絵にして 96x96)**背景に描く弾幕**(実機で 1発 0.13ms と測った差分描き)。
      MAG は全部のスプライトに掛かるので、自機・弾は半分に縮めた絵(絵の表B=0x2000、R#6=0x04)を拡大で元の大きさに見せる。
      スコア・残機(アイコンと数)・ボム残数は数字を半分にすると読めないので、中ボスの間だけ背景に描く(HUD のスプライトは出さない)。
      アイコンとボム棒は HUD のスプライトと同じ絵・同じ色(行ごとの色)で描く(bgspr)。
@@ -256,8 +257,8 @@ u8 ovl_p61_split(u8 split_line) {
     return 2;
 }
 
-static s16 bxx(void) { return (s16)(cx - 64); }
-static s16 byy(void) { return (s16)(cy - 64); }
+static s16 bxx(void) { return (s16)(cx - 48); }   /* 絵は 3x3 マス(48x48)を拡大=96x96 */
+static s16 byy(void) { return (s16)(cy - 48); }
 
 void ovl_mb_init(void) {
     u8 i;
@@ -413,8 +414,8 @@ static void put_sprites(void) {
             s16 x, y;
             u8 o;
             if (!(m & (1u << c))) continue;
-            x = (s16)(bx + ((c & 3) << 5) + ((pass == 2) ? P61_SH_OFF : 0));
-            y = (s16)(by + ((c >> 2) << 5) + ((pass == 2) ? P61_SH_OFF : 0));
+            x = (s16)(bx + ((c & 3) << 5) + ((pass == 2) ? P61_SH_OFF - 16 : 0));   /* 影(マス 5,6,9,10)は元絵の中心(32)のまま */
+            y = (s16)(by + ((c >> 2) << 5) + ((pass == 2) ? P61_SH_OFF - 16 : 0));   /* =本体(24 へ寄せた)より 8x2 ドット右下 */
             if (coldirty) {
                 if (pass == 2) vdp_sprite_color(sl, 13);
                 else if (flash) vdp_sprite_color(sl, 15);
@@ -440,7 +441,7 @@ static void hit_test(void) {
         if (!e->active || e->type != ET_BULLET || e->team != TEAM_PLAYER) continue;
         dx = (s16)(e->x + 8 - cx); if (dx < 0) dx = -dx;
         dy = (s16)(e->y + 8 - cy); if (dy < 0) dy = -dy;
-        if (!((dx < 56 && dy < 14) || (dx < 16 && dy < 44))) continue;   /* 主翼 / 胴体と双胴 */
+        if (!((dx < 42 && dy < 11) || (dx < 12 && dy < 33))) continue;   /* 主翼 / 胴体と双胴(96x96 の大きさ) */
         if (e->ax == (s16)P61_PIERCE) continue;
         if (g_pwr < PWR_MAX) e->active = 0; else e->ax = (s16)P61_PIERCE;
         hp = (hp > e->hp) ? (u16)(hp - e->hp) : 0;
@@ -483,7 +484,7 @@ void ovl_mb_frame(void) {
         break;
     case ST_FIGHT:
         if ((++st_t & (hurt ? 1 : 3)) == 0) {       /* 機首から2本の腕の渦巻き */
-            pb_spawn(cx - 2, cy + 44, sang, 10); pb_spawn(cx - 2, cy + 44, (u8)(sang + 32), 10); sang += 5; }
+            pb_spawn(cx - 2, cy + 33, sang, 10); pb_spawn(cx - 2, cy + 33, (u8)(sang + 32), 10); sang += 5; }
         if (st_t >= 150) { st = ST_WARN; st_t = 0; }
         if (t >= P61_TIMEOUT) st = ST_LEAVE;
         hit_test();
@@ -491,8 +492,8 @@ void ovl_mb_frame(void) {
     case ST_WARN:                                   /* 予告: 白く明滅 → 自機へ扇 */
         if ((++st_t & 3) == 1) { flash = 1; coldirty = 1; }
         if (st_t >= P61_WARN_T) {
-            u8 a = (u8)(aim_dir((s16)(cx - 8), (s16)(cy + 36), g_player_x, g_player_y) << 1), k;
-            for (k = 0; k < 11; k++) pb_spawn(cx - 2, cy + 44, (u8)(a - 15 + k * 3), hurt ? 16 : 13);
+            u8 a = (u8)(aim_dir((s16)(cx - 8), (s16)(cy + 27), g_player_x, g_player_y) << 1), k;
+            for (k = 0; k < 11; k++) pb_spawn(cx - 2, cy + 33, (u8)(a - 15 + k * 3), hurt ? 16 : 13);
             sfx(2, SFX_BOOM);
             st = ST_FIGHT; st_t = 0;
         }
@@ -504,7 +505,7 @@ void ovl_mb_frame(void) {
         break;
     case ST_DIE:                                    /* 燃えながら落ちる */
         cy++;
-        if ((t & 3) == 0) { ent_spawn_explosion((s16)(cx - 48 + (rnd() & 95)), (s16)(cy - 24 + (rnd() & 47))); if ((t & 7) == 0) sfx(2, SFX_BOOM); }
+        if ((t & 3) == 0) { ent_spawn_explosion((s16)(cx - 40 + (rnd() & 63)), (s16)(cy - 24 + (rnd() & 31))); if ((t & 7) == 0) sfx(2, SFX_BOOM); }
         if (++st_t >= 60) st = ST_DONE;
         break;
     }
@@ -517,7 +518,7 @@ void ovl_mb_frame(void) {
         tgt = (u8)((d < 12) ? 0 : (d > 20) ? 8 : d - 12);
         if (hp && hp < P61_HP / 2) {                /* 手負い: エンジンが燃え、弾幕が濃く・速く */
             if (!hurt) { hurt = 1; g_shake = 8; sfx(2, SFX_BOOM); }
-            if ((t & 7) == 0) ent_spawn_explosion((s16)(cx - 30 + ((t & 8) ? 44 : 0)), (s16)(cy - 8));
+            if ((t & 7) == 0) ent_spawn_explosion((s16)(cx - 23 + ((t & 8) ? 30 : 0)), (s16)(cy - 8));   /* 左右のエンジン */
         }
         if (!hp) {                                  /* 撃墜 */
             u16 pts = (u16)(500 + (P61_TIMEOUT - t) / 3);

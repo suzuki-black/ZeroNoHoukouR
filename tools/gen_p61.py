@@ -14,7 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_fw200 as G
 from PIL import Image
 
-PX = 3.0   # 元絵 1m あたりのドット(全幅 20.1m ≒ 60 ドット。画面では 2 倍)
+PX = 2.25  # 元絵 1m あたりのドット(全幅 20.1m ≒ 45 ドット。画面では 2 倍=約 90 ドット)。
+           # ★3.0(60 ドット=画面 128x128)では大きすぎて最終面のボスの印象が薄れると実機で指摘 → 3/4 に
 BLUE, WHITE = 107, 115
 
 def circle(cx, cy, r, n=10):
@@ -124,9 +125,13 @@ def preview(out):
 
 MB_SPR_MAX = 22   # 本体16＋重ね2＋影4(HUD を背景へ回すので枠に余裕がある)
 
+SHIFT = 8   # 元絵を左上へ 8 ドット寄せて 3x3 マス(48x48)に収める=画面 96x96(オーバレイは中心から 48 引いて置く)
+
 def blob(d):
     use_p61()
     img = G.frame_color(d, 'night')
+    img = [r[SHIFT:] + [0] * SHIFT for r in img[SHIFT:]] + [[0] * 64 for _ in range(SHIFT)]
+    assert not any(img[y][x] for y in range(64) for x in range(48, 64)) and not any(any(r) for r in img[48:]), d
     chosen = G.pick_overlays(img, 2)
     bm = om = 0
     pat_base, col_base, pat_ov, col_ov = [bytes(32)] * 16, {}, [], []

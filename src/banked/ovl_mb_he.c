@@ -17,6 +17,8 @@
      被弾=当たった機だけ1フレーム白く光る＋火花＋音(その後3フレームは光らせない) / 予告=白く明滅 / 手負い(耐久半分)=エンジン炎上＋速く / 影は変えない。
      白くしたあと元の色へすぐ戻せるよう、各機の色を colbuf(オーバレイの後ろの RAM)に持つ。
    ★片方を落とすと残った1機が怒る(向き直り倍速・待ち半分・突進 4px/f)。45秒で上下へ逃げる。
+   ★残った1機は**画面全体で暴れる**(solo)。下の機は自機のすぐ近くを飛ぶので無敵でもないと落とせなかった(実機で指摘)。
+     下の機が残ったら上の機(表A)の役に移して、まず上へ突き抜けさせる。分割をやめて画面全体を表Aにし、自機を直接狙う。
      1機 300点、2機とも落とすと残り時間ボーナス＋メガクラッシュ1回。メガクラッシュの間は2機を隠す(下の帯の絵の表が合わないため)。 */
 #include "types.h"
 #include "vdp.h"
@@ -41,9 +43,10 @@ extern u8 rnd(void);
 #define HE_SLOT0    14      /* 各帯の中ボスの枠 14..31 */
 #define HE_PIERCE   0x7ABE
 #define HE_SH_OFF   12      /* 影を右下へずらす量 */
-#define HE_COLBUF   0xBD00  /* 2機の機体の色(最大14枚×16B×2)。オーバレイ(0xA000〜)の後ろ=ovl10 は 7424B 以下であること(Makefile が検証) */
+#define HE_COLBUF   0xE500  /* 2機の機体の色(最大14枚×16B×2=448B)。曲データ(0xE100〜, gen_assets が 1024B 以下を検証)の後ろ、
+                               中ボスの向きのデータ(MB_BUF 0xE700)の手前。以前はオーバレイの後ろ(0xBD00)で ovl10 を 7424B に縛っていた */
 
-enum { ST_FOG, ST_AIM, ST_DASH, ST_LEAVE, ST_DONE };
+enum { ST_FOG, ST_AIM, ST_DASH, ST_LEAVE, ST_DONE, ST_RISE };   /* ST_RISE=残った下の機が上へ抜ける */
 
 static const s8 dx8[8] = { 0, 2, 3, 2, 0, -2, -3, -2 };
 static const s8 dy8[8] = { -3, -2, 0, 2, 3, 2, 0, -2 };
@@ -55,9 +58,10 @@ static u8  hcool[2];                               /* 白く光った後、次�
 static u8  ldir[2], dt[2], hf[2], nc[2];           /* hf=白く光っている残り / nc=機体(重ね＋本体)の枚数。その後ろ4枚が影 */                         /* 各機の VRAM に載っている向き / 墜落の残りフレーム */
 static u16 t, hp[2], bm[2], om[2];
 static s16 cx, cy;                                 /* 上の機(=動きの主)の中心 */
+static u8  solo;                                   /* 1=残り1機(上の機=表A の役)が画面全体で暴れる */
 
 void ovl_mb_init(void) {
-    st = ST_FOG; st_t = 0; t = 0; hurt = 0; gone = 0;
+    st = ST_FOG; st_t = 0; t = 0; hurt = 0; gone = 0; solo = 0;
     hp[0] = hp[1] = HE_HP; dt[0] = dt[1] = 0; hf[0] = hf[1] = 0; hcool[0] = hcool[1] = 0; nc[0] = nc[1] = 0; bm[0] = bm[1] = om[0] = om[1] = 0;
     cx = 56; cy = 44; fcur = 8;                    /* 上の機は左上で右向き / 下の機は右下で左向き */
     ldir[0] = ldir[1] = 0xFF;
@@ -80,7 +84,7 @@ static u8 move(s8 vx, s8 vy) {
     s16 x = (s16)(cx + vx), y = (s16)(cy + vy);
     u8 out = 0;
     if (x < 24) { x = 24; out = 1; } else if (x > 232) { x = 232; out = 1; }
-    if (y < 28) { y = 28; out = 1; } else if (y > 70) { y = 70; out = 1; }
+    if (y < 28) { y = 28; out = 1; } else if (y > (solo ? 150 : 70)) { y = solo ? 150 : 70; out = 1; }
     cx = x; cy = y;
     return out;
 }
@@ -88,6 +92,8 @@ static u8 move(s8 vx, s8 vy) {
 /* 自機の点対称の位置を狙う向きを決めて向き直りへ(=下の機が自機へ向かう) */
 static void aim(void) {
     s16 tx = (s16)(256 - 8 - g_player_x), ty = (s16)(212 - 8 - g_player_y);
+    if (solo) { tx = (s16)(g_player_x + 8); ty = (cy > 100) ? 40 : (s16)(g_player_y + 8); }   /* 残り1機は自機を直接狙う。
+                                                   画面の下半分に居たら自機の真上の上空へ引き返す(1面の Fw 200 と同じ。下端に張り付かない) */
     d8 = (u8)(((aim_dir(cx, cy, tx, ty) + 2) >> 2) & 7);
     st = ST_AIM; st_t = 0;
 }
@@ -190,6 +196,11 @@ void ovl_mb_frame(void) {
             if ((st_t & 3) == 1 && !crush) { hcool[0] = hcool[1] = 0; flash(0); flash(1); }   /* 1フレーム白→戻る、を繰り返す=明滅 */
         } else if (move(dx8[d8], dy8[d8]) || (hurt && move(hx8[d8], hy8[d8])) || st_t >= HE_WARN_T + HE_DASH_T) aim();
         break;
+    case ST_RISE:                                  /* 残った下の機: 機首を上へ向けながら上の空へ抜ける(動きの範囲の外から入る) */
+        tgt = 0;
+        cy -= 3;
+        if (cy <= 60) aim();
+        break;
     case ST_LEAVE:                                 /* 上の機は上へ、下の機は(鏡写しで)下へ抜ける */
         tgt = 0;
         cy -= 3;
@@ -202,7 +213,14 @@ void ovl_mb_frame(void) {
         if (dt[k]) {                               /* 墜落中: 爆発を出しながら消える */
             if ((t & 3) == 0) ent_spawn_explosion((s16)(kx(k) - 24 + (rnd() & 31)), (s16)(ky(k) - 24 + (rnd() & 31)));
             if ((t & 7) == 0) sfx(2, SFX_BOOM);
-            if (!--dt[k]) { gone |= b; hurt = 1; }    /* 片方を落とされると残りが怒る */
+            if (!--dt[k]) {                        /* 片方を落とされると残りが怒り、画面全体で暴れる */
+                gone |= b; hurt = 1; solo = 1;
+                if (!k && !(gone & 2)) {               /* 下の機が残った: 上の機(表A)の役に移し、まず上へ突き抜ける */
+                    cx = BX(); cy = BY(); fcur = (u8)((fcur + 16) & 31); hp[0] = hp[1];
+                    gone = 2; ldir[0] = 0xFF; bm[0] = om[0] = 0;   /* 絵を読み直すまでは出さない */
+                    st = ST_RISE;
+                }
+            }
             continue;
         }
         if (st != ST_FOG && st != ST_LEAVE && !crush) hit_test(k);
@@ -243,10 +261,13 @@ void ovl_mb_frame(void) {
         paint(cur, (st == ST_FOG) ? fogc : hf[cur] ? 15 : 0);
         for (n = 64; n; n--) HE_DAT = 13;              /* 影4枚(いつも同じ色) */
     }
-    if (g_mb_req == 0xFF && !g_mb_new) {   /* 向きが変わった機の絵を読みに行く(上の機が先) */
+    if (g_mb_req == 0xFF && !g_mb_new) {   /* 向きが変わった機の絵を読みに行く。★両方変わっていたら前回と逆の機を先に。
+                                              上の機を常に先にしていたら、旋回中は下の機の番が回らず、旋回が止まった瞬間に
+                                              下の機だけ途中の向きを飛ばして一気に向きが変わった(実機で指摘) */
         u8 want0 = fcur, want1 = (u8)((fcur + 16) & 31);
-        if (ldir[0] != want0) { cur = 0; ldir[0] = want0; g_mb_req = want0; }
-        else if (ldir[1] != want1) { cur = 1; ldir[1] = want1; g_mb_req = want1; }
+        u8 n0 = (u8)(ldir[0] != want0), n1 = (u8)(!(gone & 2) && ldir[1] != want1);
+        if (n0 && (!n1 || cur)) { cur = 0; ldir[0] = want0; g_mb_req = want0; }
+        else if (n1) { cur = 1; ldir[1] = want1; g_mb_req = want1; }
     }
     for (k = 0; k < 2; k++) put(k, (u8)(!(gone & (1 << k)) && !crush));
 }
@@ -257,6 +278,7 @@ void ovl_mb_frame(void) {
 u8 ovl_twin_shock(u8 split_line) {
     (void)split_line;
     g_ras[0].line = 0;             g_ras[0].reg = 5; g_ras[0].val = SPR_R5_A; g_ras[0].reg2 = 6; g_ras[0].val2 = 0x0F; g_ras[0].pidx = RAS_NOPAL;
+    if (solo) return 1;            /* 残り1機: 分割をやめて画面全体を表A に(上の機の役が下の帯へも行ける) */
     g_ras[1].line = MB_TWIN_SPLIT; g_ras[1].reg = 5; g_ras[1].val = SPR_R5_B; g_ras[1].reg2 = 6; g_ras[1].val2 = MB_R6_B; g_ras[1].pidx = RAS_NOPAL;
     return 2;
 }
