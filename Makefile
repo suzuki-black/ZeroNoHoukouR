@@ -395,10 +395,12 @@ $(BUILD)/ovl10.bin: $(BUILD)/ovl10.ihx tools/ihx2bin.mjs
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl10 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
 # He 111 の絵(32方向×1024B=4バンク)
 $(BUILD)/he111.bin: tools/gen_he111.py tools/gen_fw200.py | $(BUILD)
-	python3 tools/gen_he111.py bin $@
-ROMPACK_BANKS += --bank 26 $(BUILD)/ovl10.bin --asset 20 $(BUILD)/he111.bin
+	python3 tools/gen_he111.py bin $@ $(BUILD)/he111_sh.bin
+$(BUILD)/he111_sh.bin: $(BUILD)/he111.bin
+	@true
+ROMPACK_BANKS += --bank 26 $(BUILD)/ovl10.bin --asset 20 $(BUILD)/he111.bin --bank 61 $(BUILD)/he111_sh.bin
 
-BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 

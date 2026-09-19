@@ -8,8 +8,12 @@
    ★動き: 1機目が「自機の点対称の位置」を狙って 8 方向で突っ込む(1面と同じ 向き直り→白い明滅の予告→突進)。
      2機目はその鏡写しなので、自機の居る下の帯を突っ切ってくる。向き直りの途中で2機とも自機を狙って撃つ=弾が交差する。
      最初は霧の中から浮かび上がる(機体の色を 霧の色→灰→本来の色 と変える)。
-   ★スプライトは各帯の末尾 18 枠(14..31)に固定。エンティティは 9..13。色は絵を読み込んだときだけ書く
-     (被弾の白い明滅はしない。火花と音で示す)。予告の明滅や霧のあとは絵を読み直して色を戻す。
+   ★スプライトは各帯の末尾 18 枠(14..31)に固定=重ね(最大2)→本体→影4。エンティティは 9..13。色は絵を読み込んだときだけ書く。
+     予告の明滅や霧のあとは絵を読み直して色を戻す。
+   ★影: 海面に 30 ドット(2x2)。低空なので右下へ HE_SH_OFF だけ。上の機の影も 106 行より上に収まる(中心 y≦70)。
+     ★最初は朝霧を理由に省いたが「影が無い」と実機で指摘されて足した。
+   ★被弾: 当たった機だけ数フレームちらつく(消える)。2機一緒に白く光るのは突進の予告だけ
+     (★当初は被弾の表示が無く、予告の明滅が「片方に当てたのに両方点滅」に見えた=実機で指摘)。
    ★片方を落とすと残った1機が怒る(向き直り倍速・待ち半分・突進 4px/f)。45秒で上下へ逃げる。
      1機 300点、2機とも落とすと残り時間ボーナス＋メガクラッシュ1回。メガクラッシュの間は2機を隠す(下の帯の絵の表が合わないため)。 */
 #include "types.h"
@@ -35,6 +39,7 @@ extern u8 ovl_shock_build(u8 split_line);
 #define HE_FOG_T    60      /* 霧から浮かび上がる(30 フレームずつ 霧の色→灰) */
 #define HE_SLOT0    14      /* 各帯の中ボスの枠 14..31 */
 #define HE_PIERCE   0x7ABE
+#define HE_SH_OFF   12      /* 影を右下へずらす量 */
 
 enum { ST_FOG, ST_AIM, ST_DASH, ST_LEAVE, ST_DONE };
 
@@ -44,13 +49,13 @@ static const s8 hx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 static const s8 hy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
 static u8  st, st_t, d8, fcur, hurt, cur, gone;   /* gone: bit0=上の機 / bit1=下の機 が落ちた */
-static u8  ldir[2], dt[2];                         /* 各機の VRAM に載っている向き / 墜落の残りフレーム */
+static u8  ldir[2], dt[2], hb[2];                  /* hb=被弾のちらつきの残り */                         /* 各機の VRAM に載っている向き / 墜落の残りフレーム */
 static u16 t, hp[2], bm[2], om[2];
 static s16 cx, cy;                                 /* 上の機(=動きの主)の中心 */
 
 void ovl_mb_init(void) {
     st = ST_FOG; st_t = 0; t = 0; hurt = 0; gone = 0;
-    hp[0] = hp[1] = HE_HP; dt[0] = dt[1] = 0; bm[0] = bm[1] = om[0] = om[1] = 0;
+    hp[0] = hp[1] = HE_HP; dt[0] = dt[1] = 0; hb[0] = hb[1] = 0; bm[0] = bm[1] = om[0] = om[1] = 0;
     cx = 56; cy = 44; fcur = 8;                    /* 上の機は左上で右向き / 下の機は右下で左向き */
     ldir[0] = ldir[1] = 0xFF;
     vdp_copy(0, 240, 0, 64, 256, 16);              /* 絵の表A(0x7800)→表B(0x2000)。自機や弾の絵を下の帯でも使う */
@@ -88,14 +93,15 @@ static void aim(void) {
 static s16 kx(u8 k) { return k ? BX() : cx; }
 static s16 ky(u8 k) { return k ? BY() : cy; }
 
-/* 機 k の枠(14..31)へ、絵のあるマスを 重ね→本体 の順に。隠すときは全部画面外へ。 */
+/* 機 k の枠(14..31)へ、絵のあるマスを 重ね→本体→影 の順に。隠すときは全部画面外へ。 */
 static void put(u8 k, u8 show) {
     u8 c, j = 0, pass, n = 0, hy = (u8)(220 + g_vscroll - 1);
     s16 bx = (s16)(kx(k) - 32), by = (s16)(ky(k) - 32);
     if (hy == 216) hy = 215;
     vdp_write_addr((u16)((k ? 0x7200 : 0x7600) + HE_SLOT0 * 4));
-    if (show) for (pass = 0; pass < 2; pass++) {
-        u16 m = pass ? bm[k] : om[k];
+    if (show) for (pass = 0; pass < 3; pass++) {
+        u16 m = (pass == 0) ? om[k] : (pass == 1) ? bm[k] : 0x0660;   /* 影は 2x2(マス 5,6,9,10) */
+        if (pass == 2) { bx += HE_SH_OFF; by += HE_SH_OFF; j = 2; }
         for (c = 0; c < 16; c++) {
             s16 x, y;
             u8 yy;
@@ -105,7 +111,7 @@ static void put(u8 k, u8 show) {
             yy = (u8)(y + g_vscroll - 1);
             if (yy == 216) yy = 215;
             if (x < 0 || x > 240 || y < -16 || y > 212) { yy = hy; x = 0; }
-            HE_DAT = yy; HE_DAT = (u8)x; HE_DAT = pass ? MB_CELL_PAT(c) : MB_OV_PAT(j); HE_DAT = 0;
+            HE_DAT = yy; HE_DAT = (u8)x; HE_DAT = (pass == 1) ? MB_CELL_PAT(c) : MB_OV_PAT(j); HE_DAT = 0;
             j++; n++;
         }
     }
@@ -130,6 +136,7 @@ static void hit_test(u8 k) {
         if (e->ax == (s16)(HE_PIERCE + k)) continue;
         if (g_pwr < PWR_MAX) e->active = 0; else e->ax = (s16)(HE_PIERCE + k);
         hp[k] = (hp[k] > e->hp) ? (u16)(hp[k] - e->hp) : 0;
+        hb[k] = 6;
         if ((t & 3) == 0) { ent_spawn_spark(e->x, e->y); sfx(1, SFX_HIT); }
     }
     {   /* 胴体に触れたら被弾 */
@@ -209,7 +216,7 @@ void ovl_mb_frame(void) {
         const u8 *p = (const u8 *)(MB_BUF + 708);
         u16 i, n = 0;
         g_mb_pat_off = cur ? (u16)(MB_PATB - 0x7800) : 0;
-        mb_upload(448, 0);
+        mb_upload(320, 1);                         /* 本体16＋重ね2＋影4 */
         g_mb_n = 18;
         bm[cur] = g_mb_bm; om[cur] = g_mb_om;
         for (i = bm[cur]; i; i >>= 1) n += (u16)(i & 1);
@@ -217,6 +224,7 @@ void ovl_mb_frame(void) {
         if (st != ST_FOG) {
             vdp_write_addr((u16)((cur ? 0x7000 : 0x7400) + HE_SLOT0 * 16));
             for (n <<= 4; n; n--) HE_DAT = *p++;
+            for (n = 64; n; n--) HE_DAT = 13;          /* 影4枚 */
         }
     }
     if (g_mb_req == 0xFF && !g_mb_new) {   /* 向きが変わった機の絵を読みに行く(上の機が先) */
@@ -224,8 +232,10 @@ void ovl_mb_frame(void) {
         if (ldir[0] != want0) { cur = 0; ldir[0] = want0; g_mb_req = want0; }
         else if (ldir[1] != want1) { cur = 1; ldir[1] = want1; g_mb_req = want1; }
     }
-    put(0, (u8)(!(gone & 1) && !crush));
-    put(1, (u8)(!(gone & 2) && !crush));
+    for (k = 0; k < 2; k++) {
+        if (hb[k]) hb[k]--;
+        put(k, (u8)(!(gone & (1 << k)) && !crush && !(hb[k] & 2)));   /* 被弾した機だけちらつく */
+    }
 }
 
 /* 分割表: 衝撃波ごと組んでから、分割線を 106 行へ・そこで絵の表も表Bへ、先頭で表Aへ戻す(line=0 を1本足す)。 */

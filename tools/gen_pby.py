@@ -203,7 +203,7 @@ if __name__ == '__main__' and sys.argv[1] == 'bin':
             b, n = blob(lv, d)
             data += b; counts.append(n)
     open(sys.argv[2], 'wb').write(data)
-    open(sys.argv[3], 'wb').write(b''.join(shadow(d) for d in range(NDIR16)))
+    open(sys.argv[3], 'wb').write(b''.join(shadow(d) for d in range(NDIR16)) * 2)   # ★常駐は 添字&31 で引く(4面は32方向)ので2周ぶん
     print('pby: sprites per level', [max(counts[lv * 16:(lv + 1) * 16]) for lv in range(6)])
 
 if __name__ == '__main__' and sys.argv[1] == 'preview':

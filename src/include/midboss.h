@@ -22,9 +22,10 @@
 #define MB_NDIR        32
 #define OVL9_BANK      25   /* 2面の中ボス(PBY カタリナ)用オーバレイ。入口は ovlhead8.s を共用 */
 #define PBY_BANK       48   /* PBY の 6段階の大きさ×16方向×1024B(48..59。1バンク8件) */
-#define PBY_SH_BANK    60   /* PBY の影 16方向×128B */
+#define PBY_SH_BANK    60   /* PBY の影 16方向×128B を2周(常駐は 添字&31 で引く) */
 #define OVL10_BANK     26   /* 4面の中ボス(He 111 ×2)用オーバレイ */
 #define HE_BANK        20   /* He 111 の 32方向×1024B(20..23) */
+#define HE_SH_BANK     61   /* He 111 の影 32方向×128B */
 #define MB_TWIN_SPLIT  106  /* 4面: 2機は画面の中心(106行)について点対称=分割線はいつもここ */
 #define MB_PATB        0x2000   /* 4面: 下の帯の絵の表(page0 の 64..79 行。R#6=0x04) */
 #define MB_R6_B        0x04

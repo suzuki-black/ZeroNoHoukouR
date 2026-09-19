@@ -4,8 +4,10 @@
    上の帯=1機目 / 下の帯=2機目 をそれぞれ 64x64 で描く。2機は画面の中心について点対称に動く(2機目の向き=1機目+180°)。
    ★1面(Fw 200=4発・直線翼・緑の迷彩)/2面(PBY=飛行艇)と見分けがつくよう、楕円翼・全面ガラスの丸い機首・灰色2色の分割迷彩。
    使い方: python3 tools/gen_he111.py preview <out.png>
-           python3 tools/gen_he111.py bin <out.bin>     … 32方向×1024B(並びは gen_fw200.py と同じ)。2機目は 向き+16 の絵を使う。
-   ★1機あたり 18 枚以下(スプライト表は上下の帯で別々なので、2機でも各帯 18 枚)。影は描かない(朝霧で日差しが弱い)。
+           python3 tools/gen_he111.py bin <out.bin> <shadow.bin>   … 32方向×1024B(並びは gen_fw200.py と同じ)と影 32方向×128B。
+     2機目は 向き+16 の絵を使う。
+   ★1機あたり 本体＋重ね(最大2)＋影4 で 18 枚以下(スプライト表は上下の帯で別々なので、2機でも各帯 18 枚)。
+     ★最初は朝霧を理由に影を省いたが「影が無い」と実機で指摘 → 影(30 ドット=2x2)を足し、重ねを 2 までに減らした。
 """
 import sys, os, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -116,7 +118,7 @@ def blob(d):
     use_he()
     img = G.frame_color(d, 'grey')
     nbody = sum(1 for c in range(16) if any(img[(c // 4) * 16 + y][(c % 4) * 16 + x] for y in range(16) for x in range(16)))
-    chosen = G.pick_overlays(img, max(0, min(6, MB_SPR_MAX - nbody)))
+    chosen = G.pick_overlays(img, max(0, min(2, MB_SPR_MAX - 4 - nbody)))
     bm = om = 0
     pat_base, col_base, pat_ov, col_ov = [bytes(32)] * 16, {}, [], []
     for c in range(16):
@@ -137,7 +139,7 @@ def blob(d):
     for c in range(16):
         if bm & (1 << c):
             out += col_base[c]
-    n = bin(bm).count('1') + bin(om).count('1')
+    n = bin(bm).count('1') + bin(om).count('1') + 4
     assert n <= MB_SPR_MAX and len(out) <= 1024, (d, n)
     return bytes(out + bytes(1024 - len(out))), n
 
@@ -146,6 +148,13 @@ if __name__ == '__main__' and sys.argv[1] == 'bin':
     for d in range(32):
         b, n = blob(d); data += b; ns.append(n)
     open(sys.argv[2], 'wb').write(data)
+    sh = b''
+    for d in range(32):                   # 影: 半分の大きさ(30 ドット)の影絵を 2x2(マス 5,6,9,10)で
+        use_he(); G.PX_M = PX / 2
+        f = G.frame(d)
+        for c in (5, 6, 9, 10):
+            sh += G.cell_bytes([[f[(c // 4) * 16 + y][(c % 4) * 16 + x] for x in range(16)] for y in range(16)])
+    open(sys.argv[3], 'wb').write(sh)
     print('he111: sprites max', max(ns), 'min', min(ns))
 
 if __name__ == '__main__' and sys.argv[1] == 'preview':
