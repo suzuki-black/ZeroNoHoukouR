@@ -747,9 +747,11 @@ static void stage_build(void) {
     /* ★メガクラッシュ残数は1回の挑戦ごとに補充。演出の実体(雷光パレット/稲妻描画/敵弾消去)は
        すべて RAM オーバレイ側なので、載らない機械では残数0＝表示も出さない(空撃ちでストックだけ
        減る、という壊れ方を避ける)。**overlay_load の後**で判定すること。 */
-    if (curstage == STAGE_FINAL) g_pwr = 0;   /* ★最終面は初期装備に戻す(ボム無し・宙返りだけで倒すコンセプト) */
     pw_done = 0;                              /* 銀の敵機(増槽持ち)は海モード1回につき1機 */
-    g_crush = (g_ovl_ok && curstage != STAGE_FINAL) ? CRUSH_MAX : 0;   /* ★最終面は津波(全画面MAG)がボス帯と両立しないので無し */
+    if (curstage != STAGE_FINAL) g_crush = g_ovl_ok ? CRUSH_MAX : 0;
+    /* ★最終面は初期装備・ボム無し(宙返りだけで倒すコンセプト。津波は全画面の拡大でボスの帯と両立しない)。
+       ただしここでは黙って 0 にしない: 「敵大将発見」の間に自機が増槽と爆弾を投棄する演出(ovl_final.c)で 0 にする
+       =捨てたから弱くなった、という順番にする(ユーザー案A) */
     g_crush_t = 0;
     g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
     g_loop_t = 0; g_loop_cd = 0; g_loop_alt = 0;   /* 宙返りも持ち越さない */
@@ -1307,7 +1309,11 @@ u8 stage_update(void) {
         g_shipargs.mode = 8; g_shipargs.hull = (u8)(curstage == STAGE_FINAL); bcall_to(GEN_PLANES_BANK);
     } else if (seq == SEQ_ALERT && (u16)(snd_ticks - g_bgm_t0) >= ALERT_TICKS) {   /* 警報おわり(サイレンの頭から一定時間)→ 文字を消す。
                                                          最終面はここでイントロ付きの曲(ボスの登場はこれに合わせる) */
-        seq = SEQ_GO; g_alert = 0;
+        seq = SEQ_GO;
+        if (curstage == STAGE_FINAL) {               /* ★電文(一文字ずつ)＋投棄を前景で。終わってからイントロ付きの曲 */
+            g_shipargs.mode = 9; bcall_to(GEN_PLANES_BANK);
+        }
+        g_alert = 0;
         scroll_repaint_all();
         if (curstage == STAGE_FINAL) bgm_play(FINAL_BGM); else bgm_stop();
     }

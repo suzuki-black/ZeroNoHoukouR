@@ -12,6 +12,8 @@
 #include "input.h"
 #include "raster.h"
 #include "gamestate.h"   /* g_score / g_hiscore */
+#include "entity.h"      /* 決戦前の投棄(ent_spawn) */
+#include "player.h"      /* g_player_x/y */
 #include "assets_data.h" /* PANEL_W / PANEL_WB / PANEL_H */
 #include "scroll.h"      /* g_cam(警報パネルを表示リングの行へ直す) */
 #include "panel_alert.h" /* 敵艦発見 / 敵大将発見(gen_alert.py) */
@@ -190,6 +192,50 @@ static void alert_text(const char *m, u16 x, u8 sy, u8 col) {
         for (y = 0; y < 8; y++) alert_bits(&g[y], 1, x, (u8)(sy + y), col);
     }
 }
+/* ★決戦前の投棄(ユーザー案A): 「敵大将発見」と同時に、持っている増槽と爆弾を自機が捨てる。
+   当たっても威力0の自機の弾として落とすだけ(画面の下へ抜けたら自動で消える)。捨てた瞬間に弾の段階とボムを 0 にする
+   =「捨てたから弱くなった」という順番にする(黙って 0 にしていたのを改めた)。 */
+static void jettison(void) {
+    static const s8 jx[5] = { -14, 14, -5, 5, 0 };
+    u8 i, n = (u8)((g_crush > 3) ? 3 : g_crush);
+    for (i = (u8)(g_pwr ? 0 : 2); i < (u8)(2 + n); i++) {
+        Entity *e = ent_spawn(ET_BULLET);
+        if (!e) break;
+        e->x = (s16)(g_player_x + jx[i]); e->y = (s16)(g_player_y + 4);
+        e->vx = (s8)(jx[i] >> 3); e->vy = (s8)(2 + (i & 1));
+        e->team = TEAM_PLAYER; e->hp = 0;                  /* 威力0=当たっても何も起きない */
+        e->pat = (u8)((i < 2) ? SPR_TANK : SPR_EBSHELL);   /* 増槽 / 爆弾 */
+        if (i < 2) e->coltab = barrel_col;                 /* 増槽=金属の陰影(常駐の表。バンクの表は窓が戻ると消える) */
+        else       e->color = 13;                          /* 爆弾=ほぼ黒 */
+    }
+    g_pwr = 0; g_crush = 0;
+}
+
+/* ★電文(最終面): 「敵大将発見」の下に、一文字ずつ音を立てて出す(無音の中で)。出し終えたら投棄。
+   前景で回す(results_impl と同じやり方)。この間はゲームのフレームが進まないので、スクロールも止まったまま。 */
+#define MSG_Y   142     /* 1行目の上端(画面の行)。「敵大将発見」は 70〜128 */
+#define MSG_ADV 20      /* 1文字の送り(18 ドット＋間 2) */
+static void msg_line(const u8 *p, u8 sy) {
+    u8 i, y;
+    u16 x0 = (u16)((256 - (u16)MSG_N * MSG_ADV) >> 1);
+    for (i = 0; i < MSG_N; i++, p += MSG_WB * MSG_H) {
+        u16 x = (u16)(x0 + (u16)i * MSG_ADV);
+        for (y = 0; y < MSG_H; y++) alert_bits(&p[y * MSG_WB], MSG_WB, x + 2, (u8)(sy + y + 2), 13);   /* 影 */
+        for (y = 0; y < MSG_H; y++) alert_bits(&p[y * MSG_WB], MSG_WB, x, (u8)(sy + y), 15);           /* 本体=白 */
+        sfx(2, SFX_HIT);                          /* 一文字ごとに短い「コッ」 */
+        for (y = 0; y < 5; y++) vdp_wait_frame();
+    }
+}
+static void msg_impl(void) {
+    u8 f;
+    bgm_stop();                                   /* 電文と投棄の間は無音 */
+    msg_line(msg0, MSG_Y);
+    msg_line(msg1, (u8)(MSG_Y + MSG_H + 6));
+    for (f = 0; f < 30; f++) vdp_wait_frame();
+    jettison();                                   /* 増槽と爆弾を捨てる(落ちるのはこの後、ゲームが動き出してから) */
+    for (f = 0; f < 20; f++) vdp_wait_frame();
+}
+
 static void alert_impl(u8 which) {
     const u8 *p = which ? alert_tai : alert_kan;
     vdp_cmd_wait();                                   /* 海の塗り直し(VDP コマンド)が済んでから読む */
@@ -280,6 +326,7 @@ static void mag_table(void) {
 void banked_entry(void) {
     if (g_shipargs.mode == 7) { mag_table(); return; }
     if (g_shipargs.mode == 8) { alert_impl(g_shipargs.hull); return; }   /* 警報パネル(hull=0 敵艦発見 / 1 敵大将発見) */
+    if (g_shipargs.mode == 9) { msg_impl(); return; }                    /* 最終面の電文＋投棄 */
     if (g_shipargs.mode == 5) { results_impl((const char *)g_shipargs.ops); return; }
     if (g_shipargs.mode == 6) { card_text_impl(g_shipargs.hull, (const char *)g_shipargs.ops); return; }
     load_planes(g_shipargs.hull);

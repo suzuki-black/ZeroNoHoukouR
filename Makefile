@@ -290,8 +290,8 @@ $(BUILD)/boss_vram.bin $(BUILD)/boss_vram0.bin $(BUILD)/boss_misc.bin: $(BUILD)/
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
 OVL6_RELS = $(BUILD)/ovl6_palette.rel $(BUILD)/ovl6_rot.rel $(BUILD)/ovl_final.rel
 $(BUILD)/ovl6.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_final.c $(HDRS) $(BUILD)/boss_frames.h $(BUILD)/ovlhead6.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl6_palette.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl6_rot.rel
+	sdcc -m$(TARGET) -c $(OPT) --opt-code-size $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl6_palette.rel
+	sdcc -m$(TARGET) -c $(OPT) --opt-code-size $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl6_rot.rel
 	sdcc -m$(TARGET) -c $(OPT) --opt-code-size $(DEFS) $(INC) $(SRC)/banked/ovl_final.c -o $(BUILD)/ovl_final.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead6.rel $(OVL6_RELS) $(BUILD)/resident_syms.rel -o $@
