@@ -14,6 +14,7 @@
 #include "gamestate.h"   /* g_score / g_hiscore */
 #include "entity.h"      /* 決戦前の投棄(ent_spawn) */
 #include "player.h"      /* g_player_x/y */
+#include "hud.h"         /* hud_draw / HUD_SLOTS(投棄でアイコンを1つずつ減らす) */
 #include "assets_data.h" /* PANEL_W / PANEL_WB / PANEL_H */
 #include "scroll.h"      /* g_cam(警報パネルを表示リングの行へ直す) */
 #include "panel_alert.h" /* 敵艦発見 / 敵大将発見(gen_alert.py) */
@@ -192,23 +193,50 @@ static void alert_text(const char *m, u16 x, u8 sy, u8 col) {
         for (y = 0; y < 8; y++) alert_bits(&g[y], 1, x, (u8)(sy + y), col);
     }
 }
+__sfr __at(0xA0) PSG_R;
+__sfr __at(0xA1) PSG_V;
+static void tone_wait(u8 lo, u8 n) {
+    u8 v = 15, i;
+    PSG_R = 0; PSG_V = lo;
+    PSG_R = 1; PSG_V = 0;
+    for (i = 0; i < n; i++) {
+        PSG_R = 8; PSG_V = v;        /* ch A 音量 */
+        v = (u8)((v > 3) ? v - 4 : 0);
+        vdp_wait_frame();
+    }
+    PSG_R = 8; PSG_V = 0;
+}
+#define tick_wait() tone_wait(124, MSG_WAIT)   /* 打電音(周期124≒900Hz) */
+
 /* ★決戦前の投棄(ユーザー案A): 「敵大将発見」と同時に、持っている増槽と爆弾を自機が捨てる。
    当たっても威力0の自機の弾として落とすだけ(画面の下へ抜けたら自動で消える)。捨てた瞬間に弾の段階とボムを 0 にする
    =「捨てたから弱くなった」という順番にする(黙って 0 にしていたのを改めた)。 */
-static void jettison(void) {
-    static const s8 jx[5] = { -14, 14, -5, 5, 0 };
-    u8 i, n = (u8)((g_crush > 3) ? 3 : g_crush);
-    for (i = (u8)(g_pwr ? 0 : 2); i < (u8)(2 + n); i++) {
-        Entity *e = ent_spawn(ET_BULLET);
-        if (!e) break;
-        e->x = (s16)(g_player_x + jx[i]); e->y = (s16)(g_player_y + 4);
-        e->vx = (s8)(jx[i] >> 3); e->vy = (s8)(2 + (i & 1));
-        e->team = TEAM_PLAYER; e->hp = 0;                  /* 威力0=当たっても何も起きない */
-        e->pat = (u8)((i < 2) ? SPR_TANK : SPR_EBSHELL);   /* 増槽 / 爆弾 */
-        if (i < 2) e->coltab = barrel_col;                 /* 増槽=金属の陰影(常駐の表。バンクの表は窓が戻ると消える) */
-        else       e->color = 13;                          /* 爆弾=ほぼ黒 */
+static void drop1(s8 dx, u8 tank) {
+    Entity *e = ent_spawn(ET_BULLET);
+    if (e) {
+        e->x = (s16)(g_player_x + dx); e->y = (s16)(g_player_y + 4);
+        e->vx = (s8)(dx >> 3); e->vy = 3;
+        e->team = TEAM_PLAYER; e->hp = 0;              /* 威力0=当たっても何も起きない */
+        e->pat = tank ? SPR_TANK : SPR_EBSHELL;        /* 増槽 / 爆弾 */
+        if (tank) e->coltab = barrel_col;              /* 増槽=金属の陰影(常駐の表。バンクの表は窓が戻ると消える) */
+        else      e->color = 13;                       /* 爆弾=ほぼ黒 */
     }
-    g_pwr = 0; g_crush = 0;
+    tone_wait(210, 25);                                /* 投下の音＋間(1つずつ落とす) */
+}
+
+/* ★投棄: 増槽 → 爆弾 の順に**1つずつ**落とす。落とすたびに段階/残数を1つ減らし、HUD のアイコンも1つ減らす。 */
+static void jettison(void) {
+    while (g_pwr) {
+        g_pwr--;
+        vdp_sprite_pos((u8)(HUD_SLOTS + g_pwr), 0, 220, SPR_TANK);   /* 減った枠を画面外へ(前景なので自分で消す) */
+        drop1((s8)((g_pwr & 1) ? 14 : -14), 1);
+        hud_draw(g_score, g_lives);
+    }
+    while (g_crush) {
+        g_crush--;
+        drop1((s8)((g_crush & 1) ? 5 : -5), 0);
+        hud_draw(g_score, g_lives);
+    }
 }
 
 /* ★電文(最終面): 「敵大将発見」の下に、一文字ずつ音を立てて出す(無音の中で)。出し終えたら投棄。
@@ -218,19 +246,6 @@ static void jettison(void) {
 #define MSG_WAIT 15     /* 1文字あたりの間(フレーム)。緊急の呼びかけの後の決意なのでゆっくり(ユーザー指定) */
 /* ★打電音: 曲も効果音も鳴っていない場面なので、PSG の tone A を直接鳴らす(sfx の短いノイズでは小さすぎると指摘)。
    最大音量の硬い「ツッ」から一気に減衰させる。割込み(ISR)は BGM 停止・効果音なしのとき ch A に触らない。 */
-__sfr __at(0xA0) PSG_R;
-__sfr __at(0xA1) PSG_V;
-static void tick_wait(void) {
-    u8 v = 15, i;
-    PSG_R = 0; PSG_V = 124;          /* 周期 124 ≒ 900Hz */
-    PSG_R = 1; PSG_V = 0;
-    for (i = 0; i < MSG_WAIT; i++) {
-        PSG_R = 8; PSG_V = v;        /* ch A 音量 */
-        v = (u8)((v > 3) ? v - 4 : 0);
-        vdp_wait_frame();
-    }
-    PSG_R = 8; PSG_V = 0;
-}
 static void msg_line(const u8 *p, u8 sy) {
     u8 i, y;
     u16 x0 = (u16)((256 - (u16)MSG_N * MSG_ADV) >> 1);

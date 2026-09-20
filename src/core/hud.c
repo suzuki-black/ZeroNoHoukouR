@@ -69,6 +69,7 @@ void hud_draw(u16 score, u8 lives) {
     static u16 last_score = 0xFFFF; static u8 dig[5] = { 0,0,0,0,0 };
     static u8  last_lives = 0xFF;   static u8 ldig = 0;
     static u8  last_crush = 0xFF;   /* ボム残数: 変化時だけパターンを書き換える */
+    static u8  last_pwr = 0xFF;     /* パワーアップ段階: 変化時だけ色を置く */
     u8 crush_n = g_crush;
     u8 i;
     if (score != last_score) {
@@ -97,6 +98,12 @@ void hud_draw(u16 score, u8 lives) {
         vdp_sprite_pos(7, 0, 220, SPR_CRUSH);
         vdp_sprite_pos(8, 0, 220, SPR_DIGIT0);
     }
+    /* ★パワーアップ段階(増槽の数)を画面下の中央へ。1段階=1本(最大3本)。取ると増え、ミス/最終面の投棄で減る。
+       枠は HUD_SLOTS の後ろを段階ぶんだけ借りる(g_spr_base が scene_stage で段階ぶん下がる)。
+       減ったぶんの枠は、次の ent_draw_all が停止マーカで隠す(前景の投棄では gen_planes が画面外へ退避する)。 */
+    { static const u8 tx[PWR_MAX] = { 107, 121, 135 };   /* 3本並べたとき中央に来る位置 */
+      for (i = 0; i < g_pwr; i++) vdp_sprite_pos((u8)(HUD_SLOTS + i), tx[i], 190, SPR_TANK);
+      if (g_pwr != last_pwr) { for (i = 0; i < g_pwr; i++) vdp_sprite_color((u8)(HUD_SLOTS + i), 14); last_pwr = g_pwr; } }
 #ifdef DEBUG_FPS
     /* ★デバッグROMのみ。左2桁=g_fps(JIFFY基準の参考値)、右4桁=フレームカウンタ(ストップウォッチ実測用の真値)。
        使い方: 右4桁を読む→スマホで正確に10秒→もう一度読む→(差)/10=実FPS。JIFFYの進み方に依存しない。 */

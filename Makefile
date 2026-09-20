@@ -99,6 +99,7 @@ ROMPACK_BANKS = --bank 4 assets/cards.bin \
                 --bank 17 $(BUILD)/hot.bin \
                 --bank 18 $(BUILD)/ovl.bin \
                 --bank 19 $(BUILD)/gen_planes.ihx \
+                --bank 30 $(BUILD)/coldsetup.ihx \
                 --asset 9 assets/title.yjk
 
 .PHONY: all rom clean run
@@ -213,6 +214,12 @@ $(BUILD)/gen_planes.ihx: $(SRC)/banked/gen_planes.c $(HDRS) $(BUILD)/bankhead.re
 	     $(BUILD)/bankhead.rel $(BUILD)/gen_planes.rel $(BUILD)/resident_syms.rel -o $@
 	@DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/gen_planes.map | head -1); \
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: gen_planes の static が $$((16#$$DL))B。0xE000〜0xE0FF(256B)を超えると 0xE100 の曲データを踏む"; rm -f $@; exit 3; fi
+
+# 面の準備の配置処理(対空砲の初期化・主砲/停泊機の配置)を bank30 へ。常駐リクレイムのため scene_stage.c から移設。
+$(BUILD)/coldsetup.ihx: $(SRC)/banked/coldsetup.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/coldsetup.c -o $(BUILD)/coldsetup.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
+	     $(BUILD)/bankhead.rel $(BUILD)/coldsetup.rel $(BUILD)/resident_syms.rel -o $@
 
 # DEBUG_PROF の冷たい側(自己診断画面・区間別µs表示)を bank29 へ(20〜23 は4面の中ボスの絵)。常駐リクレイムのため prof.c から移設。
 # 通常ビルドでは一切作らない(バンクも消費しない)。
@@ -467,7 +474,7 @@ $(BUILD)/p61_b.bin $(BUILD)/p61_c.bin: $(BUILD)/p61_a.bin
 	@true
 ROMPACK_BANKS += --bank 3 $(BUILD)/ovl12.bin
 
-BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/fw200_sh.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/ovl11.bin $(BUILD)/bank60.bin $(BUILD)/bank61.bin $(BUILD)/bank62.bin $(BUILD)/ovl12.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx \
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/fw200_sh.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/ovl11.bin $(BUILD)/bank60.bin $(BUILD)/bank61.bin $(BUILD)/bank62.bin $(BUILD)/ovl12.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx $(BUILD)/coldsetup.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 

@@ -49,14 +49,7 @@ static u8 pal_need_reset;   /* 面開始/再開でパレット状態を捨てる
    後半ほど 間隔↓(速い)・弾数↑(3→5-way)・弾速↑・suppress↓(安全半径が狭い=肉薄が難しい)。
    ★suppress: 半径内(≒ゼロ距離)に自機が居ると発射スキップ=肉薄で撃たせない教育メカ。1面ほど広い。
    面順=BB/Carrier/Hood/Twins/Iowa。 */
-static const u8 fd_gun_bb[]   = { 56, 26, FIRE_AIMFAN, 3, 2, 3, FIRE_END };  /* 1面: 遅い3-way(教育) */
-static const u8 fd_gun_cv[]   = { 50, 24, FIRE_AIMFAN, 4, 2, 4, FIRE_END };
-static const u8 fd_gun_hd[]   = { 44, 22, FIRE_AIMFAN, 4, 2, 4, FIRE_END };
-static const u8 fd_gun_tw[]   = { 38, 20, FIRE_AIMFAN, 5, 2, 4, FIRE_END };
-static const u8 fd_gun_iowa[] = { 32, 18, FIRE_AIMFAN, 5, 2, 5, FIRE_END };  /* 5面: 速い5-way高速弾 */
-static const u8 *const fd_gun_stage[STAGE_COUNT] = {
-    fd_gun_bb, fd_gun_cv, fd_gun_hd, fd_gun_tw, fd_gun_iowa
-};
+/* ★主砲の発砲スクリプト・耐久・対空砲の耐久の表は bank30(coldsetup.c)へ移した(常駐の節約)。 */
 /* 戦闘機の発砲: 45f毎に自機狙い＋散らし円錐(±3)。空中の的なので抑え込みは無し(suppress=0)。 */
 static const u8 fd_faim[] = { 40,  0, FIRE_AIMED, 3, 1, 3, FIRE_END };
 
@@ -69,11 +62,6 @@ static const u8 fighter_iv[STAGE_COUNT]   = { 40, 28, 40, 40, 28 };/* 出現間�
 /* ★破壊物の耐久(半分単位。通常の自機弾は1発=2)。面が進むほど硬い。
    ★パワーアップ段階3は「3方向×威力3倍×貫通」で火力が通常の約5倍になるため、旧版の3倍(主砲30)では
      実機で「柔らかい」と評価された。5面がいちばん硬くなるよう面別にした。 */
-static const u8 gun_hp[STAGE_COUNT]    = { 40, 36, 56, 64, 80 };   /* 主砲4基(通常弾で20/18/28/32/40発)。
-                                                                        ★2面(空母)は 48 だと「やたら硬い」と実機で指摘。空母の砲は小さな5インチ砲で、
-                                                                          左前の砲は甲板の停泊機の列の奥にあり(弾は停泊機に当たると消える)届きにくい */
-static const u8 aa_big_hp[STAGE_COUNT] = { 14, 16, 18, 22, 26 };   /* 大型対空砲14基 */
-static const u8 aa_sml_hp[STAGE_COUNT] = {  8,  9, 10, 12, 14 };   /* 小型対空砲9基 */
 
 /* ★海イントロ共通BGM(gen_assets track7=スロー渋・予感)。海(敵艦未出現)の間だけ鳴らし、敵艦が見えたら面別へ切替。 */
 #define BGM_SEA_INTRO 7
@@ -81,7 +69,7 @@ static const u8 aa_sml_hp[STAGE_COUNT] = {  8,  9, 10, 12, 14 };   /* 小型対�
 #define BGM_MIDBOSS   9   /* 中ボス(第九 第4楽章 終盤が元ネタ。ニ短調で悲壮に)。中ボスが終わって海2 に戻ったら海の曲へ */
 /* 敵機の行別カラー(陰影16B)は面別にデータバンク(fighter_ctab_off)へ置き、stage_build で当該面の
    16BをRAMへ読む(常駐節約)。海イントロ機／艦載機の coltab に使う。 */
-static u8 cur_ctab[16];
+u8 cur_ctab[16];   /* ★bank30(coldsetup.c)も読む(停泊機の色) */
 /* 銀の敵機(増槽持ち)の行ごとの色: 上=明るい銀 / 中ほど=赤帯 / 下=銀。どの面の敵機・敵弾(橙)とも見分けられる */
 static const u8 pw_ctab[16] = { 15,15,15,15, 15,15,11,11, 11,14,14,14, 14,14,14,14 };
 static u8 pw_done;
@@ -116,32 +104,11 @@ static void arm_plain_split(void) {
     vdp_set_vscroll(g_vscroll);
 }
 
-static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
-    Entity *e = ent_spawn(ET_TURRET);
-    if (e) {
-        g_lturret++;   /* ★生存砲台O(1)カウンタ(stage_buildで0初期化済み。当たり判定の撃破で--) */
-        e->ax = (s16)shipX - 8;                /* 砲塔中心x→スプライト左上(中心x=shipX) */
-        e->ay = (s16)(SC_SHIP_R0 * 16 + shipY) - 8;   /* 砲身スプライト(旋回中心=8,8)をドーム中心に合わせる */
-        e->hp = gun_hp[curstage]; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;   /* 耐久は面別(gun_hp)。半分単位＝通常の自機弾1発が2 */
-        e->vx = 4; e->vy = 0; e->h = 0;        /* 砲身の向き=下 / 旋回冷却 / 命中フラッシュ残 */
-        e->pat = (u8)(SPR_BARREL0 + 4 * 4);    /* 可動砲身(下向き, BGドームに重なる) */
-        e->coltab = barrel_col;                /* 金属シェード(行別カラー) */
-    }
-}
 /* 各面の主砲4基の艦内(x,y)はデータバンク(gun_off, 面別12B=[x0-3,u16 y0-3])に置き、
    stage_build で当該面をRAMへ読む(常駐節約)。空母/双子はx左右に分かれる。 */
-static u8  cur_gun_x[4];
-static u16 cur_gun_y[4];
+u8  cur_gun_x[4];   /* ★bank30(coldsetup.c)が読む */
+u16 cur_gun_y[4];
 
-/* 空母(2面)の停泊F6F(甲板8機)。エンティティ(ET_PARKED)で艦上に静止=破壊/発艦できる。中央列4＋左列4。 */
-static void spawn_parked(u8 shipX, u16 shipY) {
-    Entity *e = ent_spawn(ET_PARKED);
-    if (e) {
-        e->ax = (s16)shipX - 8;                         /* 艦上世界アンカー(中心=shipX,ship座標y) */
-        e->ay = (s16)(SC_SHIP_R0 * 16 + shipY) - 8;
-        e->pat = SPR_HELLCAT; e->coltab = cur_ctab; e->shadow = 1;
-    }
-}
 
 /* 戦艦を バッファB へ事前描画(旧版忠実)。海テンプレ→OPS(+ops2)をRAMへ読み ship_render(艦種別)。
    ★重い(数千VDP塗り)ので、Bに既に現在の艦が居るなら再生成しない(ミス再挑戦=即再開)。 */
@@ -240,15 +207,6 @@ u8  aa_vis_i[SHIP_NAAG];   /* 可視AAの砲index */
 s16 aa_vis_sx[SHIP_NAAG];  /* 画面X(蛇行込み) */
 s16 aa_vis_sy[SHIP_NAAG];  /* 画面Y */
 /* aa_update/aa_collide の本体は banked/hot.c(RAM実行)へ移設。aafire_iv も hot.c 側へ移した。 */
-static void aa_reset(void) {
-    u8 i;
-    for (i = 0; i < SHIP_NAAG; i++) {
-        u16 t = (u16)60 + (u16)i * 11;   /* ★u16で計算し255クランプ。u8のままだと高iで桁溢れ(例 i=20→320&FF=64)し初期CDが乱れる */
-        aa_fire[i] = (t > 255) ? 255 : (u8)t;
-        aa_hp[i]   = (i < 14) ? aa_big_hp[curstage] : aa_sml_hp[curstage];   /* 面別の耐久(半分単位) */
-        aa_dead[i] = 0;
-    }
-}
 static u8 aa_alive(void) { u8 i, n = 0; for (i = 0; i < SHIP_NAAG; i++) if (!aa_dead[i]) n++; return n; }
 /* aa_update / aa_collide の本体は banked/hot.c(RAM実行)へ移設。ここからは hotcode.c のラッパ
    (aa_update/aa_collide=hot_ram のジャンプテーブル)を aa_hot.h 経由で呼ぶ。 */
@@ -793,22 +751,13 @@ static void stage_build(void) {
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
     g_gun_kills = 0;
     g_lturret = 0;         /* ★生存砲台O(1)カウンタを0初期化(直後のspawn_turret×4で++) */
-    aa_reset();            /* 対空砲の発射タイマ初期化 */
+    bcall_to(COLDSETUP_BANK);   /* ★対空砲の初期化＋主砲4基・停泊機の配置(bank30。常駐の節約) */
     nburn = 0;             /* 炎上サイト表クリア(面リスタートで炎を消す) */
     special_reset();       /* 艦種別固有兵装のタイマ初期化 */
     g_py_min = 0;
     if (curstage == STAGE_FINAL) {         /* ★ボス/壁/分割/弱点はオーバレイ側。呼べるのはページ2がRAMの間だけ */
         if (g_ovl_ok) { ramx_use_ram(); final_init(); ramx_use_cart(); }
         return;
-    }
-    spawn_turret(cur_gun_x[0], cur_gun_y[0], 30);
-    spawn_turret(cur_gun_x[1], cur_gun_y[1], 45);
-    spawn_turret(cur_gun_x[2], cur_gun_y[2], 60);
-    spawn_turret(cur_gun_x[3], cur_gun_y[3], 75);
-    if (curstage == 1) {   /* 空母: 停泊F6F 8機を甲板へ(中央列x120×4＋左列x98×4) */
-        u8 i;
-        for (i = 0; i < 4; i++) spawn_parked(120, (u16)(130 + i * 40));
-        for (i = 0; i < 4; i++) spawn_parked(98,  (u16)(150 + i * 40));
     }
 }
 
@@ -1254,7 +1203,9 @@ u8 stage_update(void) {
             }
         }
     }
-    g_spr_base = (u8)((g_loop_t ? 4 : 0) + ((g_mb == MB_ACTIVE && curstage == 4) ? 0 : HUD_SLOTS));   /* 5面の中ボスの間は HUD の枠も使う */
+    g_spr_base = (u8)((g_loop_t ? 4 : 0)
+                      + ((g_mb == MB_ACTIVE && curstage == 4) ? 0 : (u8)(HUD_SLOTS + g_pwr)));
+                      /* 5面の中ボスの間は HUD の枠も使う。ふだんは HUD＋パワーアップのアイコン(段階ぶん) */
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (g_mb == MB_ACTIVE) g_spr_limit = (u8)(32 - g_mb_n);   /* ★中ボスは末尾の枠(最低優先) */
     g_spr_hide_to = (g_mb == MB_ACTIVE) ? g_spr_limit : 0;   /* ★その手前に停止マーカを置かない(vdp.c) */

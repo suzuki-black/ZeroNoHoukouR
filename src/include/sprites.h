@@ -56,6 +56,7 @@ extern const u8 barrel_col[16];  /* 砲身の行別シェード(金属感の多�
 extern const u8 barrel_flash[16];/* 砲身の命中フラッシュ(白) */
 
 #define GEN_PLANES_BANK 19   /* banked/gen_planes.c を置くROMバンク(戦闘機8方向の手続き生成) */
+#define COLDSETUP_BANK  30   /* banked/coldsetup.c を置くROMバンク(面の準備の配置処理) */
 void sprites_load(u8 stage);   /* 全静的パターン(bank16)＋その面の戦闘機8方向×3サイズ(bank19) を VRAM へ投入 */
 
 #endif /* SPRITES_H */
