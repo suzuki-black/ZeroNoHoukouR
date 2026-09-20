@@ -316,7 +316,8 @@ u8 ovl_final_frame(void) {
             if (k < 8) {
                 u8 b = (u8)(1 << wall_order[k]);
                 if (!(wall_bits & b)) { wall_bits |= b; g_shake = 3; }
-                if (!(tick & 15)) sfx(2, SFX_RUMBLE);
+                if (!(tick & 3)) sfx(2, SFX_RUMBLE);   /* ★16フレームごとだと壁が組み上がる0.8秒の間に1〜2回しか鳴らず
+                                                          「がっ」1回に聞こえた(実機で指摘)。4フレームごとに詰めて「ががががが」に */
                 g_rumble_lv = (tick & 1) ? 15 : 5;
             } else if (wall_bits != 0xFF) { wall_bits = 0xFF; g_rumble_lv = 0; }
             else g_rumble_lv = 0;

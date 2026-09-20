@@ -215,6 +215,22 @@ static void jettison(void) {
    前景で回す(results_impl と同じやり方)。この間はゲームのフレームが進まないので、スクロールも止まったまま。 */
 #define MSG_Y   142     /* 1行目の上端(画面の行)。「敵大将発見」は 70〜128 */
 #define MSG_ADV 20      /* 1文字の送り(18 ドット＋間 2) */
+#define MSG_WAIT 15     /* 1文字あたりの間(フレーム)。緊急の呼びかけの後の決意なのでゆっくり(ユーザー指定) */
+/* ★打電音: 曲も効果音も鳴っていない場面なので、PSG の tone A を直接鳴らす(sfx の短いノイズでは小さすぎると指摘)。
+   最大音量の硬い「ツッ」から一気に減衰させる。割込み(ISR)は BGM 停止・効果音なしのとき ch A に触らない。 */
+__sfr __at(0xA0) PSG_R;
+__sfr __at(0xA1) PSG_V;
+static void tick_wait(void) {
+    u8 v = 15, i;
+    PSG_R = 0; PSG_V = 124;          /* 周期 124 ≒ 900Hz */
+    PSG_R = 1; PSG_V = 0;
+    for (i = 0; i < MSG_WAIT; i++) {
+        PSG_R = 8; PSG_V = v;        /* ch A 音量 */
+        v = (u8)((v > 3) ? v - 4 : 0);
+        vdp_wait_frame();
+    }
+    PSG_R = 8; PSG_V = 0;
+}
 static void msg_line(const u8 *p, u8 sy) {
     u8 i, y;
     u16 x0 = (u16)((256 - (u16)MSG_N * MSG_ADV) >> 1);
@@ -222,18 +238,18 @@ static void msg_line(const u8 *p, u8 sy) {
         u16 x = (u16)(x0 + (u16)i * MSG_ADV);
         for (y = 0; y < MSG_H; y++) alert_bits(&p[y * MSG_WB], MSG_WB, x + 2, (u8)(sy + y + 2), 13);   /* 影 */
         for (y = 0; y < MSG_H; y++) alert_bits(&p[y * MSG_WB], MSG_WB, x, (u8)(sy + y), 15);           /* 本体=白 */
-        sfx(2, SFX_HIT);                          /* 一文字ごとに短い「コッ」 */
-        for (y = 0; y < 5; y++) vdp_wait_frame();
+        tick_wait();                              /* 一文字ごとに打電音＋間 */
     }
 }
 static void msg_impl(void) {
     u8 f;
     bgm_stop();                                   /* 電文と投棄の間は無音 */
     msg_line(msg0, MSG_Y);
+    for (f = 0; f < 30; f++) vdp_wait_frame();    /* 1行目のあとで一拍おく */
     msg_line(msg1, (u8)(MSG_Y + MSG_H + 6));
-    for (f = 0; f < 30; f++) vdp_wait_frame();
+    for (f = 0; f < 60; f++) vdp_wait_frame();    /* 読ませる間 */
     jettison();                                   /* 増槽と爆弾を捨てる(落ちるのはこの後、ゲームが動き出してから) */
-    for (f = 0; f < 20; f++) vdp_wait_frame();
+    for (f = 0; f < 40; f++) vdp_wait_frame();
 }
 
 static void alert_impl(u8 which) {

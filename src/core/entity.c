@@ -343,8 +343,11 @@ static u8 draw_shadow(u8 slot, const Entity *e) {
     u8 off = (e->type == ET_PLAYER) ? g_loop_alt : 0, pat = e->pat;
     /* ★最終面(g_py_min!=0)の自機は高空＝海面の影は遠くて小さい(パターン60=小さな影、右下へ大きく離す) */
     if (off == 0 && g_py_min && e->type == ET_PLAYER) { pat = 60; off = 14; }
-    spr_col1(slot, 13);   /* ほぼ黒(1,1,1)。単色=差分書換 */
-    vdp_sat_pos(slot, (u8)(e->x + SHADOW_DX + off), (u8)(e->y + SHADOW_DY + off), pat);   /* ★A6: シャドウへ */
+    { s16 sx = (s16)(e->x + SHADOW_DX + off);
+      if (sx > 255) return slot;   /* ★画面の右外へ出る影は描かない。u8 に丸めると回り込んで**左端に影が出た**(実機で指摘。
+                                      最終面は高空でずらす量が大きく、自機が右端に寄ると起きる) */
+      spr_col1(slot, 13);   /* ほぼ黒(1,1,1)。単色=差分書換 */
+      vdp_sat_pos(slot, (u8)sx, (u8)(e->y + SHADOW_DY + off), pat); }   /* ★A6: シャドウへ */
     return (u8)(slot + 1);
 }
 /* ★プール全走査を1回に統合(従来は自機探索/可視収集/合体弾/影 で4回走査していた=各エンティティの

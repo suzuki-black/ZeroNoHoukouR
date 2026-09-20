@@ -595,6 +595,22 @@ static void spr_hide_from(u8 sl) {
     for (; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, 0);
 }
 
+/* ★中ボスの後片付け(VDP と借りもの)。中ボスが終わったときと、**中ボス戦の最中にミスしたとき**の両方から呼ぶ。
+   ミスのときに呼んでいなかったので、5面は拡大(MAG)と絵の表Bが残ったまま沈没演出に入り、
+   砲身・艦載機の枠も中ボスの絵のままだった(実機で「中ボスが空中分解する」と指摘)。 */
+void mb_restore_hw(void) {
+    #define RG1SAV (*(volatile u8 *)0xF3E0)   /* BIOS の R#1 の控え(拡大ビットを含む) */
+    vdp_set_hscroll(0, 0); vdp_wreg(25, 0); g_sea_skip = 0;   /* 3面: 帯の横ずれ・左端の MSK・海の塗り直しの除外 */
+    vdp_wreg(1, (u8)(RG1SAV & 0xFE));                          /* 5面: 拡大を切る */
+    vdp_wreg(6, 0x0F);                                         /* 絵の表Aへ */
+    g_spr_patb = 0;                                            /* 4面: 絵の表Bへの写しを止める */
+    vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_ROW_A, 256, 2);           /* 砲身と艦載機のパターンを戻す */
+    vdp_copy(0, (u16)(MB_SAVE_Y + 2), 0, MB_PAT_ROW_B, 256, 4);
+    g_mb_n = 0;
+    g_spr_hide_to = 0;   /* ★末尾の枠に停止マーカを置かない指定も戻す。残っていると、この後の描画で中ボスの枠が
+                            また現れた(5面のミスで中ボスの絵が残って見えた) */
+}
+
 void mb_finish(void) {
     spr_hide_from(g_spr_used);
     ent_spr_cache_inval((u8)(32 - g_mb_n));
@@ -748,10 +764,10 @@ static void stage_build(void) {
        すべて RAM オーバレイ側なので、載らない機械では残数0＝表示も出さない(空撃ちでストックだけ
        減る、という壊れ方を避ける)。**overlay_load の後**で判定すること。 */
     pw_done = 0;                              /* 銀の敵機(増槽持ち)は海モード1回につき1機 */
-    if (curstage != STAGE_FINAL) g_crush = g_ovl_ok ? CRUSH_MAX : 0;
-    /* ★最終面は初期装備・ボム無し(宙返りだけで倒すコンセプト。津波は全画面の拡大でボスの帯と両立しない)。
-       ただしここでは黙って 0 にしない: 「敵大将発見」の間に自機が増槽と爆弾を投棄する演出(ovl_final.c)で 0 にする
-       =捨てたから弱くなった、という順番にする(ユーザー案A) */
+    g_crush = g_ovl_ok ? CRUSH_MAX : 0;
+    /* ★最終面も他の面と同じくボムを補充し、弾の段階も前の面から持ち越す(ユーザー指定)。
+       そのうえで「敵大将発見」の電文のあとに自機が増槽と爆弾を投棄して 0 になる(gen_planes.c の jettison)。
+       最終面がボム無し・初期装備なのは変わらない(宙返りだけで倒すコンセプト。津波は全画面の拡大でボスの帯と両立しない)。 */
     g_crush_t = 0;
     g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
     g_loop_t = 0; g_loop_cd = 0; g_loop_alt = 0;   /* 宙返りも持ち越さない */
@@ -1263,15 +1279,8 @@ u8 stage_update(void) {
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */
     if (g_mb == MB_LOAD) {
         bgm_play(BGM_MIDBOSS);
-        {   /* ★中ボスが出る瞬間に、残っている敵機・敵弾・爆発を消す(5面は拡大で仕掛けが見えてしまう=ユーザー指摘。全面で揃える)。
-               自機・自機の弾・増槽と、艦に載っているもの(主砲の砲身・甲板の停泊機)は残す。
-               ★主砲まで消すと、中ボスの後の艦で砲身が無くなり、生存砲台の数も減らなくなった(実機で指摘) */
-            u8 i; Entity *e = ent_pool();
-            for (i = 0; i < ENT_MAX; i++, e++)
-                if (e->active && e->type != ET_PLAYER && e->type != ET_ITEM && e->type != ET_TURRET && e->type != ET_PARKED
-                    && !(e->type == ET_BULLET && e->team == TEAM_PLAYER)) e->active = 0;
-            /* ★属性表も今ここで空にする。中ボスは末尾の枠を ent_draw_all から取り上げるが、自分で書くのは読み込みの
-               2〜3フレーム後。その間、枠に残った敵機・敵弾の属性が表示され、5面は拡大がかかって2倍で見えた(実機で指摘) */
+        {   /* ★中ボスが出る瞬間: 枠に残った敵機・敵弾の属性を消す(中ボスは末尾の枠を自分で書くまで数フレームかかる。
+               5面は拡大がかかって2倍で見えた=実機で指摘)。敵そのものは直前のフェードアウト(ovl_power.c)で消えている */
             spr_hide_from(HUD_SLOTS);
             scorepop_reset();
         }
@@ -1291,9 +1300,7 @@ u8 stage_update(void) {
             overlay_load(OVL_BANK); g_mb = MB_OVER;
         }
     } else if (g_mb == MB_RESTORE) {
-        vdp_set_hscroll(0, 0); vdp_wreg(25, 0); g_sea_skip = 0;   /* 3面: 帯の横ずれ・左端の MSK・海の塗り直しの除外を戻す */
-        vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_ROW_A, 256, 2);            /* 砲身と艦載機のパターンを戻す */
-        vdp_copy(0, (u16)(MB_SAVE_Y + 2), 0, MB_PAT_ROW_B, 256, 4);
+        mb_restore_hw();
         overlay_load(OVL_BANK);
         player_shadow(1);
         g_mb = MB_OVER;
@@ -1328,6 +1335,11 @@ u8 stage_update(void) {
            基準色へ戻してから演出へ入る。pal_need_reset で、再開時に全16色を書き直させる。 */
         vdp_palette_game();
         pal_need_reset = 1;
+        if (g_mb && g_mb != MB_OVER) {     /* 中ボスが出ている最中(LOAD/ACTIVE/RESTORE) */
+            mb_restore_hw();            /* ★中ボス戦の最中のミス: 拡大・絵の表・借りたパターンを戻してから演出へ */
+            vdp_sprite_hide_from(0);    /* ★中ボスの枠も消す。戻したパターン(砲身・艦載機)で描かれて「空中分解」に見えた(実機で指摘) */
+            scroll_repaint_all();       /* ★背景に描いたもの(5面の弾幕とHUD・3面の駆逐艦)を海から引き直す */
+        }
         if (curstage == STAGE_FINAL) raster_off();   /* ★ボス帯の分割を止める(表Bのボスが下に出ないように) */
         else arm_plain_split();         /* ★被弾の衝撃波の帯を残したまま演出に入らない */
         play_death_banked(cam);         /* 沈没演出(bank16) */
