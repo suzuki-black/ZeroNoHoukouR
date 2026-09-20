@@ -18,13 +18,9 @@ extern u8  cur_gun_x[4];   /* 主砲4基の艦内x */
 extern u16 cur_gun_y[4];   /* 同 y */
 extern u8  cur_ctab[16];   /* この面の機体の行別色(停泊機の色) */
 
-/* 主砲の発砲(面別): 弾速と間隔で難度を付ける。面順=BB/Carrier/Hood/Twins/Iowa。 */
-static const u8 fd_gun_bb[]   = { 56, 26, FIRE_AIMFAN, 3, 2, 3, FIRE_END };  /* 1面: 遅い3-way(教育) */
-static const u8 fd_gun_cv[]   = { 50, 24, FIRE_AIMFAN, 4, 2, 4, FIRE_END };
-static const u8 fd_gun_hd[]   = { 44, 22, FIRE_AIMFAN, 4, 2, 4, FIRE_END };
-static const u8 fd_gun_tw[]   = { 38, 20, FIRE_AIMFAN, 5, 2, 4, FIRE_END };
-static const u8 fd_gun_iowa[] = { 32, 18, FIRE_AIMFAN, 5, 2, 5, FIRE_END };  /* 5面: 速い5-way高速弾 */
-static const u8 *const fd_gun_stage[STAGE_COUNT] = { fd_gun_bb, fd_gun_cv, fd_gun_hd, fd_gun_tw, fd_gun_iowa };
+/* ★主砲の発砲スクリプトは**常駐**(scene_stage.c)に置く。ここ(バンク)に置くと砲台が持つポインタが
+   バンクの窓(0xA000〜)を指し、窓が既定へ戻った瞬間に中身が変わって撃たなくなる(実機で「2面で全く撃ってこない」と指摘)。 */
+extern const u8 *const fd_gun_stage[STAGE_COUNT];
 
 /* 破壊物の耐久(半分単位。通常の自機弾は1発=2)。面が進むほど硬い。
    ★2面(空母)の主砲は小さな5インチ砲で、左前の砲は甲板の停泊機の列の奥にある(弾は停泊機に当たると消える)ので

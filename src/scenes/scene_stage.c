@@ -49,7 +49,15 @@ static u8 pal_need_reset;   /* 面開始/再開でパレット状態を捨てる
    後半ほど 間隔↓(速い)・弾数↑(3→5-way)・弾速↑・suppress↓(安全半径が狭い=肉薄が難しい)。
    ★suppress: 半径内(≒ゼロ距離)に自機が居ると発射スキップ=肉薄で撃たせない教育メカ。1面ほど広い。
    面順=BB/Carrier/Hood/Twins/Iowa。 */
-/* ★主砲の発砲スクリプト・耐久・対空砲の耐久の表は bank30(coldsetup.c)へ移した(常駐の節約)。 */
+/* 主砲の発砲(面別): 弾速と間隔で難度を付ける。面順=BB/Carrier/Hood/Twins/Iowa。
+   ★配置は bank30(coldsetup.c)だが、**スクリプトの実体は常駐に置く**: 砲台が持つのはポインタなので、
+     バンクに置くと窓が戻った瞬間に中身が変わる(耐久などの「値」だけをバンクへ移してある)。 */
+static const u8 fd_gun_bb[]   = { 56, 26, FIRE_AIMFAN, 3, 2, 3, FIRE_END };  /* 1面: 遅い3-way(教育) */
+static const u8 fd_gun_cv[]   = { 50, 24, FIRE_AIMFAN, 4, 2, 4, FIRE_END };
+static const u8 fd_gun_hd[]   = { 44, 22, FIRE_AIMFAN, 4, 2, 4, FIRE_END };
+static const u8 fd_gun_tw[]   = { 38, 20, FIRE_AIMFAN, 5, 2, 4, FIRE_END };
+static const u8 fd_gun_iowa[] = { 32, 18, FIRE_AIMFAN, 5, 2, 5, FIRE_END };  /* 5面: 速い5-way高速弾 */
+const u8 *const fd_gun_stage[STAGE_COUNT] = { fd_gun_bb, fd_gun_cv, fd_gun_hd, fd_gun_tw, fd_gun_iowa };
 /* 戦闘機の発砲: 45f毎に自機狙い＋散らし円錐(±3)。空中の的なので抑え込みは無し(suppress=0)。 */
 static const u8 fd_faim[] = { 40,  0, FIRE_AIMED, 3, 1, 3, FIRE_END };
 
