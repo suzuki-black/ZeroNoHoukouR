@@ -435,7 +435,7 @@ void ent_draw_all(void) {
     /* ★パワーアップ段階のアイコンは**いちばん最後**=最低優先(1走査線8枚を超えたら弾ではなくこれが落ちる)。
        HUD の枠(優先度が高い)に置いていたら、中ボス戦で弾がアイコンの行で消えると実機で指摘された。
        ★5面の中ボスの間は拡大(MAG)なので出さない(g_pwr_icon=0。代わりにオーバレイが背景へ描く)。 */
-    if (g_pwr_icon && slot < g_spr_limit) {
+    if (g_pwr_icon) {              /* ★枠は scene_stage が1つ予約してある(g_spr_limit-1)ので必ず置ける */
         const u8 *tab = pwr_col[g_pwr - 1];
         if (slot_ctab[slot] != tab) { vdp_sprite_color_tab(slot, tab); slot_ctab[slot] = tab; slot_col[slot] = 0xFF; }
         vdp_sat_pos(slot, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);

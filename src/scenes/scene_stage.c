@@ -1006,7 +1006,11 @@ u8 stage_update(void) {
             g_loop_cd = LOOP_CD;
             sfx(0, SFX_SHOT);                  /* 引き起こしの合図(専用音は後で) */
         }
-      } else if (g_crush && !(g_mb == MB_ACTIVE && curstage == 4) && !g_alert) {   /* B単押し = メガクラッシュ(★5面の中ボスの間は使えない: 拡大中) */
+      } else if (g_crush && g_mb == MB_ACTIVE && curstage == 4) {
+        /* ★5面の中ボス(P-61=夜戦の電探機)の間は**電探妨害**を受けていて波を呼べない、という演出。
+           押したことは伝える: 画面下の「JAMMED」を光らせ、砂嵐の音を出す(表示はオーバレイの hud_bg)。 */
+        g_jam_t = 16;
+      } else if (g_crush && !g_alert) {   /* B単押し = メガクラッシュ */
         g_crush--;
         g_crush_t = CRUSH_FRAMES;
         arm_plain_split();               /* ★クラッシュ中は分割表を組み直さない(揺れと古い帯が干渉する) */
@@ -1222,6 +1226,9 @@ u8 stage_update(void) {
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (g_mb == MB_ACTIVE) g_spr_limit = (u8)(32 - g_mb_n);   /* ★中ボスは末尾の枠(最低優先) */
     g_spr_hide_to = (g_mb == MB_ACTIVE) ? g_spr_limit : 0;   /* ★その手前に停止マーカを置かない(vdp.c) */
+    g_spr_limit = (u8)(g_spr_limit - g_pwr_icon);   /* ★アイコンのぶんを1枠予約(敵/弾はその手前まで)。
+                                                       予約しないと中ボス戦のように枠が少ないときアイコンが
+                                                       出ずっぱりで消えた(実機で「消えている時間が長い」と指摘)。 */
     if (curstage == STAGE_FINAL && g_ovl_ok) final_bgbul();   /* ★弾を背景へ(スプライトでは描かせない) */
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
     if (g_mb == MB_ACTIVE) mb_frame();   /* ★中ボス: ent_draw_all の**後**(その停止マーカを埋め直して末尾の枠へ置く) */

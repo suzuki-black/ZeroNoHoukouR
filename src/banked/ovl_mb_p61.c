@@ -57,7 +57,7 @@ u8 pb_ox, pb_oy, pb_nx, pb_ny, pb_w, pb_h, pb_oh, pb_oofs, pb_nofs, pb_cnt, pb_r
 
 static u8  st, st_t, hurt, fr, flast, flash, fcool, coldirty, sang, ph, hud_sc_dirty;
 static u16 t, hp, hud_last, kpts;
-static u8  hud_lv, hud_cr, hud_pw;
+static u8  hud_lv, hud_cr, hud_pw, jam_on;
 static s16 cx, cy;
 
 /* 前回の矩形(ox,oy,w×oh)を海へ戻し、新しい矩形(nx,ny,w×h)を pb_col で描く。重なって変わらない行は触らない(BGTEST の実測版)。 */
@@ -278,7 +278,7 @@ void ovl_mb_init(void) {
     /* スコア等を描く行を海の波の塗り直しから外す */
     g_sea_skip |= (u16)(1u << (((u8)(cam + 1)) >> 4)) | (u16)(1u << (((u8)(cam + 16)) >> 4))
                 | (u16)(1u << (((u8)(cam + 190)) >> 4)) | (u16)(1u << (((u8)(cam + 205)) >> 4));
-    hud_last = 0xFFFF; hud_lv = 0xFF; hud_cr = 0xFF; hud_pw = 0xFF; hud_sc_dirty = 0;
+    hud_last = 0xFFFF; hud_lv = 0xFF; hud_cr = 0xFF; hud_pw = 0xFF; hud_sc_dirty = 0; jam_on = 0; g_jam_t = 0;
     g_mb_n = 22;
     g_mb_req = p61_req[fr]; g_mb_new = 0;
 }
@@ -326,14 +326,14 @@ static void bgspr(u8 x, u8 y, const u8 *pat, const u8 *rc, u8 c1) {
         }
     }
 }
-/* ★HUD と同じ絵・同じ色(hud.c の crush_pattern / hud_colors の crush_col)。ボム棒: 幅4の棒を6おきに bars 本、行 1..14 */
-static const u8 crush_col[16] = { 15,15,15, 12,12,12, 11,11,11,11,11, 12,12,12, 15,15 };
+/* ★HUD と同じ絵。ボム棒: 幅4の棒を6おきに bars 本、行 1..14。
+   ★色はこの面だけ暗い単色(13)にする: 中ボスの間は電探妨害で撃てない=撃てないことを色で示す。 */
 static void crush_bg(u8 bars) {
     u8 pat[32], r, l = 0xF0, rt = 0x00;
     if (bars >= 2) { l |= 0x03; rt |= 0xC0; }
     if (bars >= 3) { rt |= 0x0F; }
     for (r = 0; r < 16; r++) { u8 on = (u8)(r >= 1 && r <= 14); pat[r] = on ? l : 0; pat[16 + r] = on ? rt : 0; }
-    bgspr(8, 190, pat, crush_col, 0);
+    bgspr(8, 190, pat, (const u8 *)0, 13);   /* ★妨害中なので暗い色(撃てない) */
 }
 static void hud_bg(void) {
     if (!hud_sc_dirty) {                             /* 最初の1回: 残機のアイコン(零戦のシルエット, 緑)。絵は表Aの SPR_ZERO をそのまま */
@@ -363,6 +363,17 @@ static void hud_bg(void) {
     /* ★パワーアップ段階の山形(画面下中央)。この面の中ボスの間はスプライトが拡大なので背景へ描く
        (常駐の ent_draw_all は g_pwr_icon=0 で出さない)。絵は焼いてある SPR_PWRLV を読み、
        出さない山の行を落としてから、段階の色(pwr_col)で置く。 */
+    /* ★この面の中ボス(P-61=夜戦の電探機)の間は**電探妨害**でボムが撃てない、という演出。
+       棒を暗く落とし、右に JAMMED を出す。押した(g_jam_t)ときは白く光らせ、砂嵐の音を返す。 */
+    {   u8 s = (u8)(g_jam_t ? 2 : 1);
+        if (g_jam_t) { g_jam_t--; if (!(g_jam_t & 3)) sfx(2, SFX_EFIRE); }
+        if (s != jam_on) {
+            static const u8 jam_s[6] = { 'J','A','M','M','E','D' };
+            u8 i, c = (u8)((s == 2) ? 15 : 13);
+            jam_on = s;
+            for (i = 0; i < 6; i++) glyph((u8)(32 + i * 8), 192, jam_s[i], c);
+        }
+    }
     if (g_pwr != hud_pw) {
         u8 lv = g_pwr;
         hud_pw = lv;

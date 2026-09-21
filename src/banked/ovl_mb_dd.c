@@ -170,6 +170,13 @@ static void finish(void) {
 
 void ovl_mb_frame(void) {
     if (st == ST_DONE) return;
+    /* ★メガクラッシュ(津波)は稲妻を消すために背景を世界の正本から引き直す(scroll_repaint_all)。
+       この艦はリングへ直接描いてあるので**一緒に消える**(実機で「ボムで本体が消える」と指摘)。
+       登場のときと同じ手順で描き直す(嵐の中からもう一度現れる絵になる)。 */
+    if (g_mb_recol) {
+        g_mb_recol = 0;
+        if (st == ST_FIGHT || st == ST_WARN) { st = ST_DRAW; st_t = 0; row = 0; g_mb_req = DD_REQ0; g_mb_new = 0; }
+    }
     t++; wph++;
     if (g_dd_flash) g_dd_flash--;
     if (dcool) dcool--;
