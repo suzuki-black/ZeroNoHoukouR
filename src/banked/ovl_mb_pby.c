@@ -16,7 +16,6 @@
 #include "player.h"     /* g_player_x/y */
 #include "sound.h"
 #include "midboss.h"
-#include "hud.h"      /* HUD_SLOTS(手前の枠の先頭) */
 
 extern u8 rnd(void);
 
@@ -67,11 +66,11 @@ static void fly(void) {
 /* ent_draw_all の後に呼ぶ: 重ね→本体→影 の順に末尾の枠へ。エンティティとの間の枠は隠す。 */
 static void put_sprites(void) {
     /* ★高い所を飛んでいる間は**手前**の枠(HUD の直後)へ置く=自機の上を通る。低いときは末尾(最低優先)。
-       常駐が g_mb_front を見て g_spr_base をずらしてあるので、手前のときの先頭は g_spr_base-g_mb_n。 */
-    u8 c, j = 0, pass, sl, s0 = (u8)(g_mb_front ? (u8)(g_spr_base - g_mb_n) : (u8)(32 - g_mb_n));
+       ★使ってよい枠は常駐が今フレームに与えた [g_mb_s0, g_mb_end) だけ。はみ出すと HUD を壊す(実機で出た)。 */
+    u8 c, j = 0, pass, sl, s0 = g_mb_s0, end = g_mb_end;
     s16 bx = (s16)((qx >> 2) - 32), by = (s16)((qy >> 2) - 32), off = (s16)(PB_SH_OFF + (alt >> 2) + (alt >> 3));
     const u8 *col = (const u8 *)(MB_BUF + 708);
-    if (!g_mb_front) for (sl = g_spr_used; sl < s0; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
+    /* エンティティとの間の枠は常駐の vdp_sat_flush が画面外へ置いてある(g_spr_hide_to=g_mb_s0) */
     sl = s0;
     for (pass = 0; pass < 3; pass++) {
         u16 m = (pass == 0) ? g_mb_om : (pass == 1) ? g_mb_bm : 0x0660;   /* 影は 2x2(マス 5,6,9,10) */
@@ -79,6 +78,7 @@ static void put_sprites(void) {
             s16 x, y;
             u8 o;
             if (!(m & (1u << c))) continue;
+            if (sl >= end) break;                  /* ★与えられた枠の外へは書かない */
             x = (s16)(bx + ((c & 3) << 4));
             y = (s16)(by + ((c >> 2) << 4));
             if (pass == 2) { x += off; y += off; }
@@ -96,6 +96,7 @@ static void put_sprites(void) {
         }
         if (pass == 1) j = 0;
     }
+    for (; sl < end; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));   /* 余った枠は画面外へ */
     coldirty = 0;
 }
 
@@ -210,10 +211,7 @@ void ovl_mb_frame(void) {
             sfx(2, SFX_BOOM);
         }
     }
-    {   /* ★自機より高い所に居る間は手前の枠へ(上昇中も含む)。切り替えたら色を置き直す。 */
-        u8 f = (u8)(st == ST_CLIMB || alt >= PB_ALT_BODY);
-        if (f != g_mb_front) { g_mb_front = f; coldirty = 1; ent_spr_cache_inval(HUD_SLOTS); }
-    }
+    g_mb_front = (u8)(st == ST_CLIMB || alt >= PB_ALT_BODY);   /* ★自機より高い間は手前の枠を頼む(効くのは次のフレーム) */
     if (dir != tgt && (t & (hurt ? 1 : 3)) == 0) dir = (u8)((dir + ((((tgt - dir) & 15) < 8) ? 1 : 15)) & 15);
     {   /* 絵(大きさ×向き)が変わったら常駐へ読み込みを頼む。読み込み中は待つ */
         u8 idx = (u8)(((alt >> 4) << 4) + dir);
