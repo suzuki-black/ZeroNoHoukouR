@@ -85,6 +85,8 @@ static u8  wp_php[6];   /* 弱点の前フレームの耐久(減ったら軽い�
 #define SPR_FAR_SHADOW  60   /* 最終面の自機の遠い影(entity.c の draw_shadow が使う) */
 static s16 cx, cy;      /* ボス中心(画面座標) */
 static s16 tx;          /* 横移動の目標 */
+static s16 lastx;       /* 前フレームの cx(端で詰まったのを見つける) */
+static u8  stall;
 static u8  tick, dtick;
 static u8  r1n;         /* MAG を落とした R#1 */
 static u8  wall_bits;   /* 組み上がった壁の枚(bit=左から) */
@@ -259,7 +261,7 @@ void ovl_final_init(void) {
 
     shadow = ent_spawn(ET_SHOOTER);
     if (shadow) { shadow->pat = SPR_BOSS_SHADOW; shadow->color = 13; shadow->hidden = 1; }
-    cx = 208; cy = 44; tx = 128; tick = 0; dtick = 0;
+    cx = 208; cy = 44; tx = 128; tick = 0; dtick = 0; lastx = 0; stall = 0;
     for (i = 0; i < 6; i++) wp[i] = (Entity *)0;
     g_py_min = FINAL_WALL_LINE;
     { u8 *q = PREV; for (i = 0; i < ENT_MAX * 4; i++) *q++ = 0; }   /* 背景弾の前回位置 */
@@ -325,9 +327,14 @@ u8 ovl_final_frame(void) {
         if (el >= 576) { u8 i; st = ST_FIGHT; spawn_weakpoints(); tx = 128; for (i = 0; i < 6; i++) wp_php[i] = wp_hp[i]; }
     } else if (st == ST_FIGHT) {
         u8 i, hit = 0;
+        /* ★目標に着けないまま止まったら目標を捨てる(保険)。コマごとに翼の張り出しが違うので、
+           clamp_cy() に押し戻されて cx==tx にならず、次の目標も選ばれないまま固まったことがある
+           (実機で「左へ行ったきり動かない」と指摘)。BOSS_XL/XR は全コマの共通部分なので本来は起きない。 */
+        if (cx == lastx && cx != tx) { if (++stall > 24) tx = cx; } else stall = 0;
+        lastx = cx;
         /* 横移動。傾きは「目標まで 12px 以上ある間」だけ(着く直前に水平へ戻す＝コマの替え過ぎを防ぐ) */
         if (cx == tx) { if ((tick & 63) == 0) {
-            s16 xl = BOSS_XL3, xr = BOSS_XR3;
+            s16 xl = BOSS_XL, xr = BOSS_XR;
             tx = (s16)(xl + (s16)(rnd() % (u8)(xr - xl + 1))); } }
         else if (cx < tx) cx++;
         else cx--;

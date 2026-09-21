@@ -413,7 +413,6 @@ def write_bin(frames, nbase, glow_src, vram_a_path, vram_b_path, misc_path, h_pa
     open(misc_path, 'wb').write(card_image())
     ne, nb = len(ENTRY), len(BANK)
     bshadow, pshadow = shadow_patterns()
-    L3, R3 = frames[ne + 2], frames[ne + 5]
     L = []
     L.append('/* boss_frames.h — tools/gen_boss.py が生成(手で直さない)。最終面ボス XB-19 のコマ表。 */')
     L.append('/* 1コマ=VRAM 10行: パターン6行(24枚×32B) / 色表3行(24枚×16B) / 位置情報1行(ovl_final.c の meta) */')
@@ -432,8 +431,13 @@ def write_bin(frames, nbase, glow_src, vram_a_path, vram_b_path, misc_path, h_pa
     L.append('#define BOSS_VRAM0_Y 32')
     L.append(f'#define BOSS_VRAM_LEN {na * FB}')
     L.append(f'#define BOSS_VRAM0_LEN {len(vram) - na * FB}')
-    L.append(f'#define BOSS_XL3 {-min(q[0] for q in L3["sprites"]) * 2}   /* 左3 のコマで左端が画面内に入る中心 X の下限 */')
-    L.append(f'#define BOSS_XR3 {256 - max(q[0] + 16 for q in R3["sprites"]) * 2}   /* 右3 のコマの上限 */')
+    # ★横移動の目標範囲は「戦闘で出る全コマ(通常＋傾き6枚)が画面に収まる」範囲の**共通部分**にする。
+    #   傾きのコマは角度ごとに翼の張り出しが違い、左2 は左3 より左へ出る。左3 基準で目標を決めると、
+    #   左2 のコマへ戻る途中で clamp_cy() に押し戻されて目標へ着けず、cx==tx にならないので次の目標も
+    #   選ばれない＝左端で止まったまま動かなくなった(実機で指摘)。
+    fight = frames[ne - 1:ne + nb]                       # 通常コマ＋傾き6枚
+    L.append(f'#define BOSS_XL {max(-min(q[0] for q in f["sprites"]) * 2 for f in fight)}   /* 横移動の下限(戦闘の全コマが収まる中心 X) */')
+    L.append(f'#define BOSS_XR {min(256 - max(q[0] + 16 for q in f["sprites"]) * 2 for f in fight)}   /* 同 上限 */')
     L.append('#ifdef BOSS_FRAME_TABLES')
     L.append('/* 海面の影: ボス(16x16 のシルエット)と、最終面の自機(遠い小さな影) */')
     L.append('static const u8 player_far_shadow_pat[32] = { ' + ','.join(str(b) for b in pshadow) + ' };')
