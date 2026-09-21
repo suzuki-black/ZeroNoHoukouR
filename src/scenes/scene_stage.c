@@ -1212,8 +1212,8 @@ u8 stage_update(void) {
         }
     }
     g_spr_base = (u8)((g_loop_t ? 4 : 0)
-                      + ((g_mb == MB_ACTIVE && curstage == 4) ? 0 : (u8)(HUD_SLOTS + g_pwr)));
-                      /* 5面の中ボスの間は HUD の枠も使う。ふだんは HUD＋パワーアップのアイコン(段階ぶん) */
+                      + ((g_mb == MB_ACTIVE && curstage == 4) ? 0 : HUD_SLOTS));
+                      /* 5面の中ボスの間は HUD の枠も使う(HUD は背景に描く) */
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (g_mb == MB_ACTIVE) g_spr_limit = (u8)(32 - g_mb_n);   /* ★中ボスは末尾の枠(最低優先) */
     g_spr_hide_to = (g_mb == MB_ACTIVE) ? g_spr_limit : 0;   /* ★その手前に停止マーカを置かない(vdp.c) */

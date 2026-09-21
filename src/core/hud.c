@@ -8,6 +8,17 @@
 #include "gamestate.h" /* g_crush: メガクラッシュ残数 */
 
 static void crush_pattern(u8 bars);
+/* ★パワーアップ段階=**山形(階級章)を下から積む**。1本=3方向(威力2倍)/2本=2.5倍/3本=3倍＋貫通。
+   ★増槽の絵を段階ぶん並べていたのをやめた: 爆弾に見える・枠を3つ食う、と実機で指摘された。
+     山形は「上へ伸びる＝強くなる」で数えやすく、ボムの縦棒(画面下・左)とも形が紛れない。
+   ★絵は3本ぶんを**焼いたまま**(SPR_PWRLV, ship_render.c)にして、出す本数は**行別カラーで決める**
+     (出さない本の行を色0=透明にする)。パターンを毎回組み直すより常駐が小さい(デバッグROMが入らなくなった)。
+     色は弾と同じ考え方: 1段目=赤、上げるほど白が増える。 */
+static const u8 pwr_col[PWR_MAX][16] = {   /* 行: 0-3=上の山 / 5-8=中の山 / 10-13=下の山 */
+    {  0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 11,11,11,11, 0, 0 },
+    {  0, 0, 0, 0, 0, 15,15,15,15, 0, 11,11,11,11, 0, 0 },
+    { 15,15,15,15, 0, 15,15,15,15, 0, 15,15,15,15, 0, 0 },
+};
 
 /* HUD が VRAM に持っているもの(色表＋ボム棒のパターン)を置き直す。
    ★hud_init だけでなく、**他の用途に奪われた後の復旧**にも呼ぶ: 津波は32枚すべての色表と
@@ -24,8 +35,9 @@ void hud_colors(void) {
     { static const u8 crush_col[16] = { 15,15,15, 12,12,12, 11,11,11,11,11, 12,12,12, 15,15 };
       vdp_sprite_color_tab(7, crush_col); }
     vdp_sprite_color(8, 15);
+    if (g_pwr) vdp_sprite_color_tab(SPR_SLOT_PWR, pwr_col[g_pwr - 1]);   /* ★パワーアップの山形(津波が色表を奪った後の復旧) */
 #ifdef DEBUG_FPS
-    { u8 sl; for (sl = 9; sl < HUD_SLOTS; sl++) vdp_sprite_color(sl, 13); }   /* FPS2桁＋mask値2桁=ほぼ黒(視認性) */
+    { u8 sl; for (sl = 9; sl < SPR_SLOT_PWR; sl++) vdp_sprite_color(sl, 13); }   /* FPS2桁＋mask値2桁=ほぼ黒(視認性) */
 #endif
 }
 
@@ -98,12 +110,11 @@ void hud_draw(u16 score, u8 lives) {
         vdp_sprite_pos(7, 0, 220, SPR_CRUSH);
         vdp_sprite_pos(8, 0, 220, SPR_DIGIT0);
     }
-    /* ★パワーアップ段階(増槽の数)を画面下の中央へ。1段階=1本(最大3本)。取ると増え、ミス/最終面の投棄で減る。
-       枠は HUD_SLOTS の後ろを段階ぶんだけ借りる(g_spr_base が scene_stage で段階ぶん下がる)。
-       減ったぶんの枠は、次の ent_draw_all が停止マーカで隠す(前景の投棄では gen_planes が画面外へ退避する)。 */
-    { static const u8 tx[PWR_MAX] = { 107, 121, 135 };   /* 3本並べたとき中央に来る位置 */
-      for (i = 0; i < g_pwr; i++) vdp_sprite_pos((u8)(HUD_SLOTS + i), tx[i], 190, SPR_TANK);
-      if (g_pwr != last_pwr) { for (i = 0; i < g_pwr; i++) vdp_sprite_color((u8)(HUD_SLOTS + i), 14); last_pwr = g_pwr; } }
+    /* ★パワーアップ段階を画面下の中央へ。山形1本=1段階(最大3本)。取ると増え、ミス/最終面の投棄で減る。
+       段階が変わったときに色表(16B)だけ置き直す=出る山の本数が変わる。 */
+    if (g_pwr != last_pwr) { last_pwr = g_pwr; if (g_pwr) vdp_sprite_color_tab(SPR_SLOT_PWR, pwr_col[g_pwr - 1]); }
+    if (g_pwr) vdp_sprite_pos(SPR_SLOT_PWR, 120, 188, SPR_PWRLV);
+    else       vdp_sprite_pos(SPR_SLOT_PWR, 0, 220, SPR_PWRLV);   /* 通常弾のときは画面外へ */
 #ifdef DEBUG_FPS
     /* ★デバッグROMのみ。左2桁=g_fps(JIFFY基準の参考値)、右4桁=フレームカウンタ(ストップウォッチ実測用の真値)。
        使い方: 右4桁を読む→スマホで正確に10秒→もう一度読む→(差)/10=実FPS。JIFFYの進み方に依存しない。 */

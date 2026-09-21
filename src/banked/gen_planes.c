@@ -228,7 +228,6 @@ static void drop1(s8 dx, u8 tank) {
 static void jettison(void) {
     while (g_pwr) {
         g_pwr--;
-        vdp_sprite_pos((u8)(HUD_SLOTS + g_pwr), 0, 220, SPR_TANK);   /* 減った枠を画面外へ(前景なので自分で消す) */
         drop1((s8)((g_pwr & 1) ? 14 : -14), 1);
         hud_draw(g_score, g_lives);
     }
