@@ -58,7 +58,7 @@ extern u8  g_pdmg;         /* 今の段階の威力(半分単位)。発砲時に
 #define PWR_MAX 3
 extern u8  g_jam_t;                 /* >0: 電探妨害の合図(5面の中ボス戦でボムを押した) */
 extern u8  g_pwr_icon;              /* 1=段階のアイコンを出す(ent_draw_all が最低優先で描く) */
-extern const u8 pwr_col[PWR_MAX][16];   /* 段階ごとの山形の行別色(0=その行は出さない) */
+extern u8 pwr_col[PWR_MAX + 1][16];   /* 段階ごとの山形の行別色(0=その行は出さない)。通常弾=1本〜最終=4本 */
 #define PWR_ICON_X 120              /* 画面下の中央(16x16)。ボムの棒と同じ行に置いて、HUD が占める走査線を増やさない */
 #define PWR_ICON_Y 190
 extern u8  g_drop;         /* 1=銀の敵機が落ちた(g_drop_x/y にその位置)。増槽はオーバレイが出す */

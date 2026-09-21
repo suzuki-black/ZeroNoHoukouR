@@ -379,12 +379,11 @@ static void hud_bg(void) {
         hud_pw = lv;
         sea_box(PWR_ICON_X, PWR_ICON_Y, 16, 16);
         vdp_cmd_wait();
-        if (lv) {
-            u8 pat[32], i, top = (u8)(15 - lv * 5);   /* この行より上は出さない */
+        {   u8 pat[32], i, top = (u8)((3 - lv) << 2);   /* この行より上の山は出さない(1本=4行) */
             vdp_read_addr((u16)(0x7800 + SPR_PWRLV * 8));
             for (i = 0; i < 32; i++) pat[i] = PB_DAT;
             for (i = 0; i < top; i++) { pat[i] = 0; pat[16 + i] = 0; }
-            bgspr(PWR_ICON_X, PWR_ICON_Y, pat, pwr_col[lv - 1], 0);
+            bgspr(PWR_ICON_X, PWR_ICON_Y, pat, pwr_col[lv], 0);
         }
     }
 }

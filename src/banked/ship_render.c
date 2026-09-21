@@ -399,10 +399,19 @@ static u8 gameover_impl(void) {
 /* ===== スプライトのビットマップ(mode2 16x16, 前半16B=左列/後半16B=右列) =====
    ★常駐節約のため sprites.c から移設(面開始で1回VRAMへ流すだけの cold data)。
      hot な色表(zcol/barrel_col/barrel_flash)は常駐(sprites.c)のまま。 */
-/* ★パワーアップ段階の山形(階級章)3本。出す本数は hud.c が行別カラー(出さない行=色0)で決める。 */
+/* ★パワーアップ段階の山形(階級章)。**通常弾=1本**から数えるので4本ぶん(1本=3行＋間1行)。
+   出す本数は行別カラー(出さない山の行=色0)で決める。 */
 static const u8 pat_pwrlv[32] = {
-    0x01,0x07,0x1C,0x60,0x00, 0x01,0x07,0x1C,0x60,0x00, 0x01,0x07,0x1C,0x60,0x00, 0x00,
-    0x80,0xE0,0x38,0x06,0x00, 0x80,0xE0,0x38,0x06,0x00, 0x80,0xE0,0x38,0x06,0x00, 0x00
+    0x01,0x0E,0x70,0x00, 0x01,0x0E,0x70,0x00, 0x01,0x0E,0x70,0x00, 0x01,0x0E,0x70,0x00,
+    0x80,0x70,0x0E,0x00, 0x80,0x70,0x0E,0x00, 0x80,0x70,0x0E,0x00, 0x80,0x70,0x0E,0x00
+};
+/* 段階ごとの色(行 0-2=最上段 … 12-14=最下段、r%4==3 は間)。下から段階ぶん出し、弾と同じで上げるほど白が増える。
+   通常=赤1本 / 1段目=白1＋赤1 / 2段目=白2＋赤1 / 最終(貫通)=白4。 */
+static const u8 pwrcol_src[4][16] = {
+    {  0, 0, 0,0,  0, 0, 0,0,  0, 0, 0,0, 11,11,11,0 },
+    {  0, 0, 0,0,  0, 0, 0,0, 15,15,15,0, 11,11,11,0 },
+    {  0, 0, 0,0, 15,15,15,0, 15,15,15,0, 11,11,11,0 },
+    { 15,15,15,0, 15,15,15,0, 15,15,15,0, 15,15,15,0 },
 };
 static const u8 pat_bullet[32] = {
     0x00,0x00,0x00,0x00,0x00,0x07,0x07,0x07,0x07,0x07,0x07,0x00,0x00,0x00,0x00,0x00,
@@ -504,6 +513,9 @@ static const u8 pat_barrel7[32] = {
    ★戦闘機8方向の手続き生成(load_planes)は常駐(sprites.c)へ置き、sprites_load が bcall 後に呼ぶ。 */
 static void load_sprites_impl(void) {
     vdp_sprite_pattern(SPR_PWRLV,   pat_pwrlv);
+    {   /* ★色表は常駐の RAM へ写す(バンクのポインタは窓が戻ると無効。値だけ渡す) */
+        const u8 *sp = (const u8 *)pwrcol_src; u8 *dp = (u8 *)pwr_col; u8 i;
+        for (i = 0; i < (PWR_MAX + 1) * 16; i++) *dp++ = *sp++; }
     vdp_sprite_pattern(SPR_BULLET,  pat_bullet);
     vdp_sprite_pattern(SPR_TURRET,  pat_turret);
     vdp_sprite_pattern(SPR_HELLCAT,  pat_hellcat);

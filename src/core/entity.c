@@ -240,14 +240,11 @@ Entity *ent_spawn(u8 type) {
 /* ★色表(mode2=16B/枚)を毎フレーム全枚書くと弾数比例で重い(もたつきの一因)。前フレームと同じ単色なら
    VRAMに既にその色=16B書込みを省く(弾は殆ど橙12で殆ど省ける)。coltabは毎回書きキャッシュ無効(0xFF)。
    隠し(Y=216)は属性のみ変更で色表は残るためキャッシュ有効。ent_reset で 0xFF 初期化。 */
-/* ★パワーアップ段階の山形(画面下中央)。絵は3本ぶん焼いてあり(SPR_PWRLV)、出す本数は行別カラーで決める
-   (出さない山の行は色0=透明)。色は弾と同じ考え方: 1段目=赤、上げるほど白が増える。
+/* ★パワーアップ段階の山形(画面下中央)。絵は4本ぶん焼いてあり(SPR_PWRLV)、出す本数は行別カラーで決める
+   (出さない山の行は色0=透明)。**通常弾=1本**から数え、最終段階(貫通)=4本。
+   ★中身は面の準備で bank16(ship_render.c)が流し込む。常駐は64Bの表を持たない(デバッグROMが入らなくなる)。
    ★オーバレイ(5面の中ボスは背景にHUDを描く)からも引くので static にしない。 */
-const u8 pwr_col[PWR_MAX][16] = {   /* 行: 0-3=上の山 / 5-8=中の山 / 10-13=下の山 */
-    {  0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 11,11,11,11, 0, 0 },
-    {  0, 0, 0, 0, 0, 15,15,15,15, 0, 11,11,11,11, 0, 0 },
-    { 15,15,15,15, 0, 15,15,15,15, 0, 15,15,15,15, 0, 0 },
-};
+u8 pwr_col[PWR_MAX + 1][16];
 
 static void spr_col1(u8 slot, u8 color) {
     if (slot_col[slot] != color) { vdp_sprite_color(slot, color); slot_col[slot] = color; slot_ctab[slot] = 0; }
@@ -436,7 +433,7 @@ void ent_draw_all(void) {
        HUD の枠(優先度が高い)に置いていたら、中ボス戦で弾がアイコンの行で消えると実機で指摘された。
        ★5面の中ボスの間は拡大(MAG)なので出さない(g_pwr_icon=0。代わりにオーバレイが背景へ描く)。 */
     if (g_pwr_icon) {              /* ★枠は scene_stage が1つ予約してある(g_spr_limit-1)ので必ず置ける */
-        const u8 *tab = pwr_col[g_pwr - 1];
+        const u8 *tab = pwr_col[g_pwr];
         if (slot_ctab[slot] != tab) { vdp_sprite_color_tab(slot, tab); slot_ctab[slot] = tab; slot_col[slot] = 0xFF; }
         vdp_sat_pos(slot, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);
         slot++;

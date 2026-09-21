@@ -1222,7 +1222,7 @@ u8 stage_update(void) {
                       /* 5面の中ボスの間は HUD の枠も使う(HUD は背景に描く) */
     /* ★パワーアップ段階のアイコン: ent_draw_all が**最後の枠**(最低優先)に描く。
        5面の中ボスの間は拡大(MAG)なので出さない(オーバレイが背景へ描く)。 */
-    g_pwr_icon = (u8)(g_pwr && !(g_mb == MB_ACTIVE && curstage == 4));
+    g_pwr_icon = (u8)(!(g_mb == MB_ACTIVE && curstage == 4));   /* 通常弾でも1本出す(段階が無いのではなく最下段) */
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (g_mb == MB_ACTIVE) g_spr_limit = (u8)(32 - g_mb_n);   /* ★中ボスは末尾の枠(最低優先) */
     g_spr_hide_to = (g_mb == MB_ACTIVE) ? g_spr_limit : 0;   /* ★その手前に停止マーカを置かない(vdp.c) */

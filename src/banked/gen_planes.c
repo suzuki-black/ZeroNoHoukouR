@@ -229,12 +229,9 @@ static void drop1(s8 dx, u8 tank) {
    (ゲームのフレームが進まない)なので自分で置く。空いている先頭(g_spr_used)へ置き、その後ろに停止マーカ。 */
 static void pwr_icon_fg(void) {
     u8 sl = g_spr_used;
-    if (g_pwr) {
-        vdp_sprite_color_tab(sl, pwr_col[g_pwr - 1]);
-        vdp_sprite_pos(sl, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);
-        sl++;
-    }
-    vdp_sprite_hide_from(sl);
+    vdp_sprite_color_tab(sl, pwr_col[g_pwr]);
+    vdp_sprite_pos(sl, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);
+    vdp_sprite_hide_from((u8)(sl + 1));
 }
 
 static void jettison(void) {
