@@ -579,7 +579,7 @@ void mb_restore_hw(void) {
 
 void mb_finish(void) {
     spr_hide_from(g_spr_used);
-    ent_spr_cache_inval((u8)(32 - g_mb_n));
+    ent_spr_cache_inval(HUD_SLOTS);   /* ★手前に置いていた場合(g_mb_front)も含めて捨てる */
     g_mb_n = 0;
     g_mb = MB_RESTORE;
 }
@@ -1224,8 +1224,13 @@ u8 stage_update(void) {
        5面の中ボスの間は拡大(MAG)なので出さない(オーバレイが背景へ描く)。 */
     g_pwr_icon = (u8)(!(g_mb == MB_ACTIVE && curstage == 4));   /* 通常弾でも1本出す(段階が無いのではなく最下段) */
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
-    if (g_mb == MB_ACTIVE) g_spr_limit = (u8)(32 - g_mb_n);   /* ★中ボスは末尾の枠(最低優先) */
-    g_spr_hide_to = (g_mb == MB_ACTIVE) ? g_spr_limit : 0;   /* ★その手前に停止マーカを置かない(vdp.c) */
+    /* ★中ボスはふだん末尾の枠(最低優先=混んだら中ボスが欠ける)。ただし**自機より高い所に居る間**は
+       手前(HUD の直後)へ置き、エンティティをその後ろへ下げる(2面の中ボスが上昇中=自機の上を通る)。 */
+    if (g_mb == MB_ACTIVE) {
+        if (g_mb_front) g_spr_base = (u8)(g_spr_base + g_mb_n);
+        else            g_spr_limit = (u8)(32 - g_mb_n);
+    }
+    g_spr_hide_to = (u8)((g_mb == MB_ACTIVE && !g_mb_front) ? g_spr_limit : 0);   /* ★その手前に停止マーカを置かない(vdp.c) */
     g_spr_limit = (u8)(g_spr_limit - g_pwr_icon);   /* ★アイコンのぶんを1枠予約(敵/弾はその手前まで)。
                                                        予約しないと中ボス戦のように枠が少ないときアイコンが
                                                        出ずっぱりで消えた(実機で「消えている時間が長い」と指摘)。 */
@@ -1254,6 +1259,7 @@ u8 stage_update(void) {
                5面は拡大がかかって2倍で見えた=実機で指摘)。敵そのものは直前のフェードアウト(ovl_power.c)で消えている */
             spr_hide_from(HUD_SLOTS);
             scorepop_reset();
+            g_mb_front = 0;   /* ★枠の並びは既定(末尾)から始める */
         }
         if (curstage == 4) { g_shipargs.mode = 7; bcall_to(GEN_PLANES_BANK); }   /* 5面: 拡大用に絵の表を半分に縮めて表Bへ(ROM 実行) */
         {   static const u8 ovl[5]  = { OVL8_BANK, OVL9_BANK, OVL11_BANK, OVL10_BANK, OVL12_BANK };   /* 1面 Fw 200 / 2面 PBY / 3面 駆逐艦 / 4面 He 111 ×2 / 5面 P-61 */

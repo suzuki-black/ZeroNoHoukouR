@@ -16,6 +16,7 @@
 #include "player.h"     /* g_player_x/y */
 #include "sound.h"
 #include "midboss.h"
+#include "hud.h"      /* HUD_SLOTS(手前の枠の先頭) */
 
 extern u8 rnd(void);
 
@@ -65,10 +66,12 @@ static void fly(void) {
 
 /* ent_draw_all の後に呼ぶ: 重ね→本体→影 の順に末尾の枠へ。エンティティとの間の枠は隠す。 */
 static void put_sprites(void) {
-    u8 c, j = 0, pass, sl, s0 = (u8)(32 - g_mb_n);
+    /* ★高い所を飛んでいる間は**手前**の枠(HUD の直後)へ置く=自機の上を通る。低いときは末尾(最低優先)。
+       常駐が g_mb_front を見て g_spr_base をずらしてあるので、手前のときの先頭は g_spr_base-g_mb_n。 */
+    u8 c, j = 0, pass, sl, s0 = (u8)(g_mb_front ? (u8)(g_spr_base - g_mb_n) : (u8)(32 - g_mb_n));
     s16 bx = (s16)((qx >> 2) - 32), by = (s16)((qy >> 2) - 32), off = (s16)(PB_SH_OFF + (alt >> 2) + (alt >> 3));
     const u8 *col = (const u8 *)(MB_BUF + 708);
-    for (sl = g_spr_used; sl < s0; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
+    if (!g_mb_front) for (sl = g_spr_used; sl < s0; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
     sl = s0;
     for (pass = 0; pass < 3; pass++) {
         u16 m = (pass == 0) ? g_mb_om : (pass == 1) ? g_mb_bm : 0x0660;   /* 影は 2x2(マス 5,6,9,10) */
@@ -186,7 +189,7 @@ void ovl_mb_frame(void) {
     if (st == ST_DONE) { mb_finish(); return; }
     if ((u8)(alt >= PB_ALT_HIT) != hi) { hi = (u8)(alt >= PB_ALT_HIT); coldirty = 1; }   /* 当たる/当たらないで色を切替 */
     if (st <= ST_CLIMB && st != ST_HIGH) {
-        if (alt < PB_ALT_BODY) {            /* 胴体に触れたら被弾 */
+        if (alt < PB_ALT_BODY && st != ST_CLIMB) {   /* 胴体に触れたら被弾(★上昇中=自機の上を抜ける間は当たらない) */
             s16 dx = (s16)(cx - px), dy = (s16)(cy - py);
             if (dx < 0) dx = -dx;
             if (dy < 0) dy = -dy;
@@ -206,6 +209,10 @@ void ovl_mb_frame(void) {
             shock_at(cy);
             sfx(2, SFX_BOOM);
         }
+    }
+    {   /* ★自機より高い所に居る間は手前の枠へ(上昇中も含む)。切り替えたら色を置き直す。 */
+        u8 f = (u8)(st == ST_CLIMB || alt >= PB_ALT_BODY);
+        if (f != g_mb_front) { g_mb_front = f; coldirty = 1; ent_spr_cache_inval(HUD_SLOTS); }
     }
     if (dir != tgt && (t & (hurt ? 1 : 3)) == 0) dir = (u8)((dir + ((((tgt - dir) & 15) < 8) ? 1 : 15)) & 15);
     {   /* 絵(大きさ×向き)が変わったら常駐へ読み込みを頼む。読み込み中は待つ */

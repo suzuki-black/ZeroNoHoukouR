@@ -48,6 +48,7 @@
 extern u8 g_mb;
 extern u8 g_mb_n;     /* 中ボスがいま使っているスプライト枚数。32-g_mb_n 以降を使う(最低優先)。エンティティはその手前まで */
 extern u8 g_mb_req;   /* オーバレイ→常駐: 読んでほしい向き(0xFF=なし) */
+extern u8 g_mb_front; /* オーバレイ→常駐: 1=中ボスを手前(HUD の直後)の枠へ。自機より上に出る */
 extern u8 g_mb_recol; /* 常駐→オーバレイ: 色表を奪われた(メガクラッシュの波)。塗り直すこと */
 extern u8 g_mb_new;   /* 常駐→オーバレイ: MB_BUF に新しい向きが入った */
 extern u16 g_mb_pat_off;       /* mb_upload が書くパターン表の番地に足す量(0=表A / 4面の2機目は MB_PATB-0x7800) */
