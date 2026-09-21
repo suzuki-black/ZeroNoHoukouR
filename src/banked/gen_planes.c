@@ -208,45 +208,42 @@ static void tone_wait(u8 lo, u8 n) {
 }
 #define tick_wait() tone_wait(124, MSG_WAIT)   /* 打電音(周期124≒900Hz) */
 
-/* ★決戦前の投棄(ユーザー案A): 「敵大将発見」と同時に、持っている増槽と爆弾を自機が捨てる。
-   当たっても威力0の自機の弾として落とすだけ(画面の下へ抜けたら自動で消える)。捨てた瞬間に弾の段階とボムを 0 にする
-   =「捨てたから弱くなった」という順番にする(黙って 0 にしていたのを改めた)。 */
-static void drop1(s8 dx, u8 tank) {
-    Entity *e = ent_spawn(ET_BULLET);
-    if (e) {
-        e->x = (s16)(g_player_x + dx); e->y = (s16)(g_player_y + 4);
-        e->vx = (s8)(dx >> 3); e->vy = 3;
-        e->team = TEAM_PLAYER; e->hp = 0;              /* 威力0=当たっても何も起きない */
-        e->pat = tank ? SPR_TANK : SPR_EBSHELL;        /* 増槽 / 爆弾 */
-        if (tank) e->coltab = barrel_col;              /* 増槽=金属の陰影(常駐の表。バンクの表は窓が戻ると消える) */
-        else      e->color = 13;                       /* 爆弾=ほぼ黒 */
-    }
-    tone_wait(210, 25);                                /* 投下の音＋間(1つずつ落とす) */
-}
-
-/* ★投棄: 増槽 → 爆弾 の順に**1つずつ**落とす。落とすたびに段階/残数を1つ減らし、HUD のアイコンも1つ減らす。 */
-/* ★パワーアップ段階のアイコンを1枚置き直す。ふだんは ent_draw_all が**最後の枠**に描くが、投棄は前景
-   (ゲームのフレームが進まない)なので自分で置く。空いている先頭(g_spr_used)へ置き、その後ろに停止マーカ。 */
-static void pwr_icon_fg(void) {
-    u8 sl = g_spr_used;
-    vdp_sprite_color_tab(sl, pwr_col[g_pwr]);
-    vdp_sprite_pos(sl, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);
+/* ★決戦前の投棄(ユーザー案A): 「敵大将発見」の電文のあと、持っている増槽と爆弾を自機が 1 つずつ捨てる。
+   ★**音と同時に**表示を1つ減らし、捨てた物がその場から落ちていくのをこの場で描く(前景=ゲームのフレームは止まっている)。
+     以前は「音 → 25 フレーム待つ → 表示を減らす」の順で毎回1拍遅れ、捨てた物もゲームが動き出すまで出なかった。
+     さらにアイコンを**別の枠に足して**描いていたため、元のアイコン(捨てる前の段階)が上に残って減らないように見えた
+     (実機で「ぽっぽっと鳴っている間、ボムもパワーアップ表示も減らない」と指摘)。 */
+#define ICON_SL ((u8)(g_spr_used - 1))   /* パワーアップのアイコンの枠(ent_draw_all がいつも最後に描く) */
+static void drop_fg(s8 dx, u8 tank) {
+    s16 x = (s16)(g_player_x + dx), y = (s16)(g_player_y + 4);
+    u8 sl = g_spr_used, i, v = 15;                      /* 捨てる物はアイコンの次の枠(そこにあった停止マーカの位置) */
+    if (tank) vdp_sprite_color_tab(sl, barrel_col); else vdp_sprite_color(sl, 13);   /* 増槽=金属 / 爆弾=ほぼ黒 */
     vdp_sprite_hide_from((u8)(sl + 1));
+    PSG_R = 0; PSG_V = 210; PSG_R = 1; PSG_V = 0;       /* 投下の音(「ぽっ」) */
+    for (i = 0; i < 25; i++) {
+        PSG_R = 8; PSG_V = v; v = (u8)((v > 3) ? v - 4 : 0);
+        if (y < 208) vdp_sprite_pos(sl, (u8)x, (u8)y, tank ? SPR_TANK : SPR_EBSHELL);
+        else         vdp_sprite_pos(sl, 0, 220, SPR_TANK);
+        x += dx >> 3; y += 3;
+        vdp_wait_frame();
+    }
+    PSG_R = 8; PSG_V = 0;
+    vdp_sprite_hide_from(sl);                            /* 停止マーカを元の位置へ */
 }
 
+/* ★投棄: 増槽 → 爆弾 の順に 1 つずつ。減らす → 表示を直す → 落とす(音) の順 */
 static void jettison(void) {
     while (g_pwr) {
         g_pwr--;
-        drop1((s8)((g_pwr & 1) ? 14 : -14), 1);
-        hud_draw(g_score, g_lives);
-        pwr_icon_fg();                       /* 段階が1つ減ったのを見せる */
+        vdp_sprite_color_tab(ICON_SL, pwr_col[g_pwr]);  /* 山を1本減らす(同じ枠を描き直す) */
+        drop_fg((s8)((g_pwr & 1) ? 14 : -14), 1);
     }
-    ent_spr_cache_inval(g_spr_used);         /* ★色表を直書きしたのでキャッシュを捨てる */
     while (g_crush) {
         g_crush--;
-        drop1((s8)((g_crush & 1) ? 5 : -5), 0);
-        hud_draw(g_score, g_lives);
+        hud_draw(g_score, g_lives);                      /* ボムの棒を1本減らす */
+        drop_fg((s8)((g_crush & 1) ? 5 : -5), 0);
     }
+    ent_spr_cache_inval(ICON_SL);                        /* ★色表を直書きしたのでキャッシュを捨てる */
 }
 
 /* ★電文(最終面): 「敵大将発見」の下に、一文字ずつ音を立てて出す(無音の中で)。出し終えたら投棄。
