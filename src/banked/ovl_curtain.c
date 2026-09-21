@@ -2,7 +2,7 @@
    設計と制約は overlay.h / curtain.h を参照。要点:
      ・ホット区間(ramx_use_ram〜ramx_use_cart)の中でしか呼ばれない
      ・ここから data_read/bcall は呼べない(page2 が RAM＝スワップ窓が無い)
-     ・常駐の関数/データ(vdp_sprite_*, g_cbul, dvx/dvy, g_scroll_dy)は通常どおり呼べる
+     ・常駐の関数/データ(vdp_sprite_*, g_cbul, dvx/dvy)は通常どおり呼べる
        (page1 は同一内容の RAM 複製＝番地はそのまま) */
 #include "curtain.h"
 #include "fire.h"
@@ -45,19 +45,16 @@ void ovl_curtain_ring(s16 cx, s16 cy, u8 n, u8 spd, u8 ang, u8 col) {
 }
 
 /* ★VDP に一切触れない純 RAM 演算。§4-1(VDPコマンドの裏でCPUを回す)の区間に置ける。
-   ★スクロール追従(既存 bh_bullet と同じ規約): 敵弾は艦(背景)と一緒に縦スクロールへ流れる。
-     論理Y自体を流すので、表示・当たり判定・画面外消滅が全て視覚と一致する
-     (自機弾=TEAM_PLAYER だけが画面固定)。これを入れないと、スクロール中に背景に対する
-     見かけの速度が変わってしまう(上りで遅く、下りで速く見える)。 */
+   ★スクロールには追従させない(bh_bullet と同じ規約): 弾は**画面=静止画**の上を発射時の速度で一定に進む。
+     艦追従にすると上り/下りで見かけの速度が変わり、打ち消し合うと画面に貼り付いて止まって見えた。 */
 void ovl_curtain_update(void) {
     u8 i;
-    s16 dy16 = (s16)(g_scroll_dy << 4);   /* px → 1/16px */
     CBul *b = g_cbul;
     for (i = 0; i < CBUL_MAX; i++, b++) {
         s16 x, y;
         if (!b->alive) continue;
         x = (s16)(b->x + b->vx);
-        y = (s16)(b->y + b->vy - dy16);
+        y = (s16)(b->y + b->vy);
         if (x < CB_XMIN || x > CB_XMAX || y < CB_YMIN || y > CB_YMAX) {
             b->alive = 0;
             if (g_cbul_live) g_cbul_live--;

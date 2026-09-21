@@ -6,7 +6,6 @@
 
 u16 g_cam;
 u8  g_sea_only;    /* ★1=最終面: 艦バッファB(=ボスのコマ置き場)を海の行として描かない。全行を海テンプレから */
-s16 g_scroll_dy;   /* このフレームのスクロール量(new-old, px)。敵弾の艦追従に使う */
 static s16 drawn_top, drawn_bot;
 
 /* 海テンプレート用の乱数(旧版と同LCG。斑点の見た目のみ) */
@@ -166,7 +165,6 @@ void scroll_to(u16 cam) {
     s16 vb = (s16)((cam + 211) >> 4);
     while (drawn_bot < vb) { drawn_bot++; draw_row(drawn_bot); if (drawn_top < drawn_bot - 15) drawn_top = drawn_bot - 15; }
     while (drawn_top > vt) { drawn_top--; draw_row(drawn_top); if (drawn_bot > drawn_top + 15) drawn_bot = drawn_top + 15; }
-    g_scroll_dy = (s16)cam - (s16)g_cam;   /* ★このフレームのスクロール量(new-old)。敵弾が艦と一緒に流れる為に使う */
     g_cam = cam;
     vdp_set_vscroll((u8)cam);
 }

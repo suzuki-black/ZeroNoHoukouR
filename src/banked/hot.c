@@ -28,18 +28,12 @@ static void bh_noop(Entity *e) { (void)e; }
    ★スクロールとは完全に独立=毎フレーム画面座標を vx/vy だけ進める(表示上の見かけ速度が一定)。
      蛇行の上り/下り・左右に一切影響されない(甲板追従の補正は入れない)。 */
 static void bh_bullet(Entity *e) {
-    s16 dy = e->vy;
+    /* ★敵弾は艦(背景)に追従させない。スクロールを足し引きすると、上り/下りで見かけの速度が変わり、
+       弾の速度とスクロールが打ち消し合うと画面に貼り付いて止まって見えた(実機で指摘)。
+       前作(BattleshipProtoR af85108)で「画面=静止画基準の一定速度」に直したが、後の高速化(3b6249e)で
+       艦追従が戻っていた。二度と戻さないこと。 */
     e->x += e->vx;
-    /* ★敵弾は艦(背景)と一緒に縦スクロールへ流れる。論理Y自体を流すので、描画・当たり判定・
-       画面外消滅・弾数リミッタが全て視覚と一致する(自機弾=TEAM_PLAYERは画面固定のまま)。 */
-    if (e->team == TEAM_ENEMY) {
-        dy -= g_scroll_dy;
-        /* ★弾の速度がスクロールと打ち消し合うと**画面に貼り付いて止まって見える**(実機で指摘。
-           2面の艦の区間で実測: 真下へ速度2の弾×スクロール2ドット/フレーム=見かけ0)。
-           そのときだけスクロール追従をやめ、弾そのものの速度で動かす。 */
-        if (!dy && !e->vx) dy = e->vy ? e->vy : 1;
-    }
-    e->y += dy;
+    e->y += e->vy;
     if (e->x < -16 || e->x > SCR_W || e->y < -16 || e->y > SCR_H) e->active = 0;
 }
 
@@ -54,7 +48,6 @@ static const s8 dirdy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 static void bh_aaburst(Entity *e) {
     e->x += e->vx;
     e->y += e->vy;
-    e->y -= g_scroll_dy;         /* ★信管弾も敵弾=艦と一緒に縦スクロールへ流れる(論理Yを流す) */
     if (e->x < 0 || e->x > 255 || e->y < 16 || e->y > 220) { e->active = 0; return; }
     if (e->ftimer == 0) {                       /* 信管作動 */
         if (e->y < 185) {                       /* 自機帯より上でのみ炸裂(下から湧かない) */
@@ -193,7 +186,6 @@ static void bh_smissile(Entity *e) {
 #define CB_GAP      52    /* 収束開始の半間隔(左右の艦=中心±52) */
 #define CB_CONVERGE 24    /* 収束フレーム数 */
 static void bh_combo(Entity *e) {
-    e->y -= g_scroll_dy;                               /* ★合体弾(予告)も敵弾=艦と一緒に流れる */
     if (e->ftimer) {                                   /* 収束中: off を 0 へ */
         e->ftimer--;
         e->x = (s16)((u16)e->ftimer * CB_GAP / CB_CONVERGE);

@@ -46,6 +46,5 @@ extern u16 g_cam;
 extern u16 g_sea_skip;                  /* 海の波の塗り直しをしないリングの帯(bit=16行)。3面の中ボスの艦の行 */
 extern u8  g_sea_only;                  /* 1=全行を海テンプレから描く(最終面。艦バッファBをボスのコマに使う) */
 void scroll_rebase(u16 add);            /* 最終面: カメラを add(512等)ずらす。リング上の位置は不変＝描き直し無し */
-extern s16 g_scroll_dy;   /* スクロール差分(敵弾が艦と一緒に流れる) */
 
 #endif /* SCROLL_H */

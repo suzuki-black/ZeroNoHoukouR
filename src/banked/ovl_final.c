@@ -296,7 +296,6 @@ u8 ovl_final_frame(void) {
     if (!g_alert) cam--;
     if (cam < 64) { cam = (u16)(cam + 512); scroll_rebase(512); }
     scroll_to(cam);
-    g_scroll_dy = 0;          /* ★敵弾を海と一緒に流さない(撃っているのは空のボス) */
 
     tick++;
     if (st == ST_WAIT) {
