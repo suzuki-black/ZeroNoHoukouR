@@ -29,6 +29,7 @@
 #include "sound.h"
 #include "raster.h"     /* g_ras */
 #include "midboss.h"
+#include "sprites.h"    /* SPR_EXP0(撃墜の火の玉) */
 
 __sfr __at(0x98) HE_DAT;
 
@@ -103,6 +104,10 @@ static s16 kx(u8 k) { return k ? BX() : cx; }
 static s16 ky(u8 k) { return k ? BY() : cy; }
 
 /* 機 k の枠(14..31)へ、絵のあるマスを 重ね→本体→影 の順に。show=0 で全部隠す。 */
+/* ★撃墜の後半(dt<=HE_FIRE_T)は、機体の本体マスをそのまま**爆発の絵**に替える(重ねと影は隠す)。
+   中ボス戦の間はエンティティの枠が 4 枚ほどしか無く、爆発のエンティティがほとんど出なかった
+   (実機で「やられたかどうか分からない」)。自分の枠で描けば機体の大きさの火の玉が必ず出る。 */
+#define HE_FIRE_T 16   /* 後半 16 フレームを火の玉に(4 フレームずつ爆発の4コマ) */
 static void put(u8 k, u8 show) {
     u8 c, j = 0, pass, n = 0, hy = (u8)(220 + g_vscroll - 1);
     s16 bx = (s16)(kx(k) - 32), by = (s16)(ky(k) - 32);
@@ -125,6 +130,21 @@ static void put(u8 k, u8 show) {
         }
     }
     for (; n < 18; n++) { HE_DAT = hy; HE_DAT = 0; HE_DAT = MB_CELL_PAT(0); HE_DAT = 0; }
+}
+/* 撃墜の後半: 本体のマスに爆発の絵(4 フレームずつ 4 コマ)。重ねと影は出さない。色は paint の 1 色 */
+static void put_fire(u8 k) {
+    u8 c, n = 0, hy = (u8)(219 + g_vscroll), pat = (u8)(SPR_EXP0 + ((u8)(HE_FIRE_T - dt[k]) & 0x0C));
+    u8 by = (u8)(ky(k) - 33 + g_vscroll);          /* 属性の Y(u8 で回す=画面の上下へ出た分は回り込むが短い間なので許す) */
+    s16 bx = (s16)(kx(k) - 32);
+    vdp_write_addr((u16)((k ? 0x7200 : 0x7600) + HE_SLOT0 * 4));
+    for (c = 0; c < 16; c++) {
+        s16 x = (s16)(bx + ((c & 3) << 4));
+        u8 y = (u8)(by + ((c >> 2) << 4));
+        if (!(bm[k] & (1u << c)) || x < 0 || x > 240) continue;
+        if (y == 216) y = 215;                     /* 216 は停止マーカ */
+        HE_DAT = y; HE_DAT = (u8)x; HE_DAT = pat; HE_DAT = 0; n++;
+    }
+    for (; n < 18; n++) { HE_DAT = hy; HE_DAT = 0; HE_DAT = pat; HE_DAT = 0; }
 }
 
 /* 機 k の機体(影は除く)の色を書く。c=0 なら colbuf の本来の色、それ以外はその1色。帯ごとの色表へ直接書く。 */
@@ -199,7 +219,7 @@ void ovl_mb_frame(void) {
         u8 f8 = (u8)(((fcur + 2) >> 2) & 7);
         move(hx8[f8], hy8[f8]);
         tgt = (u8)(d8 << 2);
-        if (++st_t == 12) { if (!(gone & 1)) shoot(0); if (!(gone & 2)) shoot(1); sfx(2, SFX_EFIRE); }
+        if (++st_t == 12) { if (!(gone & 1) && !dt[0]) shoot(0); if (!(gone & 2) && !dt[1]) shoot(1); sfx(2, SFX_EFIRE); }
         if (st_t >= (hurt ? HE_AIM_T / 2 : HE_AIM_T) && fcur == tgt) { st = ST_DASH; st_t = 0; }
         if (t >= HE_TIMEOUT) st = ST_LEAVE;
         break; }
@@ -222,10 +242,12 @@ void ovl_mb_frame(void) {
     for (k = 0; k < 2; k++) {
         u8 b = (u8)(1 << k);
         if (gone & b) continue;
-        if (dt[k]) {                               /* 墜落中: 爆発を出しながら消える */
+        if (dt[k]) {                               /* 墜落中: 前半は赤と白で激しく点滅、後半は機体ごと火の玉(put) */
             if ((t & 3) == 0) ent_spawn_explosion((s16)(kx(k) - 24 + (rnd() & 31)), (s16)(ky(k) - 24 + (rnd() & 31)));
             if ((t & 7) == 0) sfx(2, SFX_BOOM);
+            paint(k, (dt[k] & 2) ? 15 : (dt[k] > HE_FIRE_T) ? 11 : 12);   /* 前半=赤と白 / 後半=橙と白で明滅 */
             if (!--dt[k]) {                        /* 片方を落とされると残りが怒り、画面全体で暴れる */
+                g_shake = 10; sfx(2, SFX_BOOM);    /* 燃え尽きて消える瞬間 */
                 gone |= b; hurt = 1; solo = 1;
                 if (!k && !(gone & 2)) {               /* 下の機が残った: 上の機(表A)の役に移し、まず上へ突き抜ける */
                     cx = BX(); cy = BY(); fcur = (u8)((fcur + 16) & 31); hp[0] = hp[1];
@@ -281,7 +303,10 @@ void ovl_mb_frame(void) {
         if (n0 && (!n1 || cur)) { cur = 0; ldir[0] = want0; g_mb_req = want0; }
         else if (n1) { cur = 1; ldir[1] = want1; g_mb_req = want1; }
     }
-    for (k = 0; k < 2; k++) put(k, (u8)(!(gone & (1 << k)) && !crush));
+    for (k = 0; k < 2; k++) {
+        if (dt[k] && dt[k] <= HE_FIRE_T && !crush) put_fire(k);
+        else put(k, (u8)(!(gone & (1 << k)) && !crush));
+    }
 }
 
 /* 分割表: 先頭=スプライト表A＋絵の表A / 106 行=スプライト表B＋絵の表B の2本だけ。
