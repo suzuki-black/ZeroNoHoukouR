@@ -56,6 +56,10 @@ extern u8  g_crush;        /* 残り使用回数(画面下に表示) */
 extern u8  g_pwr;
 extern u8  g_pdmg;         /* 今の段階の威力(半分単位)。発砲時に g_pwr から決める(対空砲の当たり判定はこれを見る) */
 #define PWR_MAX 3
+extern u8  g_pwr_icon;              /* 1=段階のアイコンを出す(ent_draw_all が最低優先で描く) */
+extern const u8 pwr_col[PWR_MAX][16];   /* 段階ごとの山形の行別色(0=その行は出さない) */
+#define PWR_ICON_X 120              /* 画面下の中央(16x16)。ボムの棒と同じ行に置いて、HUD が占める走査線を増やさない */
+#define PWR_ICON_Y 190
 extern u8  g_drop;         /* 1=銀の敵機が落ちた(g_drop_x/y にその位置)。増槽はオーバレイが出す */
 extern u8  g_fade;         /* 0 以外: 敵をフェードアウト中(残りフレーム。FADE_T から数える)。0 になった瞬間に消す */
 extern u8  g_alert;        /* 1=警報の表示中。縦スクロールと海の塗り直しを止める(最終面は面の頭から立てておく) */

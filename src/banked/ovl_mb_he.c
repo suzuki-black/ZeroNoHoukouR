@@ -172,6 +172,18 @@ void ovl_mb_frame(void) {
     u8 tgt = fcur, k, crush = g_crush_t;
     if (st == ST_DONE) return;
     t++;
+    /* ★津波(メガクラッシュ)が32枚ぶんの色表を奪ったあとの塗り直し。機体＋影4枚を本来の色へ戻す
+       (放っておくと機体が波の色=海と同じになり「中ボスが消えた」ように見えた。実機で指摘)。 */
+    if (g_mb_recol) {
+        u16 n;
+        g_mb_recol = 0;
+        paint(0, (st == ST_FOG) ? fogc : hf[0] ? 15 : 0);
+        for (n = 64; n; n--) HE_DAT = 13;                      /* 影4枚(paint の続きの番地) */
+        if (!(gone & 2)) {
+            paint(1, (st == ST_FOG) ? fogc : hf[1] ? 15 : 0);
+            for (n = 64; n; n--) HE_DAT = 13;
+        }
+    }
     for (k = 0; k < 2; k++) {                     /* 前のフレームで白くした機を本来の色へ(白は1フレームだけ) */
         if (hf[k]) { hf[k] = 0; paint(k, 0); }
         if (hcool[k]) hcool[k]--;

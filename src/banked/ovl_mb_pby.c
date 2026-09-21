@@ -130,6 +130,7 @@ void ovl_mb_frame(void) {
     s16 cx = (s16)(qx >> 2), cy = (s16)(qy >> 2);
     s16 px = (s16)(g_player_x + 8), py = (s16)(g_player_y + 8);
     if (st == ST_DONE) return;
+    if (g_mb_recol) { g_mb_recol = 0; coldirty = 1; }   /* ★津波が色表を奪った(scene_stage)。塗り直す */
     t++;
     if (fcool) fcool--;
     if (flash && !--flash) coldirty = 1;

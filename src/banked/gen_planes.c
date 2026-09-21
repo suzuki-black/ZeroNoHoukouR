@@ -225,12 +225,26 @@ static void drop1(s8 dx, u8 tank) {
 }
 
 /* ★投棄: 増槽 → 爆弾 の順に**1つずつ**落とす。落とすたびに段階/残数を1つ減らし、HUD のアイコンも1つ減らす。 */
+/* ★パワーアップ段階のアイコンを1枚置き直す。ふだんは ent_draw_all が**最後の枠**に描くが、投棄は前景
+   (ゲームのフレームが進まない)なので自分で置く。空いている先頭(g_spr_used)へ置き、その後ろに停止マーカ。 */
+static void pwr_icon_fg(void) {
+    u8 sl = g_spr_used;
+    if (g_pwr) {
+        vdp_sprite_color_tab(sl, pwr_col[g_pwr - 1]);
+        vdp_sprite_pos(sl, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);
+        sl++;
+    }
+    vdp_sprite_hide_from(sl);
+}
+
 static void jettison(void) {
     while (g_pwr) {
         g_pwr--;
         drop1((s8)((g_pwr & 1) ? 14 : -14), 1);
         hud_draw(g_score, g_lives);
+        pwr_icon_fg();                       /* 段階が1つ減ったのを見せる */
     }
+    ent_spr_cache_inval(g_spr_used);         /* ★色表を直書きしたのでキャッシュを捨てる */
     while (g_crush) {
         g_crush--;
         drop1((s8)((g_crush & 1) ? 5 : -5), 0);

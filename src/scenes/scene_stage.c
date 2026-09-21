@@ -979,6 +979,8 @@ u8 stage_update(void) {
                 crush_wave_off();        /* 拡大を戻し全枚を画面外へ */
                 hud_colors();            /* ★波が32枚ぶんの色表とボム棒の枠を奪ったので戻す */
                 ent_spr_cache_inval(0);  /* ★敵の色キャッシュも捨てる(VRAMの色表が変わっている) */
+                if (g_mb == MB_ACTIVE) g_mb_recol = 1;   /* ★中ボスの色表も奪われている。オーバレイに塗り直させる
+                                                            (放っておくと中ボスが波の色=海と同じ色になり「消えた」ように見えた) */
             }
             /* ★描いた稲妻を消す: 表示リングを世界の正本(艦バッファB/海テンプレ)から引き直す。
                艦へ焼き込んだ炎は B 側にあるので消えない。津波はスプライトなので BG は汚れない。
@@ -1214,6 +1216,9 @@ u8 stage_update(void) {
     g_spr_base = (u8)((g_loop_t ? 4 : 0)
                       + ((g_mb == MB_ACTIVE && curstage == 4) ? 0 : HUD_SLOTS));
                       /* 5面の中ボスの間は HUD の枠も使う(HUD は背景に描く) */
+    /* ★パワーアップ段階のアイコン: ent_draw_all が**最後の枠**(最低優先)に描く。
+       5面の中ボスの間は拡大(MAG)なので出さない(オーバレイが背景へ描く)。 */
+    g_pwr_icon = (u8)(g_pwr && !(g_mb == MB_ACTIVE && curstage == 4));
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
     if (g_mb == MB_ACTIVE) g_spr_limit = (u8)(32 - g_mb_n);   /* ★中ボスは末尾の枠(最低優先) */
     g_spr_hide_to = (g_mb == MB_ACTIVE) ? g_spr_limit : 0;   /* ★その手前に停止マーカを置かない(vdp.c) */

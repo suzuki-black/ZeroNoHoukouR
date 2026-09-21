@@ -137,6 +137,7 @@ static u8 move(s8 vx, s8 vy) {
 void ovl_mb_frame(void) {
     u8 tgt = fcur;
     if (st == ST_DONE) return;
+    if (g_mb_recol) { g_mb_recol = 0; coldirty = 1; }   /* ★津波が色表を奪った(scene_stage)。塗り直す */
     t++;
     if (fcool) fcool--;
     if (flash && !--flash) coldirty = 1;

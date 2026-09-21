@@ -57,7 +57,7 @@ u8 pb_ox, pb_oy, pb_nx, pb_ny, pb_w, pb_h, pb_oh, pb_oofs, pb_nofs, pb_cnt, pb_r
 
 static u8  st, st_t, hurt, fr, flast, flash, fcool, coldirty, sang, ph, hud_sc_dirty;
 static u16 t, hp, hud_last, kpts;
-static u8  hud_lv, hud_cr;
+static u8  hud_lv, hud_cr, hud_pw;
 static s16 cx, cy;
 
 /* 前回の矩形(ox,oy,w×oh)を海へ戻し、新しい矩形(nx,ny,w×h)を pb_col で描く。重なって変わらない行は触らない(BGTEST の実測版)。 */
@@ -278,7 +278,7 @@ void ovl_mb_init(void) {
     /* スコア等を描く行を海の波の塗り直しから外す */
     g_sea_skip |= (u16)(1u << (((u8)(cam + 1)) >> 4)) | (u16)(1u << (((u8)(cam + 16)) >> 4))
                 | (u16)(1u << (((u8)(cam + 190)) >> 4)) | (u16)(1u << (((u8)(cam + 205)) >> 4));
-    hud_last = 0xFFFF; hud_lv = 0xFF; hud_cr = 0xFF; hud_sc_dirty = 0;
+    hud_last = 0xFFFF; hud_lv = 0xFF; hud_cr = 0xFF; hud_pw = 0xFF; hud_sc_dirty = 0;
     g_mb_n = 22;
     g_mb_req = p61_req[fr]; g_mb_new = 0;
 }
@@ -359,6 +359,22 @@ static void hud_bg(void) {
         vdp_cmd_wait();
         if (g_crush) crush_bg((u8)(g_crush <= 3 ? g_crush : 1));
         if (g_crush > 3) glyph(28, 192, (u8)('0' + (g_crush % 10)), 15);
+    }
+    /* ★パワーアップ段階の山形(画面下中央)。この面の中ボスの間はスプライトが拡大なので背景へ描く
+       (常駐の ent_draw_all は g_pwr_icon=0 で出さない)。絵は焼いてある SPR_PWRLV を読み、
+       出さない山の行を落としてから、段階の色(pwr_col)で置く。 */
+    if (g_pwr != hud_pw) {
+        u8 lv = g_pwr;
+        hud_pw = lv;
+        sea_box(PWR_ICON_X, PWR_ICON_Y, 16, 16);
+        vdp_cmd_wait();
+        if (lv) {
+            u8 pat[32], i, top = (u8)(15 - lv * 5);   /* この行より上は出さない */
+            vdp_read_addr((u16)(0x7800 + SPR_PWRLV * 8));
+            for (i = 0; i < 32; i++) pat[i] = PB_DAT;
+            for (i = 0; i < top; i++) { pat[i] = 0; pat[16 + i] = 0; }
+            bgspr(PWR_ICON_X, PWR_ICON_Y, pat, pwr_col[lv - 1], 0);
+        }
     }
 }
 
@@ -471,6 +487,7 @@ static void finish(void) {
 void ovl_mb_frame(void) {
     u8 tgt = fr;
     if (st == ST_DONE) return;
+    if (g_mb_recol) { g_mb_recol = 0; coldirty = 1; }   /* ★津波が色表を奪った(scene_stage)。塗り直す */
     t++;
     if (fcool) fcool--;
     if (flash && !--flash) coldirty = 1;
