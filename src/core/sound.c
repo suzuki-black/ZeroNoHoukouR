@@ -23,14 +23,15 @@ static void psg(u8 r, u8 v) {
 /* ---- SFX 状態 ---- */
 #define SFX_THUNDER_DUR 42   /* 60Hz ISR で 42 フレーム=0.7秒。クラッシュの停止(24フレーム@30fps=48 ISRフレーム)に収まる長さ */
 #define SFX_RUMBLE_DUR  56   /* 60Hz ISR で 56 フレーム≒0.93秒。津波の助走に合わせて打ち直す */
-#define SFX_LOOP_DUR    34   /* 60Hz で 34 フレーム=宙返り(30fps で 16 コマ=32 ISR フレーム)＋余韻 */
+#define SFX_LOOP_DUR    46   /* 60Hz で 46 フレーム≒0.77秒=宙返り(30fps で 16 コマ=32 ISR フレーム)＋抜けていく余韻 */
 static const u8 sfxDur[SFX_COUNT] = { 0, 8, 16, SFX_LOOP_DUR, 4, 28, 6, SFX_THUNDER_DUR, SFX_RUMBLE_DUR };
 /* ★tone B の3種(SHOT/PHIT/LOOP)は同じ形: 周期 = 始め + 経過フレーム×傾き、音量 = 残り2フレームまで一定→ぷつっと落とす。
    経過フレーム = 持続長-1-残り(SHOT は 7-rem、PHIT は 15-rem で従来と同じ値)。
-   LOOP: 周期 900(約124Hz)→ 438(約255Hz)=低い唸りが引き起こしで1オクターブ上ずる。 */
-static const u16 sfxB0[3] = { 40, 120, 900 };
-static const s8  sfxBs[3] = { 62, 30, -14 };
-static const u8  sfxBv[3] = { 13, 12, 11 };
+   LOOP: 周期 500(約224Hz)→ 230(約486Hz)=唸りが引き起こしで1オクターブ上ずる。音量は 15 と 10 を 2 フレームずつ交互=エンジンの
+   「ぶるる」という震え。★最初は 900→438(124Hz〜)・音量11 だったが、実機で全く聞き取れなかった(本体スピーカーは低音が出ず、BGM に埋もれる)。 */
+static const u16 sfxB0[3] = { 40, 120, 500 };
+static const s8  sfxBs[3] = { 62, 30, -6 };
+static const u8  sfxBv[3] = { 13, 12, 15 };
 static const u8  sfxBk[3] = { 6, 5, 5 };
                               /* NONE/SHOT/HIT/BOOM/PHIT/EFIRE/THUNDER/RUMBLE */
 static u8 sfxType[SND_CH];
@@ -69,7 +70,7 @@ void sfx_update(void) {
             u16 p = (u16)(sfxB0[i] + (s16)(u8)(sfxDur[t] - 1 - rem) * sfxBs[i]);
             bb = 1;
             psg(2, p & 0xFF); psg(3, (p >> 8) & 0x0F);   /* ★chB tone period */
-            psg(9, (rem >= 2) ? sfxBv[i] : (u8)(rem * sfxBk[i]));   /* ★chB volume */
+            psg(9, (rem < 2) ? (u8)(rem * sfxBk[i]) : (t == SFX_LOOP && (rem & 2)) ? 10 : sfxBv[i]);   /* ★chB volume(宙返りは震わせる) */
         } else {
             bc = 1;                                /* 残り(HIT/BOOM/EFIRE/THUNDER/RUMBLE)は noise C を占有 */
         }
