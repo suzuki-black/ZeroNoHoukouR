@@ -182,8 +182,9 @@ void ent_resolve_collisions(void) {
             }
         }
     }
-    /* 敵弾/敵戦闘機/… × 自機 → 敵を消し被弾+1 */
-    if (player) {
+    /* 敵弾/敵戦闘機/… × 自機 → 敵を消し被弾+1。
+       ★宙返り中は判定そのものをしない: 弾は下を抜けていく(以前は被弾だけ無視して弾は消していた=弾が吸われて見えた) */
+    if (player && !g_loop_t) {
         Entity *p = player;
         for (j = 0; j < nth; j++) {
             u8 tol;

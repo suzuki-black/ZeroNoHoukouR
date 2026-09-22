@@ -420,7 +420,7 @@ static void pb_update(void) {
         dx = (s16)(x + 2 - px); dy = (s16)(y + 2 - py);
         if (dx < 0) dx = -dx;
         if (dy < 0) dy = -dy;
-        if (dx < 5 && dy < 5) { pb_erase(b); ent_player_hit(g_player_x, g_player_y); continue; }
+        if (dx < 5 && dy < 5 && !g_loop_t) { pb_erase(b); ent_player_hit(g_player_x, g_player_y); continue; }
         pb_w = 2; pb_h = 4; pb_oh = 4;
         pb_ox = b->sx; pb_oy = b->ry;
         pb_nx = b->sx = (u8)(x >> 1); pb_ny = b->ry = (u8)(y + cl);

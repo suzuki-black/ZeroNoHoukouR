@@ -23,7 +23,15 @@ static void psg(u8 r, u8 v) {
 /* ---- SFX 状態 ---- */
 #define SFX_THUNDER_DUR 42   /* 60Hz ISR で 42 フレーム=0.7秒。クラッシュの停止(24フレーム@30fps=48 ISRフレーム)に収まる長さ */
 #define SFX_RUMBLE_DUR  56   /* 60Hz ISR で 56 フレーム≒0.93秒。津波の助走に合わせて打ち直す */
-static const u8 sfxDur[SFX_COUNT] = { 0, 8, 4, 28, 16, 6, SFX_THUNDER_DUR, SFX_RUMBLE_DUR };
+#define SFX_LOOP_DUR    34   /* 60Hz で 34 フレーム=宙返り(30fps で 16 コマ=32 ISR フレーム)＋余韻 */
+static const u8 sfxDur[SFX_COUNT] = { 0, 8, 16, SFX_LOOP_DUR, 4, 28, 6, SFX_THUNDER_DUR, SFX_RUMBLE_DUR };
+/* ★tone B の3種(SHOT/PHIT/LOOP)は同じ形: 周期 = 始め + 経過フレーム×傾き、音量 = 残り2フレームまで一定→ぷつっと落とす。
+   経過フレーム = 持続長-1-残り(SHOT は 7-rem、PHIT は 15-rem で従来と同じ値)。
+   LOOP: 周期 900(約124Hz)→ 438(約255Hz)=低い唸りが引き起こしで1オクターブ上ずる。 */
+static const u16 sfxB0[3] = { 40, 120, 900 };
+static const s8  sfxBs[3] = { 62, 30, -14 };
+static const u8  sfxBv[3] = { 13, 12, 11 };
+static const u8  sfxBk[3] = { 6, 5, 5 };
                               /* NONE/SHOT/HIT/BOOM/PHIT/EFIRE/THUNDER/RUMBLE */
 static u8 sfxType[SND_CH];
 static u8 sfxTimer[SND_CH];
@@ -56,18 +64,16 @@ void sfx_update(void) {
         sfxTimer[ch]--;
         t = sfxType[ch];
         rem = sfxTimer[ch];
-        if (t == SFX_SHOT || t == SFX_PHIT) bb = 1;               /* ★tone B を SFX が占有(メロディ=A死守。ベースが譲る) */
-        else if (t == SFX_HIT || t == SFX_BOOM || t == SFX_EFIRE || t == SFX_THUNDER
-                 || t == SFX_RUMBLE) bc = 1;   /* noise C を占有 */
-        if (t == SFX_SHOT) {                       /* 高→低の下降レーザー(tone B) */
-            u16 p = 40 + (u16)(7 - rem) * 62;
+        if (t <= SFX_LOOP) {                       /* tone B の3種(★メロディ=A死守。ベースが譲る) */
+            u8 i = (u8)(t - 1);
+            u16 p = (u16)(sfxB0[i] + (s16)(u8)(sfxDur[t] - 1 - rem) * sfxBs[i]);
+            bb = 1;
             psg(2, p & 0xFF); psg(3, (p >> 8) & 0x0F);   /* ★chB tone period */
-            psg(9, (rem >= 2) ? 13 : (rem * 6));          /* ★chB volume */
-        } else if (t == SFX_PHIT) {                /* 自機被弾: 低い下降の痛み音(tone B) */
-            u16 p = (u16)(120 + (u16)(15 - rem) * 30);   /* 周期↑=音程↓(下降) */
-            psg(2, p & 0xFF); psg(3, (p >> 8) & 0x0F);   /* ★chB */
-            psg(9, (rem >= 2) ? 12 : (u8)(rem * 5));      /* ★chB volume */
-        } else if (t == SFX_HIT) {                 /* 短いノイズ "コッ" */
+            psg(9, (rem >= 2) ? sfxBv[i] : (u8)(rem * sfxBk[i]));   /* ★chB volume */
+        } else {
+            bc = 1;                                /* 残り(HIT/BOOM/EFIRE/THUNDER/RUMBLE)は noise C を占有 */
+        }
+        if (t == SFX_HIT) {                        /* 短いノイズ "コッ" */
             psg(6, 15); psg(10, rem * 3);
         } else if (t == SFX_EFIRE) {               /* 敵発砲: 静かな短いノイズ "プッ" */
             psg(6, 12); psg(10, (u8)(rem * 2));    /* 低音量(自機弾より静か) */

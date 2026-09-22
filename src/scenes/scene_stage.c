@@ -999,12 +999,12 @@ u8 stage_update(void) {
        ★上方向との組合せ(B＋上)は却下。上は移動なので、避けたい場面で突っ込む操作になる。
        ★★排他は**入力の形で先に振り分け**、可否は内側で見る。可否で else へ落とすと、
          クールダウン中の A＋B がクラッシュを暴発させる(実際に踏んだ。苦労と教訓 §14-6)。 */
-    if (g_input_edge & INP_TRIGB) {
+    if ((g_input_edge & INP_TRIGB) && !g_loop_t) {   /* ★宙返り中は B を受け付けない(ボムも出ない) */
       if (g_input & INP_TRIG) {                /* A＋B = 宙返り */
-        if (!g_loop_t && !g_loop_cd) {
+        if (!g_loop_cd) {
             g_loop_t = LOOP_FRAMES;
             g_loop_cd = LOOP_CD;
-            sfx(0, SFX_SHOT);                  /* 引き起こしの合図(専用音は後で) */
+            sfx(0, SFX_LOOP);                  /* ぶーーーん(引き起こしで上ずる) */
         }
       } else if (g_crush && g_mb == MB_ACTIVE && curstage == 4) {
         /* ★5面の中ボス(P-61=夜戦の電探機)の間は**電探妨害**を受けていて波を呼べない、という演出。
@@ -1192,7 +1192,7 @@ u8 stage_update(void) {
           curtain_volley(g_rage);
       }
       if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
-      if (g_ovl_ok && DBG_ON(8)) curtain_collide();   /* ★CPU弾幕の被弾(常駐 ent_player_hit に集約) */
+      if (g_ovl_ok && DBG_ON(8) && !g_loop_t) curtain_collide();   /* ★CPU弾幕の被弾(常駐 ent_player_hit に集約) */
       if (g_ovl_ok && curstage != STAGE_FINAL) power_frame();   /* ★増槽: 銀の敵機が落ちたら出す/自機が触れたら取る */
       if (sea_on) { while (sea_step()) { } vdp_cmd_wait(); }   /* ★aa_collide(burn=VDPコマンド)前に海完全完了 */
       if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_collide());
