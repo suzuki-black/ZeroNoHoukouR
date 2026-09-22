@@ -19,15 +19,17 @@
    ★片方を落とすと残った1機が怒る(向き直り倍速・待ち半分・突進 4px/f)。45秒で上下へ逃げる。
    ★残った1機は**画面全体で暴れる**(solo)。下の機は自機のすぐ近くを飛ぶので無敵でもないと落とせなかった(実機で指摘)。
      下の機が残ったら上の機(表A)の役に移して、まず上へ突き抜けさせる。分割をやめて画面全体を表Aにし、自機を直接狙う。
-     1機 300点、2機とも落とすと残り時間ボーナス＋メガクラッシュ1回。メガクラッシュの間は2機を隠す(下の帯の絵の表が合わないため)。 */
+     1機 300点、2機とも落とすと残り時間ボーナス＋メガクラッシュ1回。メガクラッシュの間は2機を隠す(下の帯の絵の表が合わないため)。
+   ★弾は**背景に描く**(hot_hb.c)。スプライトで撃つと、2機18枚＋HUD9枚＋アイコンで自機と弾に4枠しか残らず、ひどくちらついた(実機で指摘)。 */
 #include "types.h"
 #include "vdp.h"
 #include "entity.h"
-#include "fire.h"       /* emit / aim_dir */
+#include "fire.h"       /* aim_dir / dvx,dvy */
 #include "gamestate.h"
 #include "player.h"     /* g_player_x/y */
 #include "sound.h"
 #include "raster.h"     /* g_ras */
+#include "hotcode.h"    /* hb_*: 背景に描く弾(hot_hb.c。RAM 常駐) */
 #include "midboss.h"
 #include "sprites.h"    /* SPR_EXP0(撃墜の火の玉) */
 
@@ -68,6 +70,7 @@ void ovl_mb_init(void) {
     ldir[0] = ldir[1] = 0xFF;
     vdp_copy(0, 240, 0, 64, 256, 16);              /* 絵の表A(0x7800)→表B(0x2000)。自機や弾の絵を下の帯でも使う */
     g_spr_patb = 1;
+    hb_init();
     cur = 0; g_mb_req = fcur; g_mb_new = 0;        /* 上の機の絵を常駐がすぐ読む */
     g_mb_n = 18;
 }
@@ -181,17 +184,15 @@ static void hit_test(u8 k) {
 
 static void shoot(u8 k) {
     s16 ox = (s16)(kx(k) - 8), oy = (s16)(ky(k) - 8);
-    u8 a;
     if (oy < 0 || oy > 176) return;
-    a = aim_dir(ox, oy, g_player_x, g_player_y);
-    emit(ox, oy, (u8)(a - 1), 2, 3);
-    emit(ox, oy, (u8)(a + 1), 2, 3);
+    hb_fan(ox, oy, 2);   /* 自機狙いの2方向(背景に描く) */
 }
 
 void ovl_mb_frame(void) {
     u8 tgt = fcur, k, crush = g_crush_t;
     if (st == ST_DONE) return;
     t++;
+    hb_update();                                   /* 背景の弾(ボムの後の読み直しも中でする) */
     /* ★津波(メガクラッシュ)が32枚ぶんの色表を奪ったあとの塗り直し。機体＋影4枚を本来の色へ戻す
        (放っておくと機体が波の色=海と同じになり「中ボスが消えた」ように見えた。実機で指摘)。 */
     if (g_mb_recol) {
@@ -278,7 +279,7 @@ void ovl_mb_frame(void) {
             sfx(2, SFX_BOOM);
         }
     }
-    if (gone == 3 || st == ST_DONE) { g_spr_patb = 0; mb_finish(); return; }
+    if (gone == 3 || st == ST_DONE) { g_spr_patb = 0; hb_clear(); mb_finish(); return; }
     turn_to(tgt);
     if (g_mb_new) {                                /* 常駐が読んだ絵を、その機の絵の表へ。色も書く */
         const u8 *p = (const u8 *)(MB_BUF + 708);

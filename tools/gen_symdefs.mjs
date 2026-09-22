@@ -26,5 +26,17 @@ for (const line of readFileSync(inNoi, 'utf8').split(/\r?\n/)) {
   out += `\t.globl ${sym}\n${sym} = 0x${addr.toString(16)}\n`;
   n++;
 }
+// ★中ボスの背景弾(hot.bin の入口表)を普通の関数名で呼べるように、_hb_xxx = _hot_ram + 3*slot を足す。
+//   オーバレイから関数ポインタで呼ぶと、sdcc が末尾呼び出しを jp (_hot_ram+9) という誤った形で出した。
+//   スロット番号は hotcode.h の HOT_SLOT_HB_* から読む(二重持ちしない)。
+{
+  const m = readFileSync(inNoi, 'utf8').match(/^DEF\s+_hot_ram\s+0x([0-9A-Fa-f]+)\s*$/m);
+  const hdr = readFileSync(new URL('../src/include/hotcode.h', import.meta.url), 'utf8');
+  if (m) for (const d of hdr.matchAll(/^#define\s+HOT_SLOT_HB_(\w+)\s+(\d+)/gm)) {
+    const sym = `_hb_${d[1].toLowerCase()}`;
+    out += `\t.globl ${sym}\n${sym} = 0x${(parseInt(m[1], 16) + 3 * Number(d[2])).toString(16)}\n`;
+    n++;
+  }
+}
 writeFileSync(outS, out);
 console.log(`resident_syms: ${n} 個の常駐シンボルを ${outS} へ`);

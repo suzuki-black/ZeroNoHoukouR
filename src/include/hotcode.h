@@ -15,7 +15,7 @@
 #include "types.h"
 
 #define HOT_BANK 17     /* rompack --bank 17 build/hot.bin(冷たいバンク帯 bank4+ の空き) */
-#define HOT_CAP  5312   /* hot_ram 予約バイト数。hot.bin(実測=aa_update+aa_collide+ent_update_all+behavior群+表)以上、
+#define HOT_CAP  5696   /* hot_ram 予約バイト数。★中ボスの背景弾(hot_hb.c, asm で約0.6KB)で 5312→5696。hot.bin(実測=aa_update+aa_collide+ent_update_all+behavior群+表)以上、
                            かつ常駐DATA末尾が 0xE000(バンクデータ)未満に収まること。★page3のRAM実行枠は 0xE000 が天井。
                            冷データ g_card_ram(0xE100)/ship_ram(0xE700)/fb_ram(0xE900) を高位固定へ退避して枠を確保済み。
                            ★hot.c 肥大時はここを必ず更新すること(不足すると hot_load のコピーが末尾を落とし、
@@ -27,6 +27,15 @@
 #define HOT_SLOT_AA_UPD   0   /* aa_update(対空砲の走査＋発砲) */
 #define HOT_SLOT_AA_COL   1   /* aa_collide(自機弾×対空砲) */
 #define HOT_SLOT_UPDATE   2   /* ent_update_all(全エンティティの behavior=移動/AI/発砲) */
+#define HOT_SLOT_HB_INIT   3  /* 中ボスの背景弾(hot.c の hb_*): 海のひな形を読み表を空に */
+#define HOT_SLOT_HB_FAN    4  /* 自機狙いの n-way(元の弾のスプライトの左上 ox,oy) */
+#define HOT_SLOT_HB_UPDATE 5  /* 動かす・描く・自機との当たり(ボムの後は読み直す) */
+#define HOT_SLOT_HB_CLEAR  6  /* 全部を海へ戻し、借りた帯を CPU 弾幕へ返す */
+/* ★中ボスのオーバレイから呼ぶ入口。番地は tools/gen_symdefs.mjs が hot_ram+3*slot で resident_syms に足す(常駐にラッパは置かない)。 */
+void hb_init(void);
+void hb_fan(s16 ox, s16 oy, u8 n);
+void hb_update(void);
+void hb_clear(void);
 
 extern u8 hot_ram[HOT_CAP];   /* RAM実行領域(常駐_DATAに予約)。リンク番地は rom.noi の _hot_ram を参照 */
 void hot_load(void);          /* 起動時1回: bank HOT_BANK の先頭 HOT_CAP バイトを hot_ram[] へ転写 */

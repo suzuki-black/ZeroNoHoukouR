@@ -181,7 +181,7 @@ $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
 
 # ── バンクシーン(冷たいシーン)ビルド(2パス) ──
 # 1) 常駐 rom.ihx → rom.noi から常駐シンボル絶対番地を .s に落とす(バンク側が常駐関数を呼ぶため)
-$(BUILD)/resident_syms.rel: $(BUILD)/rom.ihx tools/gen_symdefs.mjs
+$(BUILD)/resident_syms.rel: $(BUILD)/rom.ihx tools/gen_symdefs.mjs $(SRC)/include/hotcode.h
 	node tools/gen_symdefs.mjs $(BUILD)/rom.noi $(BUILD)/resident_syms.s
 	sdasz80 -o $@ $(BUILD)/resident_syms.s
 # バンク先頭スタブ(0xA000 に jp _banked_entry を確定)
@@ -241,13 +241,14 @@ $(BUILD)/prof_bank.ihx: $(SRC)/banked/prof_bank.c $(HDRS) $(BUILD)/bankhead.rel 
 # ── RAM実行モジュール(hot.c) ──
 # 常駐が予約した hot_ram[] の実番地(rom.noi の _hot_ram)へ --code-loc してリンク→ ihx→bin へ変換。
 # rompack は .bin を bank17 先頭から配置し、起動時 hot_load() が hot_ram[] へ転写する。
-$(BUILD)/hot.ihx: $(SRC)/banked/hot.c $(HDRS) $(BUILD)/hothead.rel $(BUILD)/resident_syms.rel
+$(BUILD)/hot.ihx: $(SRC)/banked/hot.c $(SRC)/banked/hot_hb.c $(HDRS) $(BUILD)/hothead.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/hot.c -o $(BUILD)/hot.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(INC) $(SRC)/banked/hot_hb.c -o $(BUILD)/hot_hb.rel   # ★中ボスの背景弾はサイズ優先
 	@HA=$$(awk '/^DEF _hot_ram /{print $$3}' $(BUILD)/rom.noi); \
 	 if [ -z "$$HA" ]; then echo "ERROR: rom.noi に _hot_ram が無い(hotcode.c を常駐にリンクせよ)"; exit 2; fi; \
 	 echo "  hot.c を hot_ram=$$HA へリンク"; \
 	 sdcc -m$(TARGET) --no-std-crt0 --code-loc $$HA --data-loc 0xE000 \
-	     $(BUILD)/hothead.rel $(BUILD)/hot.rel $(BUILD)/resident_syms.rel -o $@
+	     $(BUILD)/hothead.rel $(BUILD)/hot.rel $(BUILD)/hot_hb.rel $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs $(SRC)/include/hotcode.h
 	@HA=$$(awk '/^DEF _hot_ram /{print $$3}' $(BUILD)/rom.noi); \
 	 node tools/ihx2bin.mjs $(BUILD)/hot.ihx $$HA $@; \
@@ -339,17 +340,12 @@ ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
 # 中ボス用オーバレイ: 通常面のオーバレイから主砲の弾幕を抜き、中ボスを足す。海の区間で出現の瞬間に入れ替え、戦艦の前に戻す。
 # ★共通部分は ovl.bin と同じ .rel を同じ順で(static の番地を揃えるため)。中ボス本体は最後。
 # ★増槽(ovl_power)は入れない: 中ボス戦の間は戦闘機(銀の敵機)が出ず、その前の増槽は海と一緒に流れ去っている。static も持たないので番地はずれない
-# ★衝撃波(ovl_shock)は入れない: 中ボスの弾を背景に描く(ovl_bgbul)枠を空けるため(5面と同じ)。分割表は ovl_bgb_split。
-#   背景の弾の表(24×9B)は 0xEC00〜、海のひな形は 0xED00〜(CPU 弾幕の固定帯。中ボスの間は弾幕が出ない)。
-OVL8_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_midboss.rel $(BUILD)/ovl8_bgbul.rel
-$(BUILD)/ovl8.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_midboss.c $(SRC)/banked/ovl_bgbul.c $(HDRS) $(BUILD)/ovlhead1.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DPB_N=24 -DPB_RAM=0xEC00 -DPB_TMPL_HI=0xED $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel   # ★8KB 枠に収めるため常にサイズ優先(1フレーム1回の処理で速度は効かない)
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DPB_N=24 -DPB_RAM=0xEC00 -DPB_TMPL_HI=0xED $(INC) $(SRC)/banked/ovl_bgbul.c -o $(BUILD)/ovl8_bgbul.rel
+OVL8_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_midboss.rel
+$(BUILD)/ovl8.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_midboss.c $(HDRS) $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel   # ★8KB 枠に収めるため常にサイズ優先(1フレーム1回の処理で速度は効かない)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
-	     $(BUILD)/ovlhead1.rel $(OVL8_RELS) $(BUILD)/resident_syms.rel -o $@
+	     $(BUILD)/ovlhead8.rel $(OVL8_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead8.rel: $(SRC)/banked/ovlhead8.s | $(BUILD)
-	sdasz80 -o $@ $<
-$(BUILD)/ovlhead1.rel: $(SRC)/banked/ovlhead1.s | $(BUILD)
 	sdasz80 -o $@ $<
 $(BUILD)/ovl8.bin: $(BUILD)/ovl8.ihx tools/ihx2bin.mjs
 	@node tools/ihx2bin.mjs $(BUILD)/ovl8.ihx 0xA000 $@; \
