@@ -381,10 +381,13 @@ void ent_draw_all(void) {
     }
     /* 自機を固定最優先スロット(g_spr_base)へ */
     /* ★宙返り中は本体を描かない(2×2 合成が HUD 直後の4 slot に描いている)。影は下の影パスで描く。 */
-    if (player && !g_loop_t) slot = draw1(slot, player);
+    if (player && !g_loop_t && slot < 32) slot = draw1(slot, player);
     /* ★中ボスが出ている間は枠が 5〜9 枚しか無く、最後に描く影が必ず溢れて自機の影が消えた(実機で指摘)。
        その間だけ自機の影を自機の直後に描く(scene_stage が中ボスの間だけ自機の shadow を 2 にする)。 */
-    if (player && player->shadow == 2) slot = draw_shadow(slot, player);
+    /* ★枠が尽きていたら描かない。2面の中ボスが手前(18枚)に居る間に宙返り(4枚)すると HUD 9 と合わせて 31 枚が埋まり、
+       影とアイコンが枠 32・33 に書かれて SAT の控え(sat_shadow)を溢れ、隣の g_spr_hide_to が 220 に化けた。
+       その値で「隠す」を 220 枚ぶん書いてパターン表(弾・数字)を壊し、中ボスの後もゲームが続けられなかった(実機で指摘) */
+    if (player && player->shadow == 2 && slot < g_spr_limit) slot = draw_shadow(slot, player);
     /* 収集集合内で開始位置を毎フレーム回転させて割当(9枚/走査線超の欠落をちらつきへ均等分散)。
        ★D2(§D2 逆順SAT): 交互フレームで割当て順を"正順/逆順"に反転する。SATは低slot=高優先(1走査線8枚まで)
          なので、順を反転すると混雑ラインで"表示される8枚"が前半⇔後半で交互に入れ替わる=消える弾が
@@ -433,7 +436,7 @@ void ent_draw_all(void) {
     /* ★パワーアップ段階のアイコンは**いちばん最後**=最低優先(1走査線8枚を超えたら弾ではなくこれが落ちる)。
        HUD の枠(優先度が高い)に置いていたら、中ボス戦で弾がアイコンの行で消えると実機で指摘された。
        ★5面の中ボスの間は拡大(MAG)なので出さない(g_pwr_icon=0。代わりにオーバレイが背景へ描く)。 */
-    if (g_pwr_icon) {              /* ★枠は scene_stage が1つ予約してある(g_spr_limit-1)ので必ず置ける */
+    if (g_pwr_icon && slot < 32) { /* ★枠は scene_stage が1つ予約してある(g_spr_limit-1)。ただし枠が尽きたときは出さない(上の★) */
         const u8 *tab = pwr_col[g_pwr];
         if (slot_ctab[slot] != tab) { vdp_sprite_color_tab(slot, tab); slot_ctab[slot] = tab; slot_col[slot] = 0xFF; }
         vdp_sat_pos(slot, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);

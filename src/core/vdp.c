@@ -569,7 +569,7 @@ u8 g_spr_hide_to;
 static void sat_tail(u8 live) {
     if (g_spr_hide_to) {
         u8 hy = spr_y(220);
-        for (; live < g_spr_hide_to; live++) { VDP_DAT = hy; VDP_DAT = 0; VDP_DAT = 0; VDP_DAT = 0; }
+        for (; live < g_spr_hide_to && live < 32; live++) { VDP_DAT = hy; VDP_DAT = 0; VDP_DAT = 0; VDP_DAT = 0; }   /* ★32 枚より先はパターン表(0x7800〜)。値が化けても書かない */
     } else if (live < 32) VDP_DAT = 216;   /* 停止マーカ(=スロットliveのY)。以降のスプライト非表示 */
 }
 void vdp_sat_flush(u8 from, u8 live) {
