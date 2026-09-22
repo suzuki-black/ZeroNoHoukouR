@@ -207,6 +207,9 @@ GitHub Issues to report bugs or share impressions. Pull requests are welcome for
 - **Program / Graphics:** Claude Code (Anthropic Claude)
 - **Sound (music & SFX):** Claude Code (Anthropic Claude) — all original, not copied from any existing work
 - **Title illustration:** Microsoft Copilot × Claude Code (Anthropic Claude) — a collaboration
+- **Title lettering fonts:** [Zen Antique](https://fonts.google.com/specimen/Zen+Antique) and
+  [Exo 2](https://fonts.google.com/specimen/Exo+2) — SIL Open Font License 1.1 (the font files are not
+  included in this repository)
 
 ### License
 **MIT** © 2026 suzuki-black. See [LICENSE](LICENSE). **Everything in this repository — code, graphics,
@@ -390,6 +393,8 @@ docs/          設計・開発ノート
 - **プログラム／グラフィック:** Claude Code（Anthropic Claude）
 - **サウンド（BGM・効果音）:** Claude Code（Anthropic Claude）― すべてオリジナル。既存楽曲のコピーではありません。
 - **タイトルイラスト:** Microsoft Copilot × Claude Code（Anthropic Claude）の合作
+- **タイトル文字の書体:** [Zen Antique](https://fonts.google.com/specimen/Zen+Antique) と
+  [Exo 2](https://fonts.google.com/specimen/Exo+2)（SIL Open Font License 1.1。フォントのファイルは本リポジトリに含みません）
 
 ### ライセンス
 **MIT** © 2026 suzuki-black. 詳細は [LICENSE](LICENSE) を参照。**コード・グラフィック・音楽を含む

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """gen_title.py — タイトル画(PNG)を SCREEN12(YJK 自然画, 256x212)へ変換する。
 
-入力: assets/title_src.png(元画像を 4:3 に切り抜いて縮めたもの。元は Copilot で作ったタイトル画 1536x1024)
+入力: assets/title_src.png(元画像を 4:3 に切り抜いて縮めたもの。元は Copilot で作った文字の無い絵 assets/title_base.png に
+      tools/gen_title_text.py で文字を描いた 1536x1024)
 出力: assets/title.yjk(54272B = 256x212, 1 画素 1 バイト)。"PRESS SPACE KEY" などの文字も絵に焼き込まれている。
 
 YJK は 4 画素ごとに色(J,K)を 1 組だけ持ち、明るさ Y(5bit)だけが画素ごと。
@@ -22,9 +23,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, '..', 'assets', 'title_src.png')
 DST = os.path.join(HERE, '..', 'assets', 'title.yjk')
 PREVIEW = os.path.join(HERE, '..', 'build', 'title_preview.png')
-# 元画像 1536x1024(3:2)から 4:3 を切り抜く。★右と上を詰めると、右上の「Made with AI」が枠の外に出て、
-#   タイトル文字がちょうど中央に来る。
-CROP = (0, 40, 1290, 1008)
+# 元画像 1536x1024(3:2)から 4:3 を切り抜く。中央は x=735(gen_title_text.py の CX と揃える=文字が画面の中央に来る)。
+# ★以前の絵は右上の「Made with AI」を外すため左端から切り抜いていて、絵に焼き込まれた文字が右へ寄って見えた(実機で指摘)。
+#   今は文字の無い絵(assets/title_base.png)に gen_title_text.py で文字を描くので、零戦の機首と戦艦が収まる位置で中央に切る。
+CROP = (90, 30, 1380, 998)
 
 def clamp(v, lo, hi): return lo if v < lo else hi if v > hi else v
 
