@@ -211,9 +211,6 @@ GitHub Issues to report bugs or share impressions. Pull requests are welcome for
 - **Sound (music & SFX):** Claude Code (Anthropic Claude) — all original, not copied from any existing work
 - **Title illustration:** Microsoft Copilot × Claude Code (Anthropic Claude) — a collaboration
 
-The mid-boss theme takes its mood from the finale of Beethoven's Symphony No. 9 (public domain);
-it is an original piece and does not quote the melody.
-
 ### License
 **MIT** © 2026 suzuki-black. See [LICENSE](LICENSE). **Everything in this repository — code, graphics,
 and music — is released under the MIT license.** All assets are original works created for this game;
@@ -396,9 +393,6 @@ docs/          設計・開発ノート
 - **プログラム／グラフィック:** Claude Code（Anthropic Claude）
 - **サウンド（BGM・効果音）:** Claude Code（Anthropic Claude）― すべてオリジナル。既存楽曲のコピーではありません。
 - **タイトルイラスト:** Microsoft Copilot × Claude Code（Anthropic Claude）の合作
-
-中ボスの曲は、ベートーヴェン 交響曲第9番 第4楽章 終盤（パブリックドメイン）の空気を元にしたオリジナル曲で、
-旋律の引用はしていません。
 
 ### ライセンス
 **MIT** © 2026 suzuki-black. 詳細は [LICENSE](LICENSE) を参照。**コード・グラフィック・音楽を含む
