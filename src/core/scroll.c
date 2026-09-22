@@ -6,7 +6,7 @@
 
 u16 g_cam;
 u8  g_sea_only;    /* ★1=最終面: 艦バッファB(=ボスのコマ置き場)を海の行として描かない。全行を海テンプレから */
-static s16 drawn_top, drawn_bot;
+s16 drawn_top, drawn_bot;   /* リングに今描いてある世界行(16行単位)。★非static: 撃沈(ovl_sink.c)がリングへ書いてよい行の判定に使う */
 
 /* 海テンプレート用の乱数(旧版と同LCG。斑点の見た目のみ) */
 static u16 srng = 12345;
