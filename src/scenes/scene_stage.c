@@ -579,7 +579,7 @@ void mb_restore_hw(void) {
 
 void mb_finish(void) {
     spr_hide_from(g_spr_used);
-    ent_spr_cache_inval(HUD_SLOTS);   /* ★手前に置いていた場合(g_mb_front)も含めて捨てる */
+    ent_spr_cache_inval(0);     /* ★手前に置いていた場合(g_mb_front)も含めて捨てる */
     g_mb_n = 0;
     g_mb = MB_RESTORE;
 }
@@ -1212,7 +1212,7 @@ u8 stage_update(void) {
             g_loop_t--;
             if (g_loop_t == 0) {
                 g_loop_alt = 0;
-                ent_spr_cache_inval(HUD_SLOTS);         /* 合成が色表を直書きした slot のキャッシュを捨てる */
+                ent_spr_cache_inval(0);   /* 合成が色表を直書きした slot のキャッシュを捨てる。★0から: 5面の中ボスの間は合成が 0..3 に居る(HUD_SLOTS からだと自機が宙返りの緑のまま残った=実機で指摘) */
                 shock_at((s16)g_player_y);              /* ★抜けに衝撃波リング(★B の資産) */
             }
         }
@@ -1236,7 +1236,7 @@ u8 stage_update(void) {
         /* 枠の範囲が変わった(先頭でも末尾でも)=持ち主が変わった: エンティティの色キャッシュを捨て、中ボスにも
            色を置き直させる。★手前のときは先頭が動かず末尾だけ伸びるので、末尾も見ること(見ていなかったら、
            伸びたぶんの影が前の持ち主の色のまま出た=実機で「影の色が変」) */
-        if (s0 != g_mb_s0 || e != g_mb_end) { g_mb_s0 = s0; g_mb_end = e; g_mb_recol = 1; ent_spr_cache_inval(HUD_SLOTS); }
+        if (s0 != g_mb_s0 || e != g_mb_end) { g_mb_s0 = s0; g_mb_end = e; g_mb_recol = 1; ent_spr_cache_inval(0); }   /* 5面はエンティティが 0 から */
     }
     g_spr_hide_to = (u8)((g_mb == MB_ACTIVE && g_mb_end == 32) ? g_spr_limit : 0);   /* ★その手前に停止マーカを置かない(vdp.c) */
     g_spr_limit = (u8)(g_spr_limit - g_pwr_icon);   /* ★アイコンのぶんを1枠予約(敵/弾はその手前まで)。
