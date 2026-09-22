@@ -43,7 +43,7 @@ static const u8 pal_stage[1][16][3] = {
 #define PAL_ONLY_STAGE 2
 #include "stage_grade.h"
 #define PAL_STAGE_IDX 0
-extern u8 g_dd_flash;
+extern u8 g_dd_flash, g_dd_flash2;
 #elif defined(OVL_P61)
 /* ★5面の中ボス(P-61)のオーバレイ: 5面(夜戦)の1面分だけ */
 #define PAL_ONLY_STAGE 4
@@ -151,7 +151,8 @@ void ovl_pal_update(void) {
             else if (ph < 24) { if (b) b--; }
         }
 #ifdef OVL_DD
-        if (i == 9) { if (g_dd_flash) r = g = b = 7; else { r = 3; g = 3; b = 3; } }   /* 駆逐艦の甲板(中ボス専用の色) */
+        if (i == 9) { if (g_dd_flash) r = g = b = 7; else { r = 3; g = 3; b = 3; } }   /* 上の駆逐艦の甲板(中ボス専用の色) */
+        if (i == 6) { if (g_dd_flash2) r = g = b = 7; else { r = 3; g = 3; b = 3; } }  /* 下の駆逐艦の甲板(6 番は中ボスの間は使われていない) */
 #endif
         if (w) { r = mix(r, tr, w); g = mix(g, tg, w); b = mix(b, tb, w); }
         if (!pal_valid || pal_cur[i][0] != r || pal_cur[i][1] != g || pal_cur[i][2] != b) {
