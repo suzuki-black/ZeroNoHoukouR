@@ -339,12 +339,17 @@ ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
 # 中ボス用オーバレイ: 通常面のオーバレイから主砲の弾幕を抜き、中ボスを足す。海の区間で出現の瞬間に入れ替え、戦艦の前に戻す。
 # ★共通部分は ovl.bin と同じ .rel を同じ順で(static の番地を揃えるため)。中ボス本体は最後。
 # ★増槽(ovl_power)は入れない: 中ボス戦の間は戦闘機(銀の敵機)が出ず、その前の増槽は海と一緒に流れ去っている。static も持たないので番地はずれない
-OVL8_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_midboss.rel
-$(BUILD)/ovl8.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_midboss.c $(HDRS) $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel   # ★8KB 枠に収めるため常にサイズ優先(1フレーム1回の処理で速度は効かない)
+# ★衝撃波(ovl_shock)は入れない: 中ボスの弾を背景に描く(ovl_bgbul)枠を空けるため(5面と同じ)。分割表は ovl_bgb_split。
+#   背景の弾の表(24×9B)は 0xEC00〜、海のひな形は 0xED00〜(CPU 弾幕の固定帯。中ボスの間は弾幕が出ない)。
+OVL8_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_midboss.rel $(BUILD)/ovl8_bgbul.rel
+$(BUILD)/ovl8.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_midboss.c $(SRC)/banked/ovl_bgbul.c $(HDRS) $(BUILD)/ovlhead1.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DPB_N=24 -DPB_RAM=0xEC00 -DPB_TMPL_HI=0xED $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel   # ★8KB 枠に収めるため常にサイズ優先(1フレーム1回の処理で速度は効かない)
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DPB_N=24 -DPB_RAM=0xEC00 -DPB_TMPL_HI=0xED $(INC) $(SRC)/banked/ovl_bgbul.c -o $(BUILD)/ovl8_bgbul.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
-	     $(BUILD)/ovlhead8.rel $(OVL8_RELS) $(BUILD)/resident_syms.rel -o $@
+	     $(BUILD)/ovlhead1.rel $(OVL8_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead8.rel: $(SRC)/banked/ovlhead8.s | $(BUILD)
+	sdasz80 -o $@ $<
+$(BUILD)/ovlhead1.rel: $(SRC)/banked/ovlhead1.s | $(BUILD)
 	sdasz80 -o $@ $<
 $(BUILD)/ovl8.bin: $(BUILD)/ovl8.ihx tools/ihx2bin.mjs
 	@node tools/ihx2bin.mjs $(BUILD)/ovl8.ihx 0xA000 $@; \
@@ -449,11 +454,12 @@ ROMPACK_BANKS += --bank 63 $(BUILD)/ovl11.bin
 # 衝撃波(ovl_shock)は入れない(枠のため。static を持たないので番地はずれない)。入口表は ovlhead12(slot14=ovl_p61_split)。
 # 0xBC00〜は背景の弾の表(48発)、0xBF00〜は海のひな形なので 7168B 以下。
 # ★メガクラッシュ(ovl_crush, 2.4KB)も入れない: 津波自体が拡大(MAG)を使うので拡大中の中ボスとは相性が悪く、枠も足りない。中ボスの間はボムを使えない
-OVL12_RELS = $(BUILD)/ovl12_palette.rel $(BUILD)/ovl12_rot.rel $(BUILD)/ovl_mb_p61.rel
-$(BUILD)/ovl12.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_p61.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead12.rel $(BUILD)/resident_syms.rel
+OVL12_RELS = $(BUILD)/ovl12_palette.rel $(BUILD)/ovl12_rot.rel $(BUILD)/ovl_mb_p61.rel $(BUILD)/ovl12_bgbul.rel
+$(BUILD)/ovl12.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_p61.c $(SRC)/banked/ovl_bgbul.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead12.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DOVL_P61 $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl12_palette.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DOVL_MAG $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl12_rot.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_p61.c -o $(BUILD)/ovl_mb_p61.rel
+	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_bgbul.c -o $(BUILD)/ovl12_bgbul.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead12.rel $(OVL12_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead12.rel: $(SRC)/banked/ovlhead12.s | $(BUILD)

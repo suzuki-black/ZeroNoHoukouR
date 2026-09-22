@@ -10,6 +10,8 @@
    ★呼ぶのは ent_draw_all の**後**: その末尾に書かれる停止マーカ(Y=216)を、中ボスの手前まで隠しスプライトで埋め直すため。
    ★動き(突進): 自機の位置を見て 8 方向のどれかを決め、向き直ってから一直線に突っ込む。止まったらまた自機を見る、の繰り返し。
      回転が見えるのは向き直る間だけ(ずっと回っているのは「せわしない」と実機で指摘)。向き直る間に自機狙いの3方向弾。
+     ★弾は**背景に描く**(ovl_bgbul.c)。スプライトで撃つと、中ボス18枚＋HUD9枚＋アイコンで自機と弾に4枠しか残らず、
+       弾がちらついた(実機で指摘)。その容量のため、この中ボスの間は衝撃波が出ない(5面と同じ)。
      胴体に触れると被弾。40秒で逃げる。撃墜で 500点＋残り時間ボーナス＋メガクラッシュ1回。
    ★突進の予告: 突っ込む前に MB_WARN_T フレーム止まって白く明滅する(大きな体当たりを避ける合図)。
    ★手負い: 耐久が半分を切ったら片側の内側エンジンが燃え(爆発を繰り返し出す)、向き直りが倍速・待ちが半分・突進が 4px/f になる。
@@ -17,11 +19,13 @@
 #include "types.h"
 #include "vdp.h"
 #include "entity.h"
-#include "fire.h"       /* emit / aim_dir */
+#include "fire.h"       /* aim_dir / dvx,dvy */
 #include "gamestate.h"
 #include "player.h"     /* g_player_x/y */
 #include "sound.h"
 #include "midboss.h"
+#include "bgbul.h"      /* 背景に描く弾(ovl_bgbul.c。5面と共有) */
+#include "curtain.h"    /* curtain_reset: 背景弾の表を借りた CPU 弾幕の帯を返す */
 
 extern u8 rnd(void);
 
@@ -42,7 +46,7 @@ static const s8 dy8[8] = { -3, -2, 0, 2, 3, 2, 0, -2 };
 static const s8 hx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };   /* 向き直る間の惰性(1px/f) */
 static const s8 hy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
-static u8  st, st_t, d8, fcur, flast, flash, fcool, coldirty, hurt;   /* fcool=白く光った後、次の白を出さない残り */
+static u8  st, st_t, d8, fcur, flast, flash, fcool, coldirty, hurt, lastc;   /* fcool=白く光った後、次の白を出さない残り */
 static u16 t, hp;   /* bm=本体のマス / om=重ねのマス(いま VRAM に載っている向き) */
 static s16 bx, by;          /* 64x64 の左上(画面座標) */
 
@@ -51,6 +55,8 @@ void ovl_mb_init(void) {
     bx = 96; by = -64;
     fcur = 16; flast = 16; flash = 0; fcool = 0; coldirty = 1; hurt = 0;
     g_mb_n = 0; g_mb_req = 16; g_mb_new = 0;   /* 最初の向き(真下)は常駐がすぐ読む */
+    lastc = g_crush;
+    pb_init();
 }
 
 static void turn_to(u8 tgt) {
@@ -110,10 +116,9 @@ static void shoot(void) {
     s16 ox = (s16)(bx + 24), oy = (s16)(by + 24);
     u8 a;
     if (oy < 0 || oy > 176) return;
-    a = aim_dir(ox, oy, g_player_x, g_player_y);
-    emit(ox, oy, (u8)(a - 2), 2, 3);
-    emit(ox, oy, a,           2, 3);
-    emit(ox, oy, (u8)(a + 2), 2, 3);
+    a = (u8)(aim_dir(ox, oy, g_player_x, g_player_y) - 2);
+    {   u8 k;   /* 弾の四角(4x4)の左上=中心-2。速さはスプライトの弾と同じ 3 ドット/フレーム(1/8 単位で dv*3) */
+        for (k = 0; k < 3; k++, a += 2) pb_add((s16)(ox + 6), (s16)(oy + 6), (s8)(dvx[a & 31] * 3), (s8)(dvy[a & 31] * 3)); }
     sfx(2, SFX_EFIRE);
 }
 
@@ -138,6 +143,12 @@ void ovl_mb_frame(void) {
     u8 tgt = fcur;
     if (st == ST_DONE) return;
     if (g_mb_recol) { g_mb_recol = 0; coldirty = 1; }   /* ★津波が色表を奪った(scene_stage)。塗り直す */
+    /* ★ボムを使った: 津波が画面の弾を消し、リングも描き直した(背景の弾の絵はもう無い)ので表を空にする。
+       ★表と海のひな形は CPU 弾幕の帯を借りているので、ボムの curtain_reset(常駐)がその帯に 0 を書いている。
+         ひな形も読み直す(でないと弾を消した跡に黒い点が残る) */
+    if (g_crush < lastc) pb_init();
+    lastc = g_crush;
+    pb_update();
     t++;
     if (fcool) fcool--;
     if (flash && !--flash) coldirty = 1;
@@ -176,7 +187,7 @@ void ovl_mb_frame(void) {
         if (t >= 60) st = ST_DONE;
         break;
     }
-    if (st == ST_DONE) { mb_finish(); return; }
+    if (st == ST_DONE) { pb_clear(); curtain_reset(); mb_finish(); return; }
     if (st == ST_AIM && t >= MB_TIMEOUT) st = ST_LEAVE;
     if (st == ST_AIM || st == ST_DASH) {   /* 胴体に触れたら被弾(翼は当たらない。宙返り中は ent_player_hit が無視する) */
         s16 dx = (s16)(bx + 24 - g_player_x), dy = (s16)(by + 24 - g_player_y);
