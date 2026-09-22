@@ -72,7 +72,7 @@ public once ready. This game is the **successor to
   bullets, six weak points, and an intro that is timed to its entrance music.
 - **5 capital-ship bosses, fully destructible:** Bismarck → Essex-class carrier → HMS Hood →
   the twin battleships → USS Iowa. Every main turret and all 23 anti-aircraft mounts can be shot
-  away; ships then sink stern-first, *1943*-style.
+  away; a destroyed ship sinks stern-first beneath the waves.
 - **Mega crash (bomb):** procedural lightning and thunder, then a magnified "wall of water"
   tsunami sweeps the screen and clears enemy bullets.
 - **Loop manoeuvre:** the plane pulls up and grows as it climbs (pre-baked frames copied by the VDP);
@@ -84,8 +84,6 @@ public once ready. This game is the **successor to
   day and weather (day / sunset / storm with lightning / morning fog / night).
 - **H.TIMI 60 Hz PSG driver** with **original music** for every stage, the mid-bosses and the final
   boss, plus sound effects.
-- **Hidden settings menu** (Konami command on the title screen): difficulty, lives, durability,
-  stage select, continue, invincibility.
 
 ### Controls
 | Input | Action |
@@ -98,8 +96,8 @@ public once ready. This game is the **successor to
 ### Requirements
 - **Target hardware:** MSX turboR (e.g. Panasonic FS-A1GT).
 - The turboR system ROM is copyrighted and is **not** included. Correctness is developed and verified
-  in [openMSX](https://openmsx.org/) with C-BIOS; turboR performance is checked on real hardware and
-  [WebMSX](https://webmsx.org/).
+  in [openMSX](https://openmsx.org/) with C-BIOS; play-testing and turboR performance are checked on
+  the turboR machine of [WebMSX](https://webmsx.org/). **It has not yet been tested on real hardware.**
 
 ### Building
 Requires [SDCC](https://sdcc.sourceforge.net/), Node.js and Python 3 (with Pillow).
@@ -126,8 +124,7 @@ hardware (R800 + S1990), and it is what this project is developed on:
 openmsx -machine CBIOS_turboR -carta GAME.ROM -romtype ASCII8
 ```
 
-`GAME.ROM` also runs in [WebMSX](https://webmsx.org/) (drag-and-drop, turboR machine) and on real
-turboR hardware.
+`GAME.ROM` also runs in [WebMSX](https://webmsx.org/) (drag-and-drop, turboR machine).
 
 ### Project structure
 ```
@@ -146,8 +143,8 @@ docs/          design & development notes
 - **[Architecture / アーキテクチャ](docs/ARCHITECTURE.md)** — memory/bank/VRAM maps, resident-vs-bank
   discipline, scene FSM, RAM code execution.
 - **[Stage layout / ステージ構成](docs/ステージ構成.md)** — every stage, the numbers, and the hardware limits.
-- **[Roadmap / ROADMAP](docs/ROADMAP.md)** — the working plan and a record of every issue found on real
-  hardware and how it was fixed.
+- **[Roadmap / ROADMAP](docs/ROADMAP.md)** — the working plan and a record of every issue found in
+  play-testing and how it was fixed.
 - **[Design memo / 次版設計メモ](docs/次版設計メモ_CPU重VDP軽の演出と1943ギミック.md)** — the plan for
   CPU-heavy / VDP-light effects and *1943*-style gimmicks this game grew from.
 - **[Game spec / 仕様書](docs/仕様書.md)** · **[Algorithm notes / アルゴリズム解説](docs/アルゴリズム解説.md)** ·
@@ -194,10 +191,10 @@ docs/          design & development notes
 This is an **experimental / study project**, and it is worth being plain about what it is.
 
 - **The point is the turboR spectacle, not balance.** Every feature here was chosen to show what the
-  R800 and V9958 can do in a game loop; difficulty and pacing are tuned by play-testing on real
-  hardware but come second.
-- **It is still a prototype.** Everything is tested on a real turboR as it is built, and problems found
-  there are recorded, with their fixes, in [ROADMAP](docs/ROADMAP.md).
+  R800 and V9958 can do in a game loop; difficulty and pacing are tuned by play-testing but come
+  second.
+- **It is still a prototype.** Everything is play-tested on WebMSX's turboR as it is built (not yet on
+  real hardware), and problems found there are recorded, with their fixes, in [ROADMAP](docs/ROADMAP.md).
 - **It does not pretend to rival Capcom's *1943*.** It is an attempt to get a little closer to that
   arcade feel on a home computer that was never meant to have it.
 
@@ -270,7 +267,7 @@ silhouettes may differ from the real thing.)
 - **最終面は巨大爆撃機 XB-19**。拡大スプライトの帯と壁、背景に描く弾、6か所の弱点、登場曲に合わせた
   登場演出。
 - **全破壊できる5隻の大型艦**: ビスマルク → エセックス級空母 → HMS フッド → 双子戦艦 → USS アイオワ。
-  主砲と対空砲23基をすべて撃ち落とせ、撃沈すると『1943』のように船尾から沈みます。
+  主砲と対空砲23基をすべて撃ち落とせ、撃沈すると船尾から海へ沈んでいきます。
 - **メガクラッシュ（ボム）**: 手続き生成の稲妻と雷鳴のあと、拡大スプライトの「水の壁」の津波が画面を
   駆け上がり、敵弾を消します。
 - **宙返り**: 引き起こして上昇しながら大きくなる（VDP に焼いたコマを写すだけ）。回っている間は敵弾が下を抜けます。
@@ -278,7 +275,6 @@ silhouettes may differ from the real thing.)
 - **走査線とパレットの技**: フレームの途中でスプライト表を切り替えて32枚の上限を越える、R#23 による衝撃波の
   ゆがみ、帯ごとの横スクロール、時間帯と天候（昼／夕焼け／稲光の荒天／朝霧／夜戦）を作るパレットエンジン。
 - **H.TIMI 60Hz 割込みの PSG 音ドライバ**。各面・中ボス・最終面の曲はすべて本作のためのオリジナルで、効果音付き。
-- **隠しの設定メニュー**（タイトル画面でコナミコマンド）: 難易度・残機・耐久・ステージセレクト・コンティニュー・無敵。
 
 ### 操作
 | 入力 | 動作 |
@@ -291,7 +287,8 @@ silhouettes may differ from the real thing.)
 ### 動作環境
 - **対象実機:** MSX turboR（例: Panasonic FS-A1GT）。
 - turboR 本体 ROM は著作物のため**同梱していません**。正しさは [openMSX](https://openmsx.org/)（C-BIOS）で
-  開発・検証し、turboR での速さは実機と [WebMSX](https://webmsx.org/) で確認しています。
+  開発・検証し、テストプレイと turboR での速さは [WebMSX](https://webmsx.org/) の turboR で確認しています。
+  **実機での動作はまだ確認していません。**
 
 ### ビルド
 [SDCC](https://sdcc.sourceforge.net/)、Node.js、Python 3（Pillow）が必要です。
@@ -318,7 +315,7 @@ turboR の本体 ROM が無い場合は、[tools/openmsx/CBIOS_turboR.xml](tools
 openmsx -machine CBIOS_turboR -carta GAME.ROM -romtype ASCII8
 ```
 
-`GAME.ROM` は [WebMSX](https://webmsx.org/)（ドラッグ&ドロップ・turboR 機種）や実機の turboR でも動作します。
+`GAME.ROM` は [WebMSX](https://webmsx.org/)（ドラッグ&ドロップ・turboR 機種）でも動作します。
 
 ### ディレクトリ構成
 ```
@@ -336,7 +333,7 @@ docs/          設計・開発ノート
 ### ドキュメント
 - **[アーキテクチャ](docs/ARCHITECTURE.md)** — メモリ/バンク/VRAM 地図、常駐とバンクの規律、シーン FSM、RAM 実行。
 - **[ステージ構成](docs/ステージ構成.md)** — 全面の進行・数値・ハードの制約。
-- **[ROADMAP](docs/ROADMAP.md)** — 作業計画と、実機で見つかった不具合とその直し方の記録。
+- **[ROADMAP](docs/ROADMAP.md)** — 作業計画と、テストプレイで見つかった不具合とその直し方の記録。
 - **[次版設計メモ](docs/次版設計メモ_CPU重VDP軽の演出と1943ギミック.md)** — 本作の出発点になった、CPU 重・VDP 軽の演出と
   『1943』的なギミックの計画。
 - **[仕様書](docs/仕様書.md)** ・ **[アルゴリズム解説](docs/アルゴリズム解説.md)** ・ **[性能と高速化](docs/性能と高速化.md)** ・
@@ -378,8 +375,8 @@ docs/          設計・開発ノート
 本作は**実験的な習作**です。何であるかを正直に書いておきます。
 
 - **主題は turboR の見せ場で、バランスは二の次**です。どの機能も「R800 と V9958 がゲームループで何を
-  できるか」を見せるために選びました。難しさや間合いは実機で遊びながら調整していますが、優先順位は下です。
-- **まだ試作品**です。作りながら実機の turboR で確かめ、そこで見つかった不具合と直し方は
+  できるか」を見せるために選びました。難しさや間合いは遊びながら調整していますが、優先順位は下です。
+- **まだ試作品**です。作りながら WebMSX の turboR で確かめ（実機ではまだ未確認）、そこで見つかった不具合と直し方は
   [ROADMAP](docs/ROADMAP.md) に記録しています。
 - **カプコンの『1943』に並ぶつもりはありません。** そういう手応えを想定していない家庭用の機械で、
   あのアーケードの感触に少しでも近づけたら——という試みです。

@@ -886,7 +886,7 @@ static void results_and_fanfare(void) {
 /* ゲームオーバー画面＋コンティニュー選択(旧版準拠・カウントダウン無し)。戻り 1=CONTINUE / 0=TITLE。
    継続ON時のみ CONTINUE/TITLE のカーソルメニュー。CONTINUE=残機初期化＋同面再開(スコア保持)。 */
 
-/* 撃破演出。★オーバレイが使える機械では撃沈シーン(ovl_sink.c: 誘爆→船尾から水没→静まる。見本は 1943)。
+/* 撃破演出。★オーバレイが使える機械では撃沈シーン(ovl_sink.c: 誘爆→船尾から水没→静まる)。
    使えない機械では旧来の炎上(艦上へ爆発を降らせる＋轟音)を尺が尽きるまで。 */
 static u8 defeat_update(void) {
     u8 done;
