@@ -89,7 +89,7 @@ void vdp_sprite_mag(u8 on);
 void vdp_read_addr(u16 a);
 void vdp_sprite_pattern_read(u8 patnum, u8 *d32);
 void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum); /* slot の属性(Y=y-1,X,pattern)を更新 */
-void vdp_sprite_hide_from(u8 slot);                  /* slot に停止マーカ(Y=208)=以降非表示 */
+void vdp_sprite_hide_from(u8 slot);                  /* slot に停止マーカ(Y=216。212ライン表示では 208 は終端にならない)=以降非表示 */
 /* ★A6: SAT属性をRAM鏡へ溜め→一括バースト(ent_draw_all専用=ポートアクセス削減)。色表は別テーブルで従来通り。 */
 void vdp_sat_pos(u8 slot, u8 x, u8 y, u8 patnum);    /* 属性をシャドウへ(VRAM直書きせず) */
 void vdp_sat_flush(u8 from, u8 live);

@@ -1,13 +1,13 @@
-// rompack.mjs — .ihx(常駐コード) + 任意のバンク(コード/データ) → MegaROM(ASCII8, 128KB)
+// rompack.mjs — .ihx(常駐コード) + 任意のバンク(コード/データ) → MegaROM(ASCII8, 512KB)
 //
 //  ROM レイアウト(このプロジェクトの規律。ここで機械的に強制する):
 //    bank0-2  ROM 0x00000-0x05FFF  常駐コード(.ihx の 0x4010-0x9FFF)  ← 上限 24KB。超過=エラー
 //    bank3    ROM 0x06000-0x07FFF  スワップ窓の既定ページ(既定 0xFF。任意で --bank 3 可)
-//    bank4-15 ROM 0x08000-0x1FFFF  冷たいコード(bcall)＋データ         ← 各 8KB
+//    bank3-63 ROM 0x06000-0x7FFFF  冷たいコード(bcall)/RAM オーバレイ＋データ ← 各 8KB
 //
 //  使い方:
 //    node tools/rompack.mjs --code build/rom.ihx --out GAME.ROM [--bank N file] ...
-//      --bank N file : 8KB バンク N(4..15 推奨) に file を配置。
+//      --bank N file : 8KB バンク N(3..63) に file を配置。
 //                      .ihx(0xA000リンクの bcall コード)なら 0xA000 起点で展開、
 //                      .bin(生データ)ならそのまま先頭から配置。
 //
@@ -123,7 +123,7 @@ writeFileSync(outRom, rom);
 
 // ---- 空き容量レポート ----
 const KB = (b) => (b / 1024).toFixed(1);
-console.log(`ROM: ${outRom}  (MegaROM ASCII8, 256KB / 32 banks)`);
+console.log(`ROM: ${outRom}  (MegaROM ASCII8, 512KB / 64 banks)`);
 console.log(`  常駐コード(bank0-2): ${codeLen}B / 24576B  残り ${CODE_LIMIT - codeLen}B (${KB(CODE_LIMIT - codeLen)}KB)`);
 console.log(`  bank3(スワップ窓)  : 予約(既定 0xFF)`);
 for (let n = ASSET_FIRST; n < used.length; n++) {

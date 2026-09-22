@@ -4,7 +4,7 @@
    将来の拡張(冷たいシーンをバンク化):
      Scene に bank を持たせ、bank!=0 の場合はディスパッチャが g_bank=bank; bcall() で
      当該バンクの 0xA000 エントリを呼ぶ(そのエントリが init/update を g_scene_phase で分岐)。
-     今は常駐シーン(bank=0)のみ実装。詳細は docs/ARCHITECTURE.md。 */
+     タイトル/設定/エンディングはバンクシーン、ステージは常駐。詳細は docs/ARCHITECTURE.md。 */
 #ifndef SCENE_H
 #define SCENE_H
 

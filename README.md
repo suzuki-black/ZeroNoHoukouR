@@ -142,12 +142,12 @@ docs/          design & development notes
 ### Documentation
 - **[Architecture / アーキテクチャ](docs/ARCHITECTURE.md)** — memory/bank/VRAM maps, resident-vs-bank
   discipline, scene FSM, RAM code execution.
-- **[Stage layout / ステージ構成](docs/ステージ構成.md)** — every stage, the numbers, and the hardware limits.
 - **[Roadmap / ROADMAP](docs/ROADMAP.md)** — the working plan and a record of every issue found in
   play-testing and how it was fixed.
 - **[Design memo / 次版設計メモ](docs/次版設計メモ_CPU重VDP軽の演出と1943ギミック.md)** — the plan for
   CPU-heavy / VDP-light effects and *1943*-style gimmicks this game grew from.
-- **[Game spec / 仕様書](docs/仕様書.md)** · **[Algorithm notes / アルゴリズム解説](docs/アルゴリズム解説.md)** ·
+- **[Game spec / 仕様書](docs/仕様書.md)** — the play spec and every stage: numbers, mid-bosses, scoring, the hardware limits.
+- **[Algorithm notes / アルゴリズム解説](docs/アルゴリズム解説.md)** ·
   **[Performance / 性能と高速化](docs/性能と高速化.md)** · **[Development notes / 苦労と教訓](docs/苦労と教訓.md)**
   — carried over from *Zero no Houkou Kai* and extended.
 
@@ -335,11 +335,11 @@ docs/          設計・開発ノート
 
 ### ドキュメント
 - **[アーキテクチャ](docs/ARCHITECTURE.md)** — メモリ/バンク/VRAM 地図、常駐とバンクの規律、シーン FSM、RAM 実行。
-- **[ステージ構成](docs/ステージ構成.md)** — 全面の進行・数値・ハードの制約。
 - **[ROADMAP](docs/ROADMAP.md)** — 作業計画と、テストプレイで見つかった不具合とその直し方の記録。
 - **[次版設計メモ](docs/次版設計メモ_CPU重VDP軽の演出と1943ギミック.md)** — 本作の出発点になった、CPU 重・VDP 軽の演出と
   『1943』的なギミックの計画。
-- **[仕様書](docs/仕様書.md)** ・ **[アルゴリズム解説](docs/アルゴリズム解説.md)** ・ **[性能と高速化](docs/性能と高速化.md)** ・
+- **[仕様書](docs/仕様書.md)** — 遊びの仕様と全6面の中身（数値・中ボス・スコア・ハードの制約）。
+- **[アルゴリズム解説](docs/アルゴリズム解説.md)** ・ **[性能と高速化](docs/性能と高速化.md)** ・
   **[苦労と教訓](docs/苦労と教訓.md)** — 「零の咆哮 改」から引き継いで書き足したもの。
 
 ### ここに至るまで（系譜）

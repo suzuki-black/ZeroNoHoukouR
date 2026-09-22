@@ -11,8 +11,10 @@ PROFILE  = debug        # debug | release
 OPT_DEBUG   = --max-allocs-per-node 3000
 OPT_RELEASE = --opt-code-size --max-allocs-per-node 9000
 
-# ── MegaROM(ASCII8, 128KB=16bank×8KB)レイアウト(rompack が強制) ──
+# ── MegaROM(ASCII8, 512KB=64bank×8KB)レイアウト(rompack が強制) ──
 #   bank0-2 : 常駐コード(0x4010-0x9FFF, 上限 24KB)          ← rompack が超過をビルドエラーに
-#   bank3   : 0xA000-0xBFFF スワップ窓(データ先読み/バンクコール用。ROMは既定 0xFF)
-#   bank4-15: 冷たいコード(bcall)＋データ(艦/発砲/BGM/文字列/スプライト)
+#   bank3   : 0xA000-0xBFFF スワップ窓(データ先読み/バンクコール用)。空きが尽きたので 5面中ボスのオーバレイを置いた
+#   bank4-31: 冷たいコード(bcall)/RAM オーバレイ＋データ(艦/発砲/BGM/文字列/スプライト/タイトル画)
+#   bank32- : 大きな絵のアセット(最終面ボスのコマ・中ボスの機体・事前焼きの回転コマ)
+#   ★正確な割り当ては Makefile の ROMPACK_BANKS と docs/ARCHITECTURE.md のバンク表
 ROM_SIZE   = 0x80000    # 512KB(実体は tools/rompack.mjs の ROM_SIZE)

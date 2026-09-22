@@ -484,7 +484,10 @@ BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bi
 ifdef MAGTEST
   DEFS          += -DMAGTEST
   BANK_IHX      += $(BUILD)/scene_magtest.ihx
-  ROMPACK_BANKS += --bank 30 $(BUILD)/scene_magtest.ihx
+  ROMPACK_BANKS += --bank 31 $(BUILD)/scene_magtest.ihx   # ★空きバンクは 29(DEBUG_PROF)と 31 だけ。31 を HSTEST と共用する(両者は排他)
+ifdef HSTEST
+  $(error MAGTEST と HSTEST は bank31 を共用するので同時に指定できない)
+endif
 endif
 # ── 実機検証: 走査線途中の 横スクロール(R#26/R#27) 切替テスト: make clean && make HSTEST=1
 ifdef HSTEST

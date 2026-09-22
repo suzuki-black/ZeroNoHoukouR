@@ -1,4 +1,4 @@
-/* ovl_bgbul.c — 背景に描く敵弾(bgbul.h)。5面の P-61(ovl12)と 1面の Fw 200(ovl8)が共有する。
+/* ovl_bgbul.c — 背景に描く敵弾(bgbul.h)。5面の P-61(ovl12)専用(1面・4面は容量の都合で hot_hb.c の小型版を使う)。
    ★元は ovl_mb_p61.c にあったもの(実機で 1発 0.13ms と測った差分描き)をそのまま切り出した。 */
 #include "types.h"
 #include "vdp.h"
