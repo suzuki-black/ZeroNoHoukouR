@@ -1,0 +1,96 @@
+<?xml version="1.0" ?>
+<!DOCTYPE msxconfig SYSTEM 'msxconfig2.dtd'>
+<msxconfig>
+  <info>
+    <manufacturer>C-BIOS</manufacturer>
+    <code>turboR (C-BIOS hybrid)</code>
+    <release_year>2026</release_year>
+    <description>C-BIOS MSX2+ ROMs on MSXturboR hardware (R800 + S1990). No copyrighted firmware. For R800 perf testing.</description>
+    <type>MSXturboR</type>
+    <region>jp</region>
+  </info>
+
+  <MapperReadBackBits>largest</MapperReadBackBits>
+
+  <devices>
+
+    <primary slot="0">
+      <ROM id="C-BIOS Main ROM JP">
+        <mem base="0x0000" size="0x8000"/>
+        <rom>
+          <sha1>a5b02ea4a1530f2b96f0f4f4e2049f0de4a31e5a</sha1>
+          <filename>cbios_main_msx2+_jp.rom</filename>
+        </rom>
+      </ROM>
+      <ROM id="C-BIOS Logo ROM">
+        <mem base="0x8000" size="0x4000"/>
+        <rom>
+          <sha1>db2635ef7e3f8589518dca65f2e3b515edc5372d</sha1>
+          <filename>cbios_logo_msx2+.rom</filename>
+        </rom>
+      </ROM>
+    </primary>
+
+    <primary external="true" slot="1"/>
+    <primary external="true" slot="2"/>
+
+    <primary slot="3">
+      <secondary slot="0">
+        <ROM id="C-BIOS Sub ROM">
+          <mem base="0x0000" size="0x4000"/>
+          <rom>
+            <sha1>2fcb40413e7d373f0f2dbdc815ce18746ddf3684</sha1>
+            <filename>cbios_sub.rom</filename>
+          </rom>
+        </ROM>
+      </secondary>
+      <secondary slot="2">
+        <PanasonicRAM id="Main RAM">
+          <mem base="0x0000" size="0x10000"/>
+          <size>512</size>
+        </PanasonicRAM>
+      </secondary>
+    </primary>
+
+    <S1990 id="S1990">
+      <io base="0xE4" num="2"/>
+    </S1990>
+
+    <PPI id="ppi">
+      <io base="0xA8" num="4"/>
+      <sound><volume>16000</volume></sound>
+      <keyboard_type>jp_ansi</keyboard_type>
+      <has_keypad>true</has_keypad>
+      <code_kana_locks>true</code_kana_locks>
+      <graph_locks>false</graph_locks>
+    </PPI>
+
+    <VDP id="VDP">
+      <io base="0x98" num="4" type="O"/>
+      <io base="0x98" num="2" type="I"/>
+      <version>V9958</version>
+      <vram>128</vram>
+    </VDP>
+
+    <PSG id="PSG">
+      <type>YM2149</type>
+      <keyboardlayout>50on</keyboardlayout>
+      <io base="0xA0" num="4" type="IO"/>
+      <sound><volume>21000</volume></sound>
+    </PSG>
+
+    <E6Timer id="Turbo-R timer">
+      <io base="0xE6" num="2"/>
+    </E6Timer>
+
+    <ResetStatusRegister id="Reset Status register">
+      <io base="0xF4" num="1"/>
+      <inverted>false</inverted>
+    </ResetStatusRegister>
+
+    <TurboRPause id="TurboRPause">
+      <io base="0xA7" num="1"/>
+    </TurboRPause>
+
+  </devices>
+</msxconfig>
