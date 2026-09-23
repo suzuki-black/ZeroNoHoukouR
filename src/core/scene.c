@@ -43,11 +43,27 @@ static void scene_bgm_enter(u8 cur) {
 #define TITLE_BANK    9
 #define TITLE_YJK_LEN 54272
 static u8 g_vmode;   /* 現在のスクリーンモード(5/12)。0=未設定で初回に必ず張る。 */
+#ifdef S3TEST
+/* ★検証ROM(S3TEST): 1面の戦艦の絵(開始カード 64x48, bank4)を常駐側で RAM へ読んでおく。
+   バンクシーンからは data_read を呼べない(窓を差し替えると自分が消える)。 */
+#include "ship.h"
+#include "assets_data.h"   /* SHIP_CARD_BANK / ship_card_off / SHIP_CARD_LEN */
+static void s3test_load_card(void) {
+    static u8 done;
+    if (done) return;
+    done = 1;
+    data_read(SHIP_CARD_BANK, ship_card_off[0], g_card_ram, SHIP_CARD_LEN);
+}
+#endif
+
 static void scene_video_enter(u8 cur) {
 #if defined(MAGTEST) || defined(HSTEST) || defined(S3TEST)
     u8 want = 5;   /* ★検証ROM: 起動シーン(bank31)も SCREEN5 */
 #else
     u8 want = (cur == SC_TITLE) ? 12 : 5;
+#endif
+#ifdef S3TEST
+    s3test_load_card();
 #endif
     if (want == g_vmode) return;
     g_vmode = want;
