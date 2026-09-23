@@ -106,7 +106,7 @@ static void draw_fine(void) {
     vdp_fill(16, 150, 224, 18, 0);
     vdp_text(20, 154, 11, 0, "FINE 256X212 DOT");
     vdp_text(2, 176, 15, 1, "SPACE:SCREEN5 - SCREEN3");
-    vdp_text(2, 188, 15, 1, "B:BENCH 64 FRAMES");
+    vdp_text(2, 188, 15, 1, "B:BENCH (3 SEC, BORDER RED)");
     vdp_text(2, 200, 14, 1, "UD:ZOOM LR:FINE-FAST");
     if (bad) vdp_text(2, 164, 9, 1, "WARN: HOT_RAM MOVED");
 }
@@ -125,6 +125,7 @@ static void draw_result(void) {
     vdp_text(2, 100, 15, 1, "XFER ONLY JIFFY"); num5(150, 100, bench_xfer);
     vdp_text(2, 112, 15, 1, "FPS X10");         num5(150, 112, xf10);
     vdp_text(2, 130, 14, 1, "1536 BYTE PER FRAME");
+    vdp_text(2, 174, 14, 1, "SCALED TO 64 FRAMES");
     vdp_text(2, 142, 14, 1, "JIFFY 60 PER SEC");
     vdp_text(2, 162, 12, 1, "SPACE:BACK TO SCREEN3");
 }
@@ -351,22 +352,30 @@ static void xfer_only(void) {
     __endasm;
 }
 
+/* ★計測は 16 フレーム×3本。64 フレーム×3本(=192 フレーム)にしていたときは turboR で
+   12 秒間まったく反応が無くなり、「フリーズした」と誤解された(実測 738 jiffy)。
+   加えて、計測中はボーダー(R#7)を赤くして「走っている」ことを見せる。 */
+#define BENCH_N 16
 static void bench(void) {
     volatile u16 *j = (volatile u16 *)0xFC9E;
     u16 t0;
     u8 i;
+    vdp_wreg(7, 0x08);            /* ボーダー=赤: 計測中 */
     inram = 0;
     t0 = *j;
-    for (i = 0; i < 64; i++) { ang++; frame(); }
-    bench_tick = (u16)(*j - t0);
+    for (i = 0; i < BENCH_N; i++) { ang++; frame(); }
+    bench_tick = (u16)((*j - t0) * (64 / BENCH_N));   /* 表示は従来どおり「64 フレーム相当」 */
+    vdp_wreg(7, 0x06);            /* ボーダー=濃い赤: 2本目 */
     inram = 1;
     t0 = *j;
-    for (i = 0; i < 64; i++) { ang++; frame(); }
-    g_s3_ram = (u16)(*j - t0);
+    for (i = 0; i < BENCH_N; i++) { ang++; frame(); }
+    g_s3_ram = (u16)((*j - t0) * (64 / BENCH_N));
+    vdp_wreg(7, 0x04);            /* ボーダー=青: 3本目 */
     inram = 0;
     t0 = *j;
-    for (i = 0; i < 64; i++) xfer_only();
-    bench_xfer = (u16)(*j - t0);
+    for (i = 0; i < BENCH_N; i++) xfer_only();
+    bench_xfer = (u16)((*j - t0) * (64 / BENCH_N));
+    vdp_wreg(7, 0x00);
 }
 
 static void s3test_init(void) {
