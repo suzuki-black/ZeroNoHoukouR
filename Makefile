@@ -489,6 +489,19 @@ ifdef HSTEST
   $(error MAGTEST と HSTEST は bank31 を共用するので同時に指定できない)
 endif
 endif
+# ── 検証: SCREEN5 → SCREEN3(マルチカラー 64x48)の動的切替と、SCREEN3 での全画面ロトズーム:
+#    make clean && make S3TEST=1
+ifdef S3TEST
+  DEFS          += -DS3TEST
+  BANK_IHX      += $(BUILD)/scene_s3test.ihx
+  ROMPACK_BANKS += --bank 31 $(BUILD)/scene_s3test.ihx   # ★空きバンクは 29(DEBUG_PROF)と 31 だけ。31 は検証ROMで共用(排他)
+ifdef HSTEST
+  $(error S3TEST と HSTEST は bank31 を共用するので同時に指定できない)
+endif
+ifdef MAGTEST
+  $(error S3TEST と MAGTEST は bank31 を共用するので同時に指定できない)
+endif
+endif
 # ── 実機検証: 走査線途中の 横スクロール(R#26/R#27) 切替テスト: make clean && make HSTEST=1
 ifdef HSTEST
   DEFS          += -DHSTEST
