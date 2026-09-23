@@ -8,14 +8,14 @@
 > **試作品（プロトタイプ・開発中）です。** フィードバックと実験のために公開しています。
 
 A single-player, vertically-scrolling shoot-'em-up for the **MSX turboR** (V9958 VDP · R800).
-It is the third game in the *Zero no Houkou* line — after *Zero no Houkou* and *Zero no Houkou Kai* —
-and the one built to answer a single question: **how far can the turboR be pushed?** Mid-bosses on
-every stage, a giant bomber as the final boss, a screen-filling mega-crash, a loop manoeuvre, raster
-tricks and palette-driven weather — all on an 8-bit home computer.
+It is the fourth in the *Zero no Houkou* line — after an untitled BASIC prototype, *Zero no Houkou*
+and *Zero no Houkou Kai* — and the one built to answer a single question: **how far can the turboR
+be pushed?** Mid-bosses on every stage, a giant bomber as the final boss, a screen-filling mega-crash,
+a loop manoeuvre, raster tricks and palette-driven weather — all on an 8-bit home computer.
 
-**Repository:** <https://github.com/suzuki-black/ZeroNoHoukouR> — currently private; it will be made
-public once ready. This game is the **successor to
+**Repository:** <https://github.com/suzuki-black/ZeroNoHoukouR>. This game is the **successor to
 [BattleshipProtoR](https://github.com/suzuki-black/BattleshipProtoR)** (*Zero no Houkou Kai*).
+The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/releases).
 
 <p align="center">
   <img src="docs/media/stage4_twins.png" width="300" alt="Stage 4 — the twin battleships">
@@ -125,6 +125,7 @@ openmsx -machine CBIOS_turboR -carta GAME.ROM -romtype ASCII8
 ```
 
 `GAME.ROM` also runs in [WebMSX](https://webmsx.org/) (drag-and-drop, turboR machine).
+A pre-built ROM is attached to each [release](https://github.com/suzuki-black/ZeroNoHoukouR/releases).
 
 ### Project structure
 ```
@@ -258,8 +259,8 @@ silhouettes may differ from the real thing.)
 - **ジャンル:** 1人用・縦スクロールシューティング。
 - **構成:** 全6面。1〜5面は画面カットの無い地続きの縦スクロールで、海（空戦）→ **中ボス** → 再び海
   → 敵の大型艦との戦い、と進みます。艦を**完全に撃破**するとクリア。6面は巨大爆撃機との一騎打ちです。
-- 本作は「零の咆哮」「零の咆哮 改」に続く3作目で、**「turboR をどこまで詰め込めるか」**を主題に
-  しています。
+- 本作は「零の咆哮」「零の咆哮 改」に続く作品（タイトルを付けなかった BASIC 版から数えて4作目）で、
+  **「turboR をどこまで詰め込めるか」**を主題にしています。
 
 ### 特徴
 - **全面に中ボス**。1体ずつ違う技で見せます:
@@ -319,6 +320,7 @@ openmsx -machine CBIOS_turboR -carta GAME.ROM -romtype ASCII8
 ```
 
 `GAME.ROM` は [WebMSX](https://webmsx.org/)（ドラッグ&ドロップ・turboR 機種）でも動作します。
+ビルド済みの ROM は[リリースページ](https://github.com/suzuki-black/ZeroNoHoukouR/releases)にも添付しています。
 
 ### ディレクトリ構成
 ```
