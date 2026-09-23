@@ -171,7 +171,11 @@ static void enter_s3(void) {
     vdp_data(150); vdp_data(40);  vdp_data(0); vdp_data(15);
     vdp_data(150); vdp_data(200); vdp_data(0); vdp_data(11);
     vdp_data(208);                                        /* Y=208 = 以降表示しない */
-    vdp_wreg(1, 0x60);         /* 画面 ON・VBLANK 割込み ON・スプライト 8x8・MAG=0 */
+    /* ★R#1 = 0x68: bit6 画面ON / bit5 VBLANK割込みON / **bit3 = M2 = 1(MULTI COLOUR)** /
+       bit1 SI=0(スプライト 8x8) / bit0 MAG=0。
+       ★ここで M2 を落とすと GRAPHIC1 になり、パターン表に正しく書けていても画面は一様に見える
+         (実際に 0x60 と書いて「灰色一色」になった。VRAM もレジスタも他は正しいので気づきにくい)。 */
+    vdp_wreg(1, 0x68);
 }
 
 static void enter_s5(void) {
