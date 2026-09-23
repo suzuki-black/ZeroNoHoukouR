@@ -1,39 +1,52 @@
-/* ovl_spin.c — 撃沈の直後、**いま出ている画面そのもの**を粗くして、きりもみしながら遠ざける。
+/* ovl_spin.c — 撃沈の直後、**戦艦を丸ごと**粗くして、きりもみしながら遠ざける。
    『A-JAX』の「戦艦撃破 → きりもみ急上昇」の絵。撃沈オーバレイ(OVL7)に同居する。
 
    ★仕掛け: V9938/V9958 に背景の拡大レジスタは無い(R#1 の MAG はスプライト専用)。
      だが SCREEN3(マルチカラー)は 1 ブロック = 4x4 ドットなので、モードを選ぶこと自体が
      「背景を 4 倍に拡大した状態」になる。全画面を毎フレーム書き換えてもパターン(色)テーブルの
      1,536B で済む(SCREEN5 の全画面 27,136B = 4 フレーム分に対して 1/18)。
-     画面の 4x4 ドットを 1 テクセルとして吸い出せば、切替の瞬間に変わるのは「粗さ」だけになる。
 
-   ★置き場: 元絵 64x64 と内側ループは hot_ram を借りる(演出中はゲームの RAM 実行コードを使わない)。
-     終わったら常駐側が hot_load() で戻す。番地は Makefile が範囲検査する。
-   ★内側ループは RAM 実行。ROM 実行だと 7fps しか出ない(turboR 実測 532 jiffy/64frame)。
+   ★元絵は「画面」ではなく**戦艦バッファ B(VRAM 528行〜, 256x496 = 艦の全長)**から取る。
+     画面(192行)だけを取ると、遠ざかったときに**切り取った長方形が回っているだけ**になり、
+     艦の船首・船尾が直線で切れて角が見える(ユーザー指摘)。B なら艦の全体が入る。
+     4 ドットを 1 テクセルにして 64x124 テクセル。1 テクセル = 1 ブロックなので、
+     切り替えた瞬間の見かけの大きさは画面と同じ＝つながる。
+   ★テクセルは 4bit 詰め(1 バイトに 2 つ)。64x128 で 4,096B に収める(RAM は hot_ram を借りる)。
+   ★艦の外側は「海のタイル 16x16」で埋める。これが無いと、遠ざかったときに元絵の縁が見える。
 
-   ★倍率の上限は 1 ブロック 3 テクセル。座標が 8.8 の 16bit なので、画面端で ±256 テクセルを
-     超えると折り返して元絵が何枚も出る(試作で踏んだ)。そこまで小さくしたら白で飛ばす。 */
+   ★置き場: 元絵(0xC600-0xD5FF)・海タイル(0xD600-0xD6FF)・内側ループ(0xD700-0xD7FF)は hot_ram を
+     借りる。終わったら常駐側が hot_load() で戻す。番地は Makefile が範囲検査する。
+   ★内側ループは RAM 実行。ROM 実行だと 7fps しか出ない(turboR 実測)。
+   ★倍率の上げすぎは禁物: 座標が 8.8 の 16bit なので、画面端で ±256 テクセルを超えると
+     折り返して元絵が何枚も出る(試作で踏んだ)。 */
 #include "types.h"
 #include "vdp.h"
 #include "raster.h"
 #include "hotcode.h"
 #include "overlay.h"
+#include "scroll.h"
+#include "aa_hot.h"        /* cam(縦スクロールカメラ=世界Y) */
 
-#define TEX_ADDR  0xC600     /* hot_ram の中の 256 境界(Makefile が hot_ram の範囲を検査する) */
+#define TEX_ADDR  0xC600   /* 64x128 テクセル(4bit詰め) = 4,096B。256 境界に置くこと */
 #define TEX       ((u8 *)TEX_ADDR)
-#define RAMF      ((u8 *)0xD600)   /* 内側ループの RAM 実行先(TEX の直後) */
+#define SEA_ADDR  0xD600   /* 海タイル 16x16(1B=1テクセル) = 256B。256 境界に置くこと */
+#define SEA       ((u8 *)SEA_ADDR)
+#define RAMF      ((u8 *)0xD700)   /* 内側ループの RAM 実行先 */
 
-#define S3_PAT   0x0000      /* SCREEN3 パターン(色)テーブル: 1,536B */
-#define S3_NAME  0x0800      /* 名前テーブル: 768B */
+#define TEX_H     124      /* 実際に絵が入っている行数(496 ドット / 4)。124..127 は海 */
+
+#define S3_PAT   0x0000    /* SCREEN3 パターン(色)テーブル: 1,536B */
+#define S3_NAME  0x0800    /* 名前テーブル: 768B */
 #define S3_SATR  0x1B00
 #define S3_SPAT  0x3800
 
-#define SCL_MAX  48          /* 1 ブロック 3 テクセル。これ以上は折り返して像が並ぶ */
-#define SEQ_END  52          /* 約 2.6 秒(RAM 実行 18fps 前提) */
+#define SCL_MAX  40        /* 1 ブロック 2.5 テクセル。これ以上は折り返して像が並ぶ */
+#define SEQ_END  56        /* 約 3 秒 */
 
 static u8  ang;
 static u16 scl;
 static u16 seq_t;
+static u16 cy;             /* 元絵のどの行を画面中央に置くか(8.8。艦の中心へ寄せていく) */
 /* 内側ループが読む値(asm から直接参照する) */
 static s16 sA, sC, sBA, sDC;
 static u16 u0, v0;
@@ -48,32 +61,68 @@ static const s8 cos64[64] = {
 static s8 cs(u8 a) { return cos64[a & 63]; }
 static s8 sn(u8 a) { return cos64[(u8)(a + 48) & 63]; }
 
-/* ───────── いま出ている SCREEN5 の画面を 64x48 テクセルへ(4x4 ドットを 1 つに) ─────────
-   ★縦スクロール(R#23=g_vscroll)ぶんずらして読む。リングは 256 行で回っている。
-   ★上下 8 行ぶんは海の斑で埋めて 64x64 にする(回したとき角が欠けないように)。 */
+__sfr __at(0x98) SPIN_DAT;    /* VRAM データ   */
+__sfr __at(0x99) SPIN_CTRL;   /* アドレス/レジスタ */
+
+/* ★VRAM の 行512 以降は バイト番地が 0x10000 を超える。常駐の vdp_read_addr(u16) では
+   届かず、下位16bitだけが効いて**画面(page0)を読んでしまう**(実際に踏んだ: 艦の代わりに
+   HUD と甲板が混ざった絵になった)。ここは A16 を含めて自分で設定する。 */
+static void read_row(u16 row) {
+    /* ★R#14 は A14-A16(=16KB 単位)。下位のラッチは 14bit しか無い。
+       1 行 128B なので A14-16 = row>>7、ラッチ = (row & 127) * 128。
+       ここを row>>9 / (row&511)*128 と書いて 16KB 単位を取り違え、
+       **開始カードの絵を 128 行ごとに 4 回読む**という結果になった(実際に踏んだ)。 */
+    u8  a16 = (u8)(row >> 7);
+    u16 lo  = (u16)((row & 127) << 7);
+    __asm di __endasm;
+    SPIN_CTRL = (u8)(a16 & 7);   SPIN_CTRL = 0x80 | 14;
+    SPIN_CTRL = (u8)(lo & 0xFF); SPIN_CTRL = (u8)((lo >> 8) & 0x3F);
+    __asm ei __endasm;
+}
+#define spin_read() SPIN_DAT
+
+/* ───────── 戦艦バッファ B(256x496)を 64x124 テクセル(4bit詰め)へ ─────────
+   VRAM の 1 行は 128B(1B=2 ドット)。4 ドットおき＝2 バイトおきに上位ニブルを拾う。
+   ついでに左端(海しか無い)から 16x16 の海タイルを作る。 */
 static void grab(void) {
     u8 ty, tx;
-    for (ty = 0; ty < 64; ty++) {
-        u8 *d = &TEX[(u16)ty << 6];
-        if (ty < 8 || ty >= 56) {
-            for (tx = 0; tx < 64; tx++) d[tx] = (u8)(((tx ^ ty) & 3) ? 1 : 2);
+    /* ★海のタイルは海テンプレート(VRAM 512行〜, 16px)から取る。艦バッファの端から取ると
+       船首の絵を「海」として撒いてしまい、背景が縞になる(実際に踏んだ)。 */
+    for (ty = 0; ty < 16; ty++) {
+        read_row((u16)(SC_SEATMPL_Y + ty));
+        for (tx = 0; tx < 8; tx++) {
+            u8 a = spin_read(), b = spin_read();
+            SEA[((u16)ty << 4) | (u8)(tx << 1)]       = (u8)(a >> 4);
+            SEA[((u16)ty << 4) | (u8)((tx << 1) + 1)] = (u8)(b >> 4);
+        }
+    }
+    for (ty = 0; ty < 128; ty++) {
+        u8 *d = &TEX[(u16)ty << 5];            /* 1 行 32B(64 テクセル) */
+        if (ty >= TEX_H) {                     /* 絵の下の余り: 海タイルで埋める */
+            for (tx = 0; tx < 32; tx++) d[tx] = (u8)((SEA[((ty & 15) << 4) | ((tx << 1) & 15)] << 4)
+                                                    | SEA[((ty & 15) << 4) | (((tx << 1) + 1) & 15)]);
             continue;
         }
-        {
-            u8 row = (u8)(g_vscroll + (u8)((ty - 8) << 2));   /* 画面の 4 行ごと */
-            vdp_read_addr((u16)((u16)row << 7));              /* SCREEN5: 1 行 128B */
-            for (tx = 0; tx < 64; tx++) {
-                u8 b = vdp_read_data();                        /* 偶数ドット = 上位ニブル */
-                (void)vdp_read_data();                         /* 4 ドットおき＝1 バイト飛ばす */
-                d[tx] = (u8)(b >> 4);
-            }
+        read_row((u16)(SC_SHIPBUF_Y + (u16)ty * 4));
+        for (tx = 0; tx < 32; tx++) {
+            u8 a, b, l, r;
+            a = spin_read(); (void)spin_read();   /* 偶数テクセル(4 ドットおき) */
+            b = spin_read(); (void)spin_read();   /* 奇数テクセル */
+            l = (u8)(a >> 4);
+            r = (u8)(b >> 4);
+            /* ★B は「艦の絵＋色0(透明)の背景」。色0 のままだと黒い帯が回ってしまうので、
+               背景は海のタイルで埋める(撃沈の演出では B を透明コピーで海へ重ねている)。 */
+            if (!l) l = SEA[((u16)(ty & 15) << 4) | (u8)((tx << 1) & 15)];
+            if (!r) r = SEA[((u16)(ty & 15) << 4) | (u8)(((tx << 1) + 1) & 15)];
+            d[tx] = (u8)((l << 4) | r);
         }
     }
 }
 
 /* ───────── 1 帯(縦8ブロック=8バイト)を作って VDP へ直接流す ─────────
-   ★テクセル番地(TEX は 256 境界): 上位 = >TEX + ((v>>8)&63)>>2 / 下位 = (((v>>8)&3)<<6) + ((u>>8)&63)
-   ★元絵の外(整数部に bit6/7)は海の斑にする。無いと遠ざかったときに元絵が何枚も並ぶ。
+   ★テクセル番地(TEX は 256 境界・1 行 32B): 上位 = >TEX + (v>>3) / 下位 = ((v&7)<<5) + (u>>1)
+     ニブルは u の偶奇で選ぶ。
+   ★元絵の外(u が 64 以上 / v が 128 以上)は海タイル(SEA, 16x16)へ落とす。
    ★相対ジャンプだけで書く(そのまま hot_ram へ写して RAM 実行するため)。折り返しは中継を経由。
    ★OTIR は使わない(R800 では VDP に速すぎる＝既知の地雷)。 */
 static void strip(void) __naked {
@@ -83,37 +132,58 @@ static void strip(void) __naked {
         ld   a, #8
         ld   (_cnt), a
     sp_loop:
+        ;; ---- 左ブロックのテクセル ----
         ld   a, d
-        or   h
+        and  #0x80
+        jr   nz, sp_sea1
+        ld   a, h
         and  #0xC0
         jr   nz, sp_sea1
         ld   a, d
-        and  #63
-        ld   c, a
-        srl  a
-        srl  a
+        rrca
+        rrca
+        rrca
+        and  #0x0F
         add  a, #0xC6
         ld   b, a
-        ld   a, c
-        and  #3
-        rrca
-        rrca
+        ld   a, d
+        and  #7
+        rlca
+        rlca
+        rlca
+        rlca
+        rlca
         ld   c, a
         ld   a, h
-        and  #63
+        srl  a
         add  a, c
         ld   c, a
         ld   a, (bc)
+        bit  0, h
+        jr   z, sp_hi1
+        and  #0x0F
+        jr   sp_got1
+    sp_hi1:
+        rrca
+        rrca
+        rrca
+        rrca
+        and  #0x0F
         jr   sp_got1
     sp_sea1:
+        ld   a, d
+        and  #15
+        rlca
+        rlca
+        rlca
+        rlca
+        ld   c, a
         ld   a, h
-        xor  d
-        and  #3
-        jr   z, sp_sea1b
-        ld   a, #1
-        jr   sp_got1
-    sp_sea1b:
-        ld   a, #2
+        and  #15
+        add  a, c
+        ld   c, a
+        ld   b, #0xD6
+        ld   a, (bc)
     sp_got1:
         rlca
         rlca
@@ -121,6 +191,7 @@ static void strip(void) __naked {
         rlca
         and  #0xF0
         ld   (_nib), a
+        ;; ---- 1 ブロック右へ ----
         ld   bc, (_sA)
         add  hl, bc
         ex   de, hl
@@ -131,43 +202,65 @@ static void strip(void) __naked {
     sp_tramp:
         jr   sp_loop
     sp_over:
+        ;; ---- 右ブロックのテクセル ----
         ld   a, d
-        or   h
+        and  #0x80
+        jr   nz, sp_sea2
+        ld   a, h
         and  #0xC0
         jr   nz, sp_sea2
         ld   a, d
-        and  #63
-        ld   c, a
-        srl  a
-        srl  a
+        rrca
+        rrca
+        rrca
+        and  #0x0F
         add  a, #0xC6
         ld   b, a
-        ld   a, c
-        and  #3
-        rrca
-        rrca
+        ld   a, d
+        and  #7
+        rlca
+        rlca
+        rlca
+        rlca
+        rlca
         ld   c, a
         ld   a, h
-        and  #63
+        srl  a
         add  a, c
         ld   c, a
         ld   a, (bc)
+        bit  0, h
+        jr   z, sp_hi2
+        and  #0x0F
+        jr   sp_got2
+    sp_hi2:
+        rrca
+        rrca
+        rrca
+        rrca
+        and  #0x0F
         jr   sp_got2
     sp_sea2:
+        ld   a, d
+        and  #15
+        rlca
+        rlca
+        rlca
+        rlca
+        ld   c, a
         ld   a, h
-        xor  d
-        and  #3
-        jr   z, sp_sea2b
-        ld   a, #1
-        jr   sp_got2
-    sp_sea2b:
-        ld   a, #2
+        and  #15
+        add  a, c
+        ld   c, a
+        ld   b, #0xD6
+        ld   a, (bc)
     sp_got2:
         and  #0x0F
         ld   b, a
         ld   a, (_nib)
         or   b
         out  (0x98), a
+        ;; ---- 次の行へ(右へ出た分を差し引いて1つ下) ----
         ld   bc, (_sBA)
         add  hl, bc
         ex   de, hl
@@ -196,8 +289,9 @@ static void frame(void) {
     s16 U0, V0;
     sA = A; sC = C;
     sBA = (s16)(-C - A); sDC = (s16)(A - C);
-    U0 = (s16)(0x2000 - (s16)(32 * A) - (s16)(24 * B));   /* 画面中央が元絵の中央に来る＝中心で回る */
-    V0 = (s16)(0x2000 - (s16)(32 * C) - (s16)(24 * D));
+    /* 画面中央(ブロック 32,24)を元絵の (32, cy) に合わせる＝そこを中心に回る */
+    U0 = (s16)(0x2000 - (s16)(32 * A) - (s16)(24 * B));
+    V0 = (s16)((s16)cy - (s16)(32 * C) - (s16)(24 * D));
     vdp_write_addr(S3_PAT);
     for (g = 0; g < 6; g++) {
         u16 gu = (u16)(U0 + (s16)(g << 3) * B);
@@ -240,14 +334,18 @@ static void enter_s3(void) {
 
 /* 撃沈の直後に常駐から呼ばれる(OVL_SLOT_SPIN)。戻るまで数秒ここに居る。 */
 void ovl_spin(void) {
-    u16 k;
+    u16 k, cy0, cy1;
     const u8 *s = (const u8 *)strip;
     u16 len = (u16)((const u8 *)strip_end - s);
-    grab();                                   /* いまの画面を吸い出してから */
-    if (len > 512) return;                    /* 枠に入らない＝やらない(安全側) */
+    if (len > 256) return;                    /* 枠に入らない＝やらない(安全側) */
+    grab();                                   /* 戦艦バッファ B(艦の全長)を吸い出す */
     for (k = 0; k < len; k++) RAMF[k] = s[k]; /* 内側ループを RAM へ(ROM 実行では 7fps) */
     stripr = (void (*)(void))RAMF;
-    ang = 0; scl = 16; seq_t = 0;
+    /* 始まりは「いま画面に見えている場所」。B の行 = 世界Y - BOW_Y なので、画面中央の世界Y
+       (cam+106)に対応する元絵の行は (cam + 106 - 32) / 4。そこから艦の中心(行62)へ寄せていく。 */
+    cy0 = (u16)((u16)(((cam + 74) >> 2) & 127) << 8);
+    cy1 = (u16)(62 << 8);
+    ang = 0; scl = 16; seq_t = 0; cy = cy0;
     enter_s3();
     while (seq_t <= SEQ_END) {
         u16 t = seq_t++;
@@ -256,6 +354,8 @@ void ovl_spin(void) {
             u16 d = (u16)(t - 8);
             u16 v = (u16)(16 + (u16)((d * d) >> 3));
             scl = (v > SCL_MAX) ? SCL_MAX : v;
+            /* 遠ざかりながら、画面の中心を艦の中心へ寄せる(全体が入ってくる) */
+            if (t < 40) cy = (u16)(cy + (u16)(((s16)cy1 - (s16)cy0) / 32));
         }
         frame();
         vdp_wait_frame();
