@@ -19,7 +19,12 @@
 #define BGM_KEEP 0xFF
 #define BGM_OFF  0xFE
 static const u8 scene_bgm[SC_COUNT] = {
+#if defined(MAGTEST) || defined(HSTEST) || defined(S3TEST)
+    /* SC_TITLE  */ BGM_OFF,   /* ★検証ROM: 起動シーンを差し替えているので曲は鳴らさない
+                                  (タイトル曲が延々と鳴り続けて検証の邪魔になる) */
+#else
     /* SC_TITLE  */ 0,         /* タイトル曲 */
+#endif
     /* SC_CONFIG */ BGM_KEEP,  /* タイトル曲を継続 */
     /* SC_STAGE  */ BGM_OFF,   /* 入場時は無音: 開始カードでファンファーレのみ→stage_introがメインBGMを開始 */
     /* SC_ENDING */ 2,         /* 静かなED曲(track2) */
