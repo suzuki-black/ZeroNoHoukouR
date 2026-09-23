@@ -318,10 +318,11 @@ ROMPACK_BANKS += --asset 32 $(BUILD)/boss_vram.bin --asset 40 $(BUILD)/boss_vram
 
 # 撃沈シーンのオーバレイ: 撃破の瞬間に通常面のものと入れ替える。パレット(面の天候つき)は同じソースを別名で入れる。
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
-OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel
-$(BUILD)/ovl7.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
+OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel $(BUILD)/ovl_spin.rel
+$(BUILD)/ovl7.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(SRC)/banked/ovl_spin.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_SINK $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl7_palette.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_sink.c -o $(BUILD)/ovl_sink.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_spin.c -o $(BUILD)/ovl_spin.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead7.rel $(OVL7_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead7.rel: $(SRC)/banked/ovlhead7.s | $(BUILD)
@@ -334,7 +335,13 @@ $(BUILD)/ovl7.bin: $(BUILD)/ovl7.ihx tools/ihx2bin.mjs
 	 fi; \
 	 echo "  ovl7.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"; \
 	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl7.map | head -1); \
-	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl7 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl7 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi; \
+	 HR=$$(sed -n 's/^ *\([0-9A-F]\{8\}\)  *_hot_ram .*/\1/p' $(BUILD)/rom.map | head -1); \
+	 HRD=$$((16#$$HR)); \
+	 if [ $$HRD -gt 50688 ] || [ $$((HRD+5696)) -lt 55296 ]; then \
+	   echo "ERROR: ovl_spin は hot_ram の 0xC600-0xD7FF(元絵＋RAM実行)を借りる。hot_ram=0x$$HR では収まらない"; exit 3; \
+	 fi; \
+	 echo "  ovl_spin: hot_ram=0x$$HR / 0xC600-0xD7FF を借りる OK"
 ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
 
 # 中ボス用オーバレイ: 通常面のオーバレイから主砲の弾幕を抜き、中ボスを足す。海の区間で出現の瞬間に入れ替え、戦艦の前に戻す。
@@ -488,6 +495,10 @@ ifdef MAGTEST
 ifdef HSTEST
   $(error MAGTEST と HSTEST は bank31 を共用するので同時に指定できない)
 endif
+endif
+# ── 検証: 撃沈の「きりもみ」をゲーム中に M で試す: make clean && make SPINTEST=1
+ifdef SPINTEST
+  DEFS += -DSPINTEST
 endif
 # ── 検証: SCREEN5 → SCREEN3(マルチカラー 64x48)の動的切替と、SCREEN3 での全画面ロトズーム:
 #    make clean && make S3TEST=1

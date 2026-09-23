@@ -59,6 +59,9 @@
 /* 22〜 は中ボスのオーバレイ(OVL8_BANK, ovlhead8.s)だけが持つ。出現の瞬間に読み込む(midboss.h) */
 #define OVL_SLOT_MB_INIT        22
 #define OVL_SLOT_MB_FRAME       23
+/* ★撃沈の「きりもみ」は slot22 を借りる(ovlhead7 では中ボスの init が空き。撃沈中に中ボスは出ない)。
+   スロットを増やすと全オーバレイの表が 3B ずつ伸び、残り 1B だった ovl9 が溢れるため。 */
+#define OVL_SLOT_SPIN           OVL_SLOT_MB_INIT
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -83,6 +86,7 @@ u8   shock_build(u8 split_line);           /* 衝撃波: g_ras[] を組み立て
 void rot_zoom(u8 k);                       /* 宙返り: 焼いたコマ(bank19)をHMMMでパターン表へ＋2×2合成(k=0..15) */
 void sink_init(void);                      /* 撃沈シーン(OVL7): 状態を決め直す */
 u8   sink_frame(void);                     /* 撃沈シーン(OVL7): 1フレーム。戻り 1=終わった */
+void spin_away(void);                      /* 撃沈シーン(OVL7): 画面を粗くしてきりもみ(数秒ブロックする) */
 void power_frame(void);                    /* パワーアップ: 銀の敵機が落ちたら増槽を出し、自機が触れたら段階を上げる */
 void mb_init(void);                        /* 中ボス(OVL8): 状態を決め直す */
 void mb_frame(void);                       /* 中ボス(OVL8): 1フレーム。終わったら g_mb=MB_RESTORE */

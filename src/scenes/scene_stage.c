@@ -907,6 +907,17 @@ static u8 defeat_update(void) {
     ent_draw_all();
     if (done) {
         g_rumble_lv = 0;
+        /* ★撃沈の直後: いまの画面を粗く(SCREEN3)して、きりもみしながら遠ざける(A-JAX の絵)。
+           元絵と内側ループは hot_ram を借りるので、終わったら hot_load() で戻す。
+           SCREEN5 への復帰は結果画面の前にここで行う(CHGMOD は VRAM を広く消す)。 */
+        if (g_ovl_ok) {
+            ramx_use_ram();          /* ★オーバレイは page2=RAM の文脈でしか呼べない */
+            spin_away();
+            ramx_use_cart();
+            hot_load();              /* きりもみが hot_ram を借りたので戻す */
+            vdp_screen5();
+            vdp_palette_game();
+        }
         results_and_fanfare();
         if (curstage + 1 < STAGE_TOTAL) {   /* 次の面へ(スコア/残機は持ち越し)。5面の次が最終面 */
             curstage++;
@@ -921,8 +932,29 @@ static u8 defeat_update(void) {
 static u8 vcnt;   /* 縦スクロール速度の位相(5コマ周期)。phase0=ゆっくり / phase1=高速(蛇行)。 */
 #define SEA0_DIV 3    /* phase0(海モード)で海うねりを塗る間隔(3=3フレームに1回)。実機turboRに合わせ微調整可。 */
 static u8 seatick;    /* phase0 海間引き用カウンタ。 */
+#ifdef SPINTEST
+/* ★検証用(make clean && make SPINTEST=1): この 1 バイトに 1 を書くと、その場で撃沈後の
+   「きりもみ」を実行する(エミュレータから叩いて確かめるため。通常 ROM には入らない)。 */
+u8 g_spin_dbg;
+#endif
+
 u8 stage_update(void) {
     u8 vstep;
+#ifdef SPINTEST
+    if (g_spin_dbg) {
+        g_spin_dbg = 0;
+        ramx_use_cart();
+        overlay_load(OVL7_BANK);     /* overlay_load は page2=cart の文脈で呼ぶ */
+        ramx_use_ram();
+        spin_away();
+        ramx_use_cart();
+        overlay_load(OVL_BANK);
+        hot_load();
+        vdp_screen5();
+        vdp_palette_game();
+        return SC_TITLE;              /* 演出を見たらタイトルへ(画面は描き直さない) */
+    }
+#endif
     if (g_view) { g_view = 0; return SC_TITLE; }   /* ★ビューア表示(カード/結果)はstage_initで完結→タイトルへ戻る */
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
     /* ★メガクラッシュ(設計メモ §4-1「安い出力で最大の爽快」)。Bボタンで発動。
