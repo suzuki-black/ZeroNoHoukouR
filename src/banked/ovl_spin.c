@@ -334,18 +334,19 @@ static void enter_s3(void) {
 
 /* 撃沈の直後に常駐から呼ばれる(OVL_SLOT_SPIN)。戻るまで数秒ここに居る。 */
 void ovl_spin(void) {
-    u16 k, cy0, cy1;
+    u16 k;
     const u8 *s = (const u8 *)strip;
     u16 len = (u16)((const u8 *)strip_end - s);
     if (len > 256) return;                    /* 枠に入らない＝やらない(安全側) */
     grab();                                   /* 戦艦バッファ B(艦の全長)を吸い出す */
     for (k = 0; k < len; k++) RAMF[k] = s[k]; /* 内側ループを RAM へ(ROM 実行では 7fps) */
     stripr = (void (*)(void))RAMF;
-    /* 始まりは「いま画面に見えている場所」。B の行 = 世界Y - BOW_Y なので、画面中央の世界Y
-       (cam+106)に対応する元絵の行は (cam + 106 - 32) / 4。そこから艦の中心(行62)へ寄せていく。 */
-    cy0 = (u16)((u16)(((cam + 74) >> 2) & 127) << 8);
-    cy1 = (u16)(62 << 8);
-    ang = 0; scl = 16; seq_t = 0; cy = cy0;
+    /* ★回転の中心は**いま画面に見えている中心**のまま動かさない。艦の中心へ寄せると
+       「別の場所へカメラが飛んでから回る」ことになり、撃沈の画面との繋がりが切れる(ユーザー指摘)。
+       B の行 = 世界Y - BOW_Y なので、画面中央の世界Y(cam+106)に対応する元絵の行は
+       (cam + 106 - 32) / 4。画面の外側は B の続き(艦の残り)と海タイルが埋める。 */
+    cy = (u16)((u16)(((cam + 74) >> 2) & 127) << 8);
+    ang = 0; scl = 16; seq_t = 0;
     enter_s3();
     while (seq_t <= SEQ_END) {
         u16 t = seq_t++;
@@ -354,8 +355,6 @@ void ovl_spin(void) {
             u16 d = (u16)(t - 8);
             u16 v = (u16)(16 + (u16)((d * d) >> 3));
             scl = (v > SCL_MAX) ? SCL_MAX : v;
-            /* 遠ざかりながら、画面の中心を艦の中心へ寄せる(全体が入ってくる) */
-            if (t < 40) cy = (u16)(cy + (u16)(((s16)cy1 - (s16)cy0) / 32));
         }
         frame();
         vdp_wait_frame();
