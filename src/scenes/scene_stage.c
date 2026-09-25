@@ -898,7 +898,7 @@ static void results_and_fanfare(void) {
 #define DFX_SPIN 1
 #define DFX_PART 2
 static const u8 defeat_fx[5] = {
-    /* 1面 */ DFX_PART,   /* 火の粉と破片(ovl_part)。噴き口が艦の上の中心から下の中心へ下りる */
+    /* 1面 */ DFX_SINK,   /* ★火の粉(DFX_PART)は調整中。見られる状態になるまで従来の沈没にしておく */
     /* 2面 */ DFX_SINK,
     /* 3面 */ DFX_SPIN,
     /* 4面 */ DFX_SINK,
