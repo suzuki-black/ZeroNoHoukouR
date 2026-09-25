@@ -888,10 +888,29 @@ static void results_and_fanfare(void) {
 
 /* 撃破演出。★オーバレイが使える機械では撃沈シーン(ovl_sink.c: 誘爆→船尾から水没→静まる)。
    使えない機械では旧来の炎上(艦上へ爆発を降らせる＋轟音)を尺が尽きるまで。 */
+/* ★撃沈の絵は面ごとに別のものにする(ユーザー方針)。もともと「船尾から沈む」が 1〜5 面
+   すべてに入っていたが、それは 1 つの持ち札として 1 面に割り当て、他の面には別の絵を置く。
+     DFX_SINK … 船尾から沈む(既存の撃沈オーバレイ)
+     DFX_SPIN … 画面を粗くしてきりもみしながら遠ざかる(SCREEN3 のロトズーム)
+     DFX_PART … 火の粉と破片のパーティクル(未実装。当面は SINK で代替)
+   ★未実装のものは SINK にしてあるので、割り当てを変えるのはこの表 1 行で済む。 */
+#define DFX_SINK 0
+#define DFX_SPIN 1
+#define DFX_PART 2
+static const u8 defeat_fx[5] = {
+    /* 1面 */ DFX_SINK,   /* ←パーティクルを実装したらここを DFX_PART にする */
+    /* 2面 */ DFX_SINK,
+    /* 3面 */ DFX_SPIN,
+    /* 4面 */ DFX_SINK,
+    /* 5面 */ DFX_SINK,
+};
+static u8 defeat_kind(void) { return (curstage < 5) ? defeat_fx[curstage] : DFX_SINK; }
+
 static u8 defeat_update(void) {
     u8 done;
+    u8 fx = defeat_kind();
     scroll_to(cam);                     /* 表示維持(cam凍結) */
-    if (g_ovl_ok) {
+    if (g_ovl_ok && fx == DFX_SINK) {
         ramx_use_ram();
         done = sink_frame();            /* 揺れ/爆発/水没/スクロール/パレット。★炎の描き直しより先(沈んだ炎を表から外す) */
         ramx_use_cart();
@@ -910,7 +929,7 @@ static u8 defeat_update(void) {
         /* ★撃沈の直後: いまの画面を粗く(SCREEN3)して、きりもみしながら遠ざける(A-JAX の絵)。
            元絵と内側ループは hot_ram を借りるので、終わったら hot_load() で戻す。
            SCREEN5 への復帰は結果画面の前にここで行う(CHGMOD は VRAM を広く消す)。 */
-        if (g_ovl_ok) {
+        if (g_ovl_ok && fx == DFX_SPIN) {
             ramx_use_ram();          /* ★オーバレイは page2=RAM の文脈でしか呼べない */
             spin_away();
             ramx_use_cart();
