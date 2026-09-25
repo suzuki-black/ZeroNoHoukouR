@@ -281,24 +281,40 @@ static u8  dbx[DEB_N], dby[DEB_N];      /* 画面座標(ドット) */
 static s8  dvx[DEB_N], dvy[DEB_N];
 static u8  dlive[DEB_N];
 
-/* 16x16 の破片(4 つの 8x8 パターン = 32 バイト)。左上/左下/右上/右下の順。 */
-static const u8 deb_pat[2][32] = {
-    {   /* 大きめの塊 */
-        0x00,0x0E,0x1F,0x3F,0x7F,0x7F,0x3F,0x1F,   0x1E,0x3E,0x7C,0x78,0x70,0x60,0x40,0x00,
-        0x00,0x70,0xF8,0xFC,0xFE,0xFE,0xFC,0xF8,   0xF0,0xE0,0xC0,0x80,0x00,0x00,0x00,0x00 },
-    {   /* 細かい破片 */
-        0x00,0x00,0x06,0x0F,0x1F,0x0E,0x04,0x00,   0x00,0x0C,0x1E,0x1C,0x08,0x00,0x00,0x00,
-        0x00,0x00,0x60,0xF0,0xF8,0x70,0x20,0x00,   0x00,0x30,0x78,0x38,0x10,0x00,0x00,0x00 },
+/* 16x16 の破片(4 つの 8x8 パターン = 32 バイト)。左上/左下/右上/右下の順。
+   ★スプライトは「行ごとに色を変えられる」(モード2の色表)。単色だと台無しなので、
+     部品らしく見えるよう 3 種類 × 行ごとの色で作る(ユーザー指摘)。 */
+static const u8 deb_pat[3][32] = {
+    {   /* 砲塔らしい塊(丸い上部＋角ばった土台) */
+        0x03,0x0F,0x1F,0x3F,0x3F,0x7F,0x7F,0x7F,   0x7F,0x7F,0x3F,0x3F,0x1F,0x1F,0x0F,0x06,
+        0xC0,0xF0,0xF8,0xFC,0xFC,0xFE,0xFE,0xFE,   0xFE,0xFE,0xFC,0xFC,0xF8,0xF8,0xF0,0x60 },
+    {   /* 甲板の板きれ(細長い) */
+        0x00,0x00,0x3F,0x7F,0x7F,0x3F,0x00,0x00,   0x00,0x00,0x1F,0x3F,0x3F,0x1F,0x00,0x00,
+        0x00,0x00,0xFC,0xFE,0xFE,0xFC,0x00,0x00,   0x00,0x00,0xF0,0xF8,0xF8,0xF0,0x00,0x00 },
+    {   /* ぎざぎざの破片 */
+        0x00,0x04,0x0E,0x1F,0x1E,0x0C,0x04,0x00,   0x00,0x06,0x0F,0x0E,0x04,0x00,0x00,0x00,
+        0x00,0x20,0x70,0xF8,0x78,0x30,0x20,0x00,   0x00,0x60,0xF0,0x70,0x20,0x00,0x00,0x00 },
+};
+
+/* 行ごとの色(16 行)。上から下へ色が変わることで立体感と「燃えている感じ」を出す。 */
+static const u8 deb_col[3][16] = {
+    /* 砲塔: 上は淡灰のハイライト → 中灰 → 暗い土台 */
+    { 14,14, 5, 5, 4, 4, 4, 5,  5, 4, 4,13,13,13,13,13 },
+    /* 板きれ: 木甲板の色 → オリーブ(舷側) */
+    {  6, 6, 6, 6, 9, 9, 9, 9,  6, 6, 6, 9, 9, 9,13,13 },
+    /* 燃えている破片: 白 → 橙 → 赤 */
+    { 15,15,12,12,12,12,11,11, 12,12,11,11,11,13,13,13 },
 };
 
 static void deb_init(void) {
     u8 i;
     vdp_sprite_init();
-    vdp_sprite_pattern(0, deb_pat[0]);
-    vdp_sprite_pattern(4, deb_pat[1]);        /* 16x16 は 4 枚単位 */
+    vdp_sprite_pattern(0, deb_pat[0]);        /* 16x16 は 4 枚単位(0,4,8) */
+    vdp_sprite_pattern(4, deb_pat[1]);
+    vdp_sprite_pattern(8, deb_pat[2]);
     for (i = 0; i < DEB_N; i++) {
         dlive[i] = 0;
-        vdp_sprite_color(i, (u8)((i & 1) ? 4 : 12));   /* 灰 と 橙 */
+        vdp_sprite_color_tab(i, deb_col[i % 3]);   /* ★行ごとに色を変える(単色にしない) */
     }
     vdp_sprite_hide_from(0);
 }
@@ -333,7 +349,7 @@ static void deb_step(void) {
             if (nx < 2 || nx > 248 || ny > 205) { dlive[i] = 0; vdp_sprite_pos(i, 0, 216, 0); continue; }
             if (ny < 0) ny = 0;
             dbx[i] = (u8)nx; dby[i] = (u8)ny;
-            vdp_sprite_pos(i, dbx[i], dby[i], (u8)((i & 1) ? 4 : 0));
+            vdp_sprite_pos(i, dbx[i], dby[i], (u8)((i % 3) * 4));   /* 形は色表と対にする */
         }
     }
 }
@@ -393,13 +409,17 @@ void ovl_part(void) {
     vdp_palette_game();
     for (t = 0; t < SEQ_END; t++) {
         if (t < SEQ_FALL) {
-            u8 ny = (u8)(((u16)t * 196) / SEQ_FALL);
+            u8 ny = (u8)(((u16)t * 212) / SEQ_FALL);   /* ★表示は 212 行。196 で止めると下に艦が残る */
             while (emit_y < ny) { erase_row(emit_y); emit_y++; }
             vdp_cmd_wait();   /* ★コピー(VDPコマンド)の完了を待つ。実行中に VRAM を直接叩くと
                                  書込みが化ける(粒が VRAM には在るのに画面に出ない状態になっていた) */
             emit((u8)((t < 12) ? 28 : 16));           /* 最初にどっと噴き、以降も絶やさない */
             deb_spawn();                              /* 破片(スプライト)も出す */
             if (t < 12) deb_spawn();
+        }
+        if (t == SEQ_FALL) {                       /* 取りこぼしが無いよう最後に全行を掃く */
+            while (emit_y < 212) { erase_row(emit_y); emit_y++; }
+            vdp_cmd_wait();
         }
         stepr();
         deb_step();
