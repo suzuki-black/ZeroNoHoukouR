@@ -19,7 +19,7 @@
 #define BGM_KEEP 0xFF
 #define BGM_OFF  0xFE
 static const u8 scene_bgm[SC_COUNT] = {
-#if defined(MAGTEST) || defined(HSTEST) || defined(S3TEST)
+#if defined(MAGTEST) || defined(HSTEST) || defined(S3TEST) || defined(PARTTEST)
     /* SC_TITLE  */ BGM_OFF,   /* ★検証ROM: 起動シーンを差し替えているので曲は鳴らさない
                                   (タイトル曲が延々と鳴り続けて検証の邪魔になる) */
 #else
@@ -57,7 +57,7 @@ static void s3test_load_card(void) {
 #endif
 
 static void scene_video_enter(u8 cur) {
-#if defined(MAGTEST) || defined(HSTEST) || defined(S3TEST)
+#if defined(MAGTEST) || defined(HSTEST) || defined(S3TEST) || defined(PARTTEST)
     u8 want = 5;   /* ★検証ROM: 起動シーン(bank31)も SCREEN5 */
 #else
     u8 want = (cur == SC_TITLE) ? 12 : 5;
@@ -88,6 +88,8 @@ static const Scene registry[SC_COUNT] = {
     /* SC_TITLE  */ { 0,          0,           31 },   /* ★検証ROM: 横スクロール分割テスト(scene_hstest, bank31) */
 #elif defined(S3TEST)
     /* SC_TITLE  */ { 0,          0,           31 },   /* ★検証ROM: SCREEN3 ロトズームテスト(scene_s3test, bank31) */
+#elif defined(PARTTEST)
+    /* SC_TITLE  */ { 0,          0,           31 },   /* ★検証ROM: SCREEN3 パーティクルテスト(scene_parttest, bank31) */
 
 #else
     /* SC_TITLE  */ { 0,          0,            5 },   /* 冷たいシーン: bank5(bcall)。起動シーン */

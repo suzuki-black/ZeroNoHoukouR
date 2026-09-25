@@ -496,6 +496,21 @@ ifdef HSTEST
   $(error MAGTEST と HSTEST は bank31 を共用するので同時に指定できない)
 endif
 endif
+# ── 検証: SCREEN3 でパーティクルを何粒飛ばせるか: make clean && make PARTTEST=1
+ifdef PARTTEST
+  DEFS          += -DPARTTEST
+  BANK_IHX      += $(BUILD)/scene_parttest.ihx
+  ROMPACK_BANKS += --bank 31 $(BUILD)/scene_parttest.ihx   # ★bank31 は検証ROMで共用(排他)
+ifdef S3TEST
+  $(error PARTTEST と S3TEST は bank31 を共用するので同時に指定できない)
+endif
+ifdef HSTEST
+  $(error PARTTEST と HSTEST は bank31 を共用するので同時に指定できない)
+endif
+ifdef MAGTEST
+  $(error PARTTEST と MAGTEST は bank31 を共用するので同時に指定できない)
+endif
+endif
 # ── 検証: 撃沈の「きりもみ」をゲーム中に M で試す: make clean && make SPINTEST=1
 ifdef SPINTEST
   DEFS += -DSPINTEST
