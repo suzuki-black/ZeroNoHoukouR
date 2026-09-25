@@ -58,47 +58,56 @@ static void spawn(void) {
     u8 *p = PRT;
     for (i = 0; i < PRT_MAX; i++) {
         u16 r = rnd16();
-        p[0] = (u8)(r & 0xFF);            /* x 小数 */
-        p[1] = (u8)(28 + (r >> 13));      /* x ブロック(中央付近) */
-        p[2] = (u8)(r >> 8);              /* y 小数 */
-        p[3] = (u8)(20 + ((r >> 11) & 3));/* y ブロック */
+        p[0] = (u8)(r & 0xFF);
+        p[1] = (u8)(120 + ((r >> 8) & 15));   /* x(ドット): 画面中央付近 */
+        p[2] = (u8)(r >> 5);
+        p[3] = (u8)(150 + ((r >> 12) & 7));   /* y(ドット): 画面下寄り */
         r = rnd16();
-        p[4] = (u8)((s8)(r & 0x3F) - 32); /* vx: ±32 */
-        p[5] = (u8)((s8)((r >> 8) & 0x3F) - 56);  /* vy: 上向き中心 */
+        p[4] = (u8)((s8)((r & 0x3F) - 32));
+        p[5] = (u8)((s8)(((r >> 8) & 0x3F) - 58));
         p += 6;
     }
     grav = 0;
 }
 
-/* ───────── 画面バッファを海で埋める ───────── */
-static void clear_buf(void) __naked {
-    __asm
-        ld   hl, #0xC600
-        ld   de, #0xC601
-        ld   bc, #1535
-        ld   (hl), #0x11
-        ldir
-        ret
-    __endasm;
-}
 
-/* ───────── 粒を 1 フレーム進めて画面バッファへ打つ ─────────
-   IX = 粒、_pn = 粒数、_grav = 重力の位相。
+/* ───────── SCREEN5(精緻なまま)で粒を打つ ─────────
+   ★1 粒 = 2x2 ドット(1 バイト × 2 行)。VRAM 番地は y*128 + (x>>1) で、
+     上位 = y>>1 / 下位 = ((y&1)<<7) | (x>>1)。桁上がりしない。
+   ★消去は「海の色で塗り戻す」。演出中、粒が飛ぶのは艦を消した後の海の上だけなので、
+     背景を読み戻さなくてよい(読み戻すと番地設定が倍になる)。
+   ★番地設定はポート4回(約20µs)。これが粒ごとに要るので SCREEN5 では粒数が効く。
    ★相対ジャンプだけで書く(RAM 実行のため)。 */
 static void step_plot(void) __naked {
     __asm
-        push ix               ; ★IX は SDCC のフレームポインタ。__naked で壊すと呼び元が飛ぶ(実際に踏んだ)
+        push ix
         ld   ix, #0xCC00
         ld   hl, (_pn)
+        ld   (_cnt16), hl
+        jr   p5_first
+    p5_loop:
+        ld   bc, #6
+        add  ix, bc
+    p5_first:
+        ld   hl, (_cnt16)
+        dec  hl
+        ld   (_cnt16), hl
         ld   a, h
         or   l
-        jr   nz, pt_go
+        jr   nz, p5_body
         pop  ix
         ret
-    pt_go:
-        ld   (_cnt16), hl
-    pt_loop:
-        ;; ---- x += vx*8 ----
+    p5_body:
+        ;; ---- 古い位置を海で塗り戻す(2 行) ----
+        ld   a, 3(ix)             ; y
+        cp   #210
+        jr   nc, p5_move          ; 画面外なら消さない
+        ld   c, 1(ix)             ; x
+        call p5_addr
+        ld   a, #0x11
+        out  (0x98), a
+    p5_move:
+        ;; ---- x += vx*2 / y += vy*2, vy += 1 ----
         ld   e, 4(ix)
         ld   a, e
         rla
@@ -106,17 +115,11 @@ static void step_plot(void) __naked {
         ld   d, a
         sla  e
         rl   d
-        sla  e
-        rl   d
-        sla  e
-        rl   d
         ld   l, 0(ix)
         ld   h, 1(ix)
         add  hl, de
         ld   0(ix), l
         ld   1(ix), h
-        ld   b, h                 ; B = bx(ブロック)
-        ;; ---- y += vy*8 ----
         ld   e, 5(ix)
         ld   a, e
         rla
@@ -124,165 +127,74 @@ static void step_plot(void) __naked {
         ld   d, a
         sla  e
         rl   d
-        sla  e
-        rl   d
-        sla  e
-        rl   d
         ld   l, 2(ix)
         ld   h, 3(ix)
         add  hl, de
         ld   2(ix), l
         ld   3(ix), h
-        ld   c, h                 ; C = by(ブロック)
-        jr   pt_skip
-    pt_tramp:                     ; ★jr の飛距離(±127)が足りないので折り返しは中継を経由する
-        jr   pt_loop
-    pt_skip:
-        ;; ---- 重力(2フレームに1回 vy を +1) ----
-        ld   a, (_grav)
-        or   a
-        jr   z, pt_nog
         inc  5(ix)
-    pt_nog:
-        ;; ---- 画面の外へ出たら噴き口へ戻す(★分岐先は近くに置く。jr の飛距離が足りなくなるため) ----
-        ld   a, b
-        cp   #64
-        jr   nc, pt_resp
-        ld   a, c
-        cp   #48
-        jr   c, pt_draw
-        jr   pt_resp
-    pt_tramp2:                    ; ★ループ末尾から pt_tramp まで届かないので、もう1段中継する
-        jr   pt_tramp
-    pt_resp:                      ; 速度を振り直して噴き口へ(粒ごとの簡易乱数)
+        jr   p5_chk
+    p5_back:
+        jr   p5_loop
+    p5_chk:
+        ;; ---- 画面外なら噴き口へ戻す(計測用。本番では消す) ----
+        ld   a, 3(ix)
+        cp   #200
+        jr   c, p5_draw
+        ld   1(ix), #128
+        ld   3(ix), #150
         ld   a, 4(ix)
         add  a, a
         add  a, #37
         and  #0x3F
-        sub  #32                  ; vx = -32..+31
+        sub  #32
         ld   4(ix), a
         ld   a, 5(ix)
         add  a, a
         xor  #0x5B
         and  #0x3F
-        or   #0xC0                ; vy = -64..-1(上向き)
+        or   #0xC0
         ld   5(ix), a
-        ld   1(ix), #32           ; 噴き口(画面中央やや下)
-        ld   3(ix), #40
-        jr   pt_next
-    pt_draw:
-        ;; ---- 番地: 上位 = 0xC6 + (by>>3) / 下位 = ((bx>>1)<<3) | (by&7) ----
-        ld   a, c
-        rrca
-        rrca
-        rrca
-        and  #0x0F
-        add  a, #0xC6
-        ld   d, a
-        ld   a, b
-        srl  a
-        rlca
-        rlca
-        rlca
-        and  #0xF8
-        ld   e, a
-        ld   a, c
-        and  #7
-        add  a, e
-        ld   e, a
-        ;; ---- 色: 粒ごとに 11(赤)/12(橙)/15(白)/14(淡灰) ----
-        ld   a, 4(ix)
-        and  #3
-        add  a, #11
-        cp   #14
-        jr   c, pt_col
-        add  a, #1                ; 14 → 15(白)
-    pt_col:
-        ld   c, a
-        ;; ---- ニブルへ書く(もう片方は残す) ----
-        ld   a, (de)
-        bit  0, b
-        jr   nz, pt_lo
-        and  #0x0F
+        jr   p5_back
+    p5_draw:
+        ;; ---- 新しい位置に打つ(2 行) ----
+        ld   a, 3(ix)
+        ld   c, 1(ix)
+        call p5_addr
+        ld   a, #0xCC
+        out  (0x98), a
+        jr   p5_back
+        ;; --- A=y, C=x → VRAM 書込み番地を設定する ---
+    p5_addr:
+        srl  a                    ; y>>1 → 上位
         ld   b, a
+        ld   a, 3(ix)
+        and  #1
+        rrca                      ; (y&1)<<7
+        ld   d, a
         ld   a, c
-        rlca
-        rlca
-        rlca
-        rlca
-        or   b
-        jr   pt_put
-    pt_lo:
-        and  #0xF0
-        or   c
-    pt_put:
-        ld   (de), a
-    pt_next:
-        ld   bc, #6
-        add  ix, bc
-        ld   hl, (_cnt16)
-        dec  hl
-        ld   (_cnt16), hl
-        ld   a, h
-        or   l
-        jr   nz, pt_tramp2
-        pop  ix
-        ret
-    __endasm;
-}
-/* step_plot の終わり(写す長さを測るための目印)。★この関数は step_plot の直後に置くこと。 */
-static void step_plot_end(void) __naked { __asm ret __endasm; }
-static void (*stepr)(void);   /* hot_ram へ写した step_plot */
-static u16 cnt16;   /* step_plot のループ回数(asm から参照) */
-
-/* ───────── 画面バッファを VRAM のパターン表へ ───────── */
-static void blast(void) __naked {
-    __asm
-        ld   a, #0
+        srl  a                    ; x>>1
+        add  a, d
+        ld   e, a                 ; 下位
+        di
+        xor  a
         out  (0x99), a
         ld   a, #0x80 + 14
         out  (0x99), a
-        ld   a, #0
+        ld   a, e
         out  (0x99), a
-        ld   a, #0x40
-        out  (0x99), a
-        ld   hl, #0xC600
-        ld   bc, #1536
-    pb_loop:
-        ld   a, (hl)
-        out  (0x98), a
-        inc  hl
-        dec  bc
         ld   a, b
-        or   c
-        jr   nz, pb_loop
+        or   #0x40
+        out  (0x99), a
+        ei
         ret
     __endasm;
 }
+static void step_plot_end(void) __naked { __asm ret __endasm; }
+static void (*stepr)(void);
+static u16 cnt16;
 
-static void enter_s3(void) {
-    u8 y, x, i;
-    raster_off();
-    __asm
-        ld   a, #3
-        ld   (0xFCAF), a
-        call 0x005F            ; CHGMOD (MULTI COLOUR)
-    __endasm;
-    vdp_wreg(25, 0x00);
-    vdp_wreg(2, S3_NAME / 0x400);
-    vdp_wreg(4, S3_PAT / 0x800);
-    vdp_wreg(5, S3_SATR / 0x80);
-    vdp_wreg(6, S3_SPAT / 0x800);
-    vdp_palette_game();
-    vdp_write_addr(S3_NAME);
-    for (y = 0; y < 24; y++)
-        for (x = 0; x < 32; x++) vdp_data((u8)(((y >> 2) << 5) + x));
-    vdp_write_addr(S3_SPAT);
-    for (i = 0; i < 8; i++) vdp_data(0x00);
-    vdp_write_addr(S3_SATR);
-    vdp_data(208);
-    vdp_wreg(1, 0x68);         /* ★bit3=M2=1(MULTI COLOUR)。ここを落とすと画面が一様になる */
-}
+
 
 static void num5(u8 x, u8 y, u16 v) {
     char s[6];
@@ -296,10 +208,8 @@ static void draw_result(void) {
     /* 16 フレームの JIFFY → fps x10 = 16*600/jiffy */
     u16 f1 = (u16)(g_pt_jiffy ? (u16)((16UL * 600UL) / g_pt_jiffy) : 0);
     u16 f2 = (u16)(g_pt_xfer  ? (u16)((16UL * 600UL) / g_pt_xfer)  : 0);
-    vdp_screen5();
-    vdp_palette_game();
     vdp_fill(0, 0, 256, 212, 1);
-    vdp_text(2, 10, 11, 1, "SCREEN3 PARTICLE BENCH");
+    vdp_text(2, 10, 11, 1, "SCREEN5 PARTICLE BENCH");
     vdp_text(2, 30, 15, 1, "PARTICLES");      num5(130, 30, g_pt_n);
     vdp_text(2, 50, 15, 1, "16 FRAME JIFFY"); num5(130, 50, g_pt_jiffy);
     vdp_text(2, 62, 15, 1, "FPS X10");        num5(130, 62, f1);
@@ -316,11 +226,14 @@ static void bench(void) {
     u8 i;
     g_pt_n = pn;
     t0 = *j;
-    for (i = 0; i < 16; i++) { clear_buf(); stepr(); blast(); grav ^= 1; }   /* 計測には assert を入れない */
+    for (i = 0; i < 16; i++) { stepr(); grav ^= 1; }
     g_pt_jiffy = (u16)(*j - t0);
-    t0 = *j;
-    for (i = 0; i < 16; i++) blast();
-    g_pt_xfer = (u16)(*j - t0);
+    g_pt_xfer = 0;
+}
+
+static void draw_bg5(void) {
+    vdp_fill(0, 0, 256, 212, 1);          /* 海(単色)。計測用の背景 */
+    vdp_text(2, 2, 15, 1, "SCREEN5 PARTICLE TEST");
 }
 
 static void pt_init(void) {
@@ -341,31 +254,20 @@ static void pt_init(void) {
     vdp_sprite_init();
     vdp_sprite_hide_from(0);
     spawn();
-    enter_s3();
+    draw_bg5();
 }
 
-/* ★毎フレーム モードレジスタを張り直す。init で設定しただけでは SCREEN1・画面OFF に
-   戻されていた(R#0=0 / R#1=0x22 / R#2=6)。計測ROMなのでコストの小さい安全側で押し切る。 */
-static void assert_s3(void) {
-    vdp_wreg(0, 0x00);
-    vdp_wreg(1, 0x68);   /* 画面ON / VBLANK割込みON / M2=1(MULTI COLOUR) / スプライト8x8 */
-    vdp_wreg(2, S3_NAME / 0x400);
-    vdp_wreg(4, S3_PAT / 0x800);
-}
 
 static u8 pt_update(void) {
     if (st == 1) {                                  /* 結果表示 */
-        if (g_input_edge & INP_TRIG) { enter_s3(); spawn(); st = 0; }
+        if (g_input_edge & INP_TRIG) { draw_bg5(); spawn(); st = 0; }
         return SCENE_NONE;
     }
-    if (g_input_edge & INP_TRIG)  { spawn(); return SCENE_NONE; }
+    if (g_input_edge & INP_TRIG)  { draw_bg5(); spawn(); return SCENE_NONE; }
     if (g_input_edge & INP_TRIGB) { bench(); draw_result(); st = 1; return SCENE_NONE; }
     if ((g_input_edge & INP_UP)   && pn + 64 <= PRT_MAX) pn = (u16)(pn + 64);
     if ((g_input_edge & INP_DOWN) && pn > 64)            pn = (u16)(pn - 64);
-    assert_s3();
-    clear_buf();
     stepr();
-    blast();
     grav ^= 1;
     g_pt_frames++;
     return SCENE_NONE;
