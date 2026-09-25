@@ -272,6 +272,72 @@ static void step_plot(void) __naked {
 static void step_plot_end(void) __naked { __asm ret __endasm; }
 static void (*stepr)(void);
 
+/* ───────── 破片(スプライト 16x16) ─────────
+   ★背景に描く粒は 2x2 ドットで目立ちにくい。大きく見える破片はスプライトで飛ばす。
+     スプライト属性の書込みは 1 枚 4 バイト(番地設定 1 回)で、30 枚でも 1ms 弱。
+     演出中は HUD も敵も出ないので 32 枚まるごと使える。 */
+#define DEB_N 28
+static u8  dbx[DEB_N], dby[DEB_N];      /* 画面座標(ドット) */
+static s8  dvx[DEB_N], dvy[DEB_N];
+static u8  dlive[DEB_N];
+
+/* 16x16 の破片(4 つの 8x8 パターン = 32 バイト)。左上/左下/右上/右下の順。 */
+static const u8 deb_pat[2][32] = {
+    {   /* 大きめの塊 */
+        0x00,0x0E,0x1F,0x3F,0x7F,0x7F,0x3F,0x1F,   0x1E,0x3E,0x7C,0x78,0x70,0x60,0x40,0x00,
+        0x00,0x70,0xF8,0xFC,0xFE,0xFE,0xFC,0xF8,   0xF0,0xE0,0xC0,0x80,0x00,0x00,0x00,0x00 },
+    {   /* 細かい破片 */
+        0x00,0x00,0x06,0x0F,0x1F,0x0E,0x04,0x00,   0x00,0x0C,0x1E,0x1C,0x08,0x00,0x00,0x00,
+        0x00,0x00,0x60,0xF0,0xF8,0x70,0x20,0x00,   0x00,0x30,0x78,0x38,0x10,0x00,0x00,0x00 },
+};
+
+static void deb_init(void) {
+    u8 i;
+    vdp_sprite_init();
+    vdp_sprite_pattern(0, deb_pat[0]);
+    vdp_sprite_pattern(4, deb_pat[1]);        /* 16x16 は 4 枚単位 */
+    for (i = 0; i < DEB_N; i++) {
+        dlive[i] = 0;
+        vdp_sprite_color(i, (u8)((i & 1) ? 4 : 12));   /* 灰 と 橙 */
+    }
+    vdp_sprite_hide_from(0);
+}
+
+/* 破片を 1 つ噴き口から出す */
+static void deb_spawn(void) {
+    u8 i;
+    for (i = 0; i < DEB_N; i++) {
+        if (dlive[i]) continue;
+        {
+            u16 r = rnd16();
+            dbx[i]  = (u8)(112 + ((r >> 8) & 31));
+            dby[i]  = emit_y;
+            dvx[i]  = (s8)((r & 15) - 8);
+            dvy[i]  = (s8)(((r >> 4) & 15) - 11);
+            dlive[i] = 1;
+        }
+        return;
+    }
+}
+
+/* 破片を 1 フレーム進めて置き直す */
+static void deb_step(void) {
+    u8 i;
+    for (i = 0; i < DEB_N; i++) {
+        if (!dlive[i]) { vdp_sprite_pos(i, 0, 216, 0); continue; }
+        {
+            s16 nx = (s16)((s16)dbx[i] + dvx[i]);
+            s16 ny = (s16)((s16)dby[i] + dvy[i]);
+            if ((i & 3) == 0) dvy[i]++;                 /* 重力(ゆっくり) */
+            else if ((i & 1) == 0) dvy[i]++;
+            if (nx < 2 || nx > 248 || ny > 205) { dlive[i] = 0; vdp_sprite_pos(i, 0, 216, 0); continue; }
+            if (ny < 0) ny = 0;
+            dbx[i] = (u8)nx; dby[i] = (u8)ny;
+            vdp_sprite_pos(i, dbx[i], dby[i], (u8)((i & 1) ? 4 : 0));
+        }
+    }
+}
+
 /* 噴き口から粒を出す。★山なりに散らす(横に強く・上に強く)。 */
 static void emit(u8 n) {
     u8 *p = PRT;
@@ -319,6 +385,7 @@ void ovl_part(void) {
     stepr = (void (*)(void))CODE;
     emit_y = 0;
     raster_off();
+    deb_init();
     /* ★白フラッシュ: 轟沈の瞬間を作る(パレットだけ=帯域ゼロ) */
     white_pal();
     vdp_wait_frame();
@@ -328,9 +395,15 @@ void ovl_part(void) {
         if (t < SEQ_FALL) {
             u8 ny = (u8)(((u16)t * 196) / SEQ_FALL);
             while (emit_y < ny) { erase_row(emit_y); emit_y++; }
+            vdp_cmd_wait();   /* ★コピー(VDPコマンド)の完了を待つ。実行中に VRAM を直接叩くと
+                                 書込みが化ける(粒が VRAM には在るのに画面に出ない状態になっていた) */
             emit((u8)((t < 12) ? 28 : 16));           /* 最初にどっと噴き、以降も絶やさない */
+            deb_spawn();                              /* 破片(スプライト)も出す */
+            if (t < 12) deb_spawn();
         }
         stepr();
+        deb_step();
         vdp_wait_frame();
     }
+    vdp_sprite_hide_from(0);
 }
