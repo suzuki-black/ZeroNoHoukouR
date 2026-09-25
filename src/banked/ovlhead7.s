@@ -7,6 +7,7 @@
         .globl  _ovl_sink_init
         .globl  _ovl_sink_frame
         .globl  _ovl_spin
+        .globl  _ovl_part
         .area   _CODE
         jp      stub_ret             ; slot0  curtain_update
         jp      stub_ret             ; slot1  curtain_ring
@@ -31,7 +32,7 @@
         jp      _ovl_sink_frame      ; slot20 (OVL_SLOT_SINK_FRAME)
         jp      stub_ret             ; slot21 power_frame(撃沈中は呼ばない)
         jp      _ovl_spin            ; slot22 ★撃沈の「きりもみ」に転用(中ボスの init は撃沈中に呼ばれない)
-        jp      stub_ret             ; slot23 mb_frame
+        jp      _ovl_part            ; slot23 ★撃沈の「火の粉・破片」に転用(中ボスの frame は撃沈中に呼ばれない)
 stub_zero:
         xor     a
         ld      d, a

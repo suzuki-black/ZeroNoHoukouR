@@ -62,6 +62,7 @@
 /* ★撃沈の「きりもみ」は slot22 を借りる(ovlhead7 では中ボスの init が空き。撃沈中に中ボスは出ない)。
    スロットを増やすと全オーバレイの表が 3B ずつ伸び、残り 1B だった ovl9 が溢れるため。 */
 #define OVL_SLOT_SPIN           OVL_SLOT_MB_INIT
+#define OVL_SLOT_PART           OVL_SLOT_MB_FRAME   /* 撃沈の火の粉・破片(同じ理由で slot23 を借りる) */
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -87,6 +88,7 @@ void rot_zoom(u8 k);                       /* 宙返り: 焼いたコマ(bank19)
 void sink_init(void);                      /* 撃沈シーン(OVL7): 状態を決め直す */
 u8   sink_frame(void);                     /* 撃沈シーン(OVL7): 1フレーム。戻り 1=終わった */
 void spin_away(void);                      /* 撃沈シーン(OVL7): 画面を粗くしてきりもみ(数秒ブロックする) */
+void part_burst(void);                     /* 撃沈シーン(OVL7): 火の粉と破片(数秒ブロックする) */
 void power_frame(void);                    /* パワーアップ: 銀の敵機が落ちたら増槽を出し、自機が触れたら段階を上げる */
 void mb_init(void);                        /* 中ボス(OVL8): 状態を決め直す */
 void mb_frame(void);                       /* 中ボス(OVL8): 1フレーム。終わったら g_mb=MB_RESTORE */

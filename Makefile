@@ -318,11 +318,12 @@ ROMPACK_BANKS += --asset 32 $(BUILD)/boss_vram.bin --asset 40 $(BUILD)/boss_vram
 
 # 撃沈シーンのオーバレイ: 撃破の瞬間に通常面のものと入れ替える。パレット(面の天候つき)は同じソースを別名で入れる。
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
-OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel $(BUILD)/ovl_spin.rel
-$(BUILD)/ovl7.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(SRC)/banked/ovl_spin.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
+OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel $(BUILD)/ovl_spin.rel $(BUILD)/ovl_part.rel
+$(BUILD)/ovl7.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(SRC)/banked/ovl_spin.c $(SRC)/banked/ovl_part.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_SINK $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl7_palette.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_sink.c -o $(BUILD)/ovl_sink.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_spin.c -o $(BUILD)/ovl_spin.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_part.c -o $(BUILD)/ovl_part.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead7.rel $(OVL7_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead7.rel: $(SRC)/banked/ovlhead7.s | $(BUILD)

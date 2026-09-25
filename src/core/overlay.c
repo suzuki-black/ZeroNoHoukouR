@@ -109,6 +109,7 @@ void final_bgbul(void) __naked { __asm jp 0xA036 __endasm; }
 void sink_init(void) __naked   { __asm jp 0xA039 __endasm; }
 u8   sink_frame(void) __naked  { __asm jp 0xA03C __endasm; }
 void spin_away(void) __naked   { __asm jp 0xA042 __endasm; }   /* slot22 を借りる(撃沈のきりもみ) */
+void part_burst(void) __naked  { __asm jp 0xA045 __endasm; }   /* slot23 を借りる(撃沈の火の粉) */
 /* ---- 通常面のオーバレイ(増槽) ---- */
 void power_frame(void) __naked { __asm jp 0xA03F __endasm; }
 /* ---- 中ボスのオーバレイ(OVL8_BANK)だけが持つ入口 ---- */

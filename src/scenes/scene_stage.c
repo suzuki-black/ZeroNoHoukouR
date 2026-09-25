@@ -898,7 +898,7 @@ static void results_and_fanfare(void) {
 #define DFX_SPIN 1
 #define DFX_PART 2
 static const u8 defeat_fx[5] = {
-    /* 1面 */ DFX_SINK,   /* ←パーティクルを実装したらここを DFX_PART にする */
+    /* 1面 */ DFX_PART,   /* 火の粉と破片(ovl_part)。噴き口が艦の上の中心から下の中心へ下りる */
     /* 2面 */ DFX_SINK,
     /* 3面 */ DFX_SPIN,
     /* 4面 */ DFX_SINK,
@@ -929,11 +929,11 @@ static u8 defeat_update(void) {
         /* ★撃沈の直後: いまの画面を粗く(SCREEN3)して、きりもみしながら遠ざける(A-JAX の絵)。
            元絵と内側ループは hot_ram を借りるので、終わったら hot_load() で戻す。
            SCREEN5 への復帰は結果画面の前にここで行う(CHGMOD は VRAM を広く消す)。 */
-        if (g_ovl_ok && fx == DFX_SPIN) {
+        if (g_ovl_ok && (fx == DFX_SPIN || fx == DFX_PART)) {
             ramx_use_ram();          /* ★オーバレイは page2=RAM の文脈でしか呼べない */
-            spin_away();
+            if (fx == DFX_SPIN) spin_away(); else part_burst();
             ramx_use_cart();
-            hot_load();              /* きりもみが hot_ram を借りたので戻す */
+            hot_load();              /* 演出が hot_ram を借りたので戻す */
             vdp_screen5();
             vdp_palette_game();
         }
@@ -965,7 +965,7 @@ u8 stage_update(void) {
         ramx_use_cart();
         overlay_load(OVL7_BANK);     /* overlay_load は page2=cart の文脈で呼ぶ */
         ramx_use_ram();
-        spin_away();
+        if (defeat_kind() == DFX_PART) part_burst(); else spin_away();   /* 面の割り当てで試す */
         ramx_use_cart();
         overlay_load(OVL_BANK);
         hot_load();
