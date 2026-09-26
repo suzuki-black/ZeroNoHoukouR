@@ -55,6 +55,9 @@
 #define OVL_SLOT_SINK_INIT      19
 #define OVL_SLOT_SINK_FRAME     20
 #define OVL7_BANK               28
+/* 面ごとの撃沈演出(2面の「裂けて開く」など)。ovl7 が 8KB に収まらなくなったので分けた。
+   撃破演出の最後に読み込み、戻ったら次の面の stage_setup が通常面のものへ戻す。 */
+#define OVL13_BANK              29
 #define OVL_SLOT_POWER_FRAME    21   /* 通常面のオーバレイ(増槽)。最終面/撃沈のオーバレイでは何もしない空関数 */
 /* 22〜 は中ボスのオーバレイ(OVL8_BANK, ovlhead8.s)だけが持つ。出現の瞬間に読み込む(midboss.h) */
 #define OVL_SLOT_MB_INIT        22
@@ -63,6 +66,7 @@
    スロットを増やすと全オーバレイの表が 3B ずつ伸び、残り 1B だった ovl9 が溢れるため。 */
 #define OVL_SLOT_SPIN           OVL_SLOT_MB_INIT
 #define OVL_SLOT_PART           OVL_SLOT_MB_FRAME   /* 撃沈の火の粉・破片(同じ理由で slot23 を借りる) */
+#define OVL_SLOT_CRACK          OVL_SLOT_ROT_ZOOM   /* 撃沈の「縦に裂けて開く」(宙返りは撃沈中に呼ばないので slot15 を借りる) */
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -89,6 +93,7 @@ void sink_init(void);                      /* 撃沈シーン(OVL7): 状態を�
 u8   sink_frame(void);                     /* 撃沈シーン(OVL7): 1フレーム。戻り 1=終わった */
 void spin_away(void);                      /* 撃沈シーン(OVL7): 画面を粗くしてきりもみ(数秒ブロックする) */
 void part_burst(void);                     /* 撃沈シーン(OVL7): 火の粉と破片(数秒ブロックする) */
+void crack_open(void);                     /* 撃沈シーン(OVL7): 縦に裂けて左右へ開く(数秒ブロックする) */
 void power_frame(void);                    /* パワーアップ: 銀の敵機が落ちたら増槽を出し、自機が触れたら段階を上げる */
 void mb_init(void);                        /* 中ボス(OVL8): 状態を決め直す */
 void mb_frame(void);                       /* 中ボス(OVL8): 1フレーム。終わったら g_mb=MB_RESTORE */

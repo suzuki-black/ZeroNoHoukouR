@@ -890,16 +890,18 @@ static void results_and_fanfare(void) {
    使えない機械では旧来の炎上(艦上へ爆発を降らせる＋轟音)を尺が尽きるまで。 */
 /* ★撃沈の絵は面ごとに別のものにする(ユーザー方針)。もともと「船尾から沈む」が 1〜5 面
    すべてに入っていたが、それは 1 つの持ち札として 1 面に割り当て、他の面には別の絵を置く。
-     DFX_SINK … 船尾から沈む(既存の撃沈オーバレイ)
-     DFX_SPIN … 画面を粗くしてきりもみしながら遠ざかる(SCREEN3 のロトズーム)
-     DFX_PART … 火の粉と破片のパーティクル(未実装。当面は SINK で代替)
-   ★未実装のものは SINK にしてあるので、割り当てを変えるのはこの表 1 行で済む。 */
-#define DFX_SINK 0
-#define DFX_SPIN 1
-#define DFX_PART 2
+     DFX_SINK  … 船尾から沈む(既存の撃沈オーバレイ)
+     DFX_SPIN  … 画面を粗くしてきりもみしながら遠ざかる(SCREEN3 のロトズーム)
+     DFX_PART  … 火の粉と破片のパーティクル(ovl_part)
+     DFX_CRACK … 縦に裂けて左右へ開き、割れ目から炎柱(ovl_crack)
+   ★未割り当ての面は SINK にしてあるので、割り当てを変えるのはこの表 1 行で済む。 */
+#define DFX_SINK  0
+#define DFX_SPIN  1
+#define DFX_PART  2
+#define DFX_CRACK 3
 static const u8 defeat_fx[5] = {
-    /* 1面 */ DFX_PART,   /* 火の粉と破片 */
-    /* 2面 */ DFX_SINK,
+    /* 1面 */ DFX_PART,    /* 火の粉と破片 */
+    /* 2面 */ DFX_CRACK,   /* 空母の飛行甲板が中心線から裂ける */
     /* 3面 */ DFX_SPIN,
     /* 4面 */ DFX_SINK,
     /* 5面 */ DFX_SINK,
@@ -929,9 +931,14 @@ static u8 defeat_update(void) {
         /* ★撃沈の直後: いまの画面を粗く(SCREEN3)して、きりもみしながら遠ざける(A-JAX の絵)。
            元絵と内側ループは hot_ram を借りるので、終わったら hot_load() で戻す。
            SCREEN5 への復帰は結果画面の前にここで行う(CHGMOD は VRAM を広く消す)。 */
-        if (g_ovl_ok && (fx == DFX_SPIN || fx == DFX_PART)) {
+        if (g_ovl_ok && fx != DFX_SINK) {
+            /* ★2面の「裂けて開く」は別バンク(OVL13)。撃沈オーバレイが 8KB に収まらないため。
+               overlay_load は page2=cart の文脈で呼ぶこと。 */
+            if (fx == DFX_CRACK) overlay_load(OVL13_BANK);
             ramx_use_ram();          /* ★オーバレイは page2=RAM の文脈でしか呼べない */
-            if (fx == DFX_SPIN) spin_away(); else part_burst();
+            if (fx == DFX_SPIN) spin_away();
+            else if (fx == DFX_CRACK) crack_open();
+            else part_burst();
             ramx_use_cart();
             hot_load();              /* 演出が hot_ram を借りたので戻す */
             vdp_screen5();
@@ -965,7 +972,12 @@ u8 stage_update(void) {
         ramx_use_cart();
         overlay_load(OVL7_BANK);     /* overlay_load は page2=cart の文脈で呼ぶ */
         ramx_use_ram();
-        if (defeat_kind() == DFX_PART) part_burst(); else spin_away();   /* 面の割り当てで試す */
+        {   u8 fx = defeat_kind();          /* 面の割り当てで試す(curstage を書き換えれば別の面の絵) */
+            if (fx == DFX_CRACK) { ramx_use_cart(); overlay_load(OVL13_BANK); ramx_use_ram(); }
+            if (fx == DFX_SPIN) spin_away();
+            else if (fx == DFX_CRACK) crack_open();
+            else part_burst();
+        }
         ramx_use_cart();
         overlay_load(OVL_BANK);
         hot_load();

@@ -1,0 +1,209 @@
+/* ovl_crack.c — 2面(米空母 ESSEX)の轟沈: 飛行甲板が縦に裂け、左右へ開いて海に呑まれる。
+   撃沈オーバレイ(OVL7)に同居し、撃破演出の最後に一度だけ呼ばれて数秒ブロックする。
+
+   ★面ごとに絵を変える方針。1面は「上から下へ消えながら火の粉と破片」(ovl_part)、3面は
+     「きりもみ急上昇」(ovl_spin)なので、2面は **縦に裂けて左右へ開く**=消え方の向きが直交する。
+     空母の飛行甲板には中心線が引いてあるので、そこが裂けるのは絵として分かりやすい。
+   ★台本(t は開始からのフレーム):
+       0..T_ZIP      中心線に沿って黒い亀裂が艦首から艦尾へ走る(LMMV の塗りだけ)
+       ..T_OPEN      亀裂が左右へ広がる=甲板が海に呑まれる(海テンプレートからの HMMM)
+       ..SEQ_END     取りこぼしを端まで掃いて、炎と煙だけが残る
+   ★帯域: 消去は「縦の帯」を 16 行ずつの塊で写す。海テンプレートは 16 行周期なので、
+     塊の先頭を周期に合わせれば 1 コマンドで 16 行ぶん写せる(1 行ずつ 212 回やると重い)。
+   ★オーバレイの static は 0xEE00-0xEEFF の 256B しか無く、既に埋まりかけている。
+     炎と煙の状態は演出中だけ借りる hot_ram(0xC600〜)に置く。 */
+#include "types.h"
+#include "vdp.h"
+#include "raster.h"
+#include "overlay.h"
+#include "scroll.h"
+#include "aa_hot.h"       /* curstage */
+#include "stage_grade.h"  /* 面ごとの時間帯・天候の基準パレット(2面=夕焼け) */
+
+#define FX      ((u8 *)0xC600)     /* 炎と煙 16 枚 × 4B: x, y, 残り寿命, ポーズ */
+#define FX_N    16
+#define FX_FIRE 8                  /* 前半 8 枚が炎、後半 8 枚が煙(色表がスロット固定なので分ける) */
+#define FX_SZ   4
+
+#define CX       128               /* 艦の中心線(撃破時に蛇行の横スクロールは 0 に戻されている) */
+#define OPEN_MAX 68                /* 片側の開き。艦の半幅は最大 58(空母) */
+#define T_ZIP    16
+#define T_OPEN   (T_ZIP + 44)
+#define SEQ_END  (T_OPEN + 20)
+
+/* 16x16(4 つの 8x8 = 32B)。左半分 16 行 → 右半分 16 行。パターン番号は 4 の倍数。 */
+static const u8 fx_pat[4][32] = {
+    {   /* 炎の舌(割れ目から噴く) */
+        0x02,0x07,0x07,0x0F,0x0F,0x1F,0x1F,0x3F,0x3F,0x7F,0x7F,0x7B,0x71,0x20,0x00,0x00,
+        0x00,0x08,0x1C,0x9C,0xDC,0xFE,0xFE,0xFE,0xFE,0xFE,0xFE,0xDE,0x8E,0x84,0x00,0x00 },
+    {   /* 同・揺らぎ */
+        0x10,0x38,0x38,0x7C,0x7E,0x7F,0x3F,0x3F,0x7F,0x7F,0x7D,0x78,0x30,0x10,0x00,0x00,
+        0x08,0x0C,0x1C,0x3C,0x7C,0xFC,0xFC,0xFC,0xFE,0xFE,0xDE,0x8E,0x44,0x00,0x00,0x00 },
+    {   /* 黒煙の塊 */
+        0x07,0x1F,0x3F,0x7F,0x7F,0xFF,0xFF,0x7F,0x7F,0x3F,0x1F,0x07,0x00,0x00,0x00,0x00,
+        0x80,0xF0,0xF8,0xFC,0xFE,0xFF,0xFF,0xFE,0xFE,0xFC,0xF0,0xC0,0x00,0x00,0x00,0x00 },
+    {   /* 同・散り際 */
+        0x00,0x01,0x07,0x1F,0x3F,0x3F,0x1F,0x07,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x00,0xC0,0xF0,0xF8,0xF8,0xF8,0xF0,0xE0,0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x00 },
+};
+
+/* 行ごとの色。炎は白い芯 → 橙 → 赤、煙は淡灰 → 灰 → 黒。 */
+static const u8 fx_col[2][16] = {
+    { 15,15,15,12,12,12,12,11, 11,11,11,11,11,13,13,13 },
+    { 14,14, 5, 5, 4, 4, 5, 5,  4, 4,13,13,13,13,13,13 },
+};
+
+static u8  vs;        /* 演出中の縦スクロール(画面行 → リング行 の変換に使う) */
+static u16 seed;
+
+static u16 rnd16(void) { seed = (u16)(seed * 25173 + 13849); return seed; }
+
+/* 画面の縦帯 [x, x+w) を海に戻す。★テンプレートは 16 行周期なので、周期の切れ目で区切れば
+   1 コマンドで最大 16 行ぶん写せる。リング(256 行)の折返しは跨がないように切る。
+   ★HMMM(高速コピー)は **バイト単位**。SCREEN5 は 1 バイト 2 ドットなので、x や幅が奇数だと
+     端の 1 ドットが写らず、海の上に細い縦縞が残る(実際に踏んだ)。偶数へ丸めてから出す
+     (余分に消すのは海を海で塗るだけなので無害)。 */
+static void sea_strip(u8 x, u8 w) {
+    u8 y = 0;
+    if (x & 1) { x--; w++; }
+    if (w & 1) w++;
+    while (y < 212) {
+        u8 r  = (u8)(vs + y);
+        u8 ph = (u8)(r & 15);
+        u8 n  = (u8)(16 - ph);
+        if ((u8)(y + n) > 212) n = (u8)(212 - y);
+        if ((u16)r + n > 256)  n = (u8)(256 - r);
+        vdp_copy(x, (u16)(SC_SEATMPL_Y + ph), x, (u16)(256 + r), w, n);
+        y = (u8)(y + n);
+    }
+}
+
+/* 画面行 [y, y+n) の帯を色 c で塗る(亀裂)。リングの折返しで 2 回に割る。 */
+static void seam(u8 y, u8 n, u8 x, u8 w, u8 c) {
+    u8 r = (u8)(vs + y), n1 = n;
+    if ((u16)r + n > 256) n1 = (u8)(256 - r);
+    vdp_fill(x, (u16)(256 + r), w, n1, c);
+    if (n1 < n) vdp_fill(x, 256, w, (u8)(n - n1), c);
+}
+
+static void fx_init(void) {
+    u8 i;
+    u8 *p = FX;
+    vdp_sprite_init();
+    for (i = 0; i < 4; i++) vdp_sprite_pattern((u8)(i * 4), fx_pat[i]);
+    for (i = 0; i < FX_N; i++, p += FX_SZ) {
+        p[2] = 0;
+        vdp_sprite_color_tab(i, fx_col[(i < FX_FIRE) ? 0 : 1]);
+    }
+    vdp_sprite_hide_from(0);
+}
+
+/* 炎の置き場所。裂け目の縁に貼り付くが、一列に並ぶと機械的に見えるので横にばらす。 */
+static u8 flame_x(u8 i, u8 half, u8 jit) {
+    u8 d = (u8)((jit >> 4) & 7);                                   /* 0..7 ドットのゆらぎ */
+    return (u8)((i & 1) ? (CX + half - 4 + d) : (CX - half - 12 - d));
+}
+
+/* 割れ目から炎を噴かせる。煙は炎が消えた場所から立つ。 */
+static void fx_spawn(u8 zip, u8 half) {
+    u8 i;
+    u8 *p = FX;
+    u16 r = rnd16();
+    for (i = 0; i < FX_FIRE; i++, p += FX_SZ) {
+        if (p[2]) continue;
+        p[3] = (u8)(r & 0xF0);          /* 上位 4bit = 縁からの横のゆらぎ(下位はポーズの数) */
+        p[0] = flame_x(i, half, p[3]);
+        p[1] = (u8)(((u8)(r >> 8)) & 0x7F);                          /* 亀裂が走ったところまで */
+        if (p[1] > zip) p[1] = (u8)(zip >> 1);
+        p[2] = (u8)(10 + (r & 7));
+        return;
+    }
+}
+
+static void fx_smoke(u8 x, u8 y) {
+    u8 i;
+    u8 *p = FX + FX_FIRE * FX_SZ;
+    for (i = FX_FIRE; i < FX_N; i++, p += FX_SZ) {
+        if (p[2]) continue;
+        p[0] = x; p[1] = y; p[2] = (u8)(14 + (rnd16() & 7)); p[3] = 0;
+        return;
+    }
+}
+
+/* 1 フレーム進める。炎は裂け目の縁に貼り付いたまま揺らぎ、煙は外へ流れて散る。 */
+static void fx_step(u8 half) {
+    u8 i;
+    u8 *p = FX;
+    for (i = 0; i < FX_N; i++, p += FX_SZ) {
+        if (!p[2]) { vdp_sprite_pos(i, 0, 216, 0); continue; }
+        p[3] = (u8)((p[3] & 0xF0) | ((p[3] + 1) & 0x0F));   /* 下位 4bit だけ回す(上位はゆらぎ) */
+        if (--p[2] == 0) {
+            if (i < FX_FIRE) fx_smoke(p[0], p[1]);      /* 炎が尽きたら黒煙になる */
+            vdp_sprite_pos(i, 0, 216, 0);
+            continue;
+        }
+        if (i < FX_FIRE) {
+            p[0] = flame_x(i, half, p[3]);                               /* 開くのに合わせて外へ */
+            vdp_sprite_pos(i, p[0], p[1], (u8)((p[3] & 2) ? 4 : 0));
+        } else {
+            p[0] = (u8)(p[0] + ((p[0] < CX) ? (u8)0xFF : 1));            /* 外へ流れる */
+            if (p[1] < 200) p[1]++;
+            vdp_sprite_pos(i, p[0], p[1], (u8)((p[2] < 6) ? 12 : 8));    /* 散り際は小さく */
+        }
+    }
+}
+
+static void white_pal(void) { u8 i; for (i = 0; i < 16; i++) vdp_set_pal(i, 7, 7, 7); }
+
+/* ★閃光から戻すときは **その面の** パレットへ戻すこと。vdp_palette_game() は 1 面(昼)の色なので、
+   2 面(夕焼け)でこれを呼ぶと海が昼の青に戻ってしまう(実際に踏んだ)。 */
+static void stage_pal(void) {
+    u8 i, s = (u8)((curstage < 5) ? curstage : 0);
+    for (i = 0; i < 16; i++) {
+        const u8 *c = pal_stage[s][i];
+        vdp_set_pal(i, c[0], c[1], c[2]);
+    }
+}
+
+/* 撃破演出の最後に常駐から呼ばれる(OVL_SLOT_CRACK)。戻るまで数秒ここに居る。 */
+void ovl_crack(void) {
+    u16 t;
+    u8 zip = 0, half = 0, sweep = 0;
+    vs   = g_vscroll;
+    seed = 0x3179;
+    raster_off();
+    fx_init();
+    white_pal();                 /* ★閃光はパレットだけ=帯域ゼロ */
+    vdp_wait_frame();
+    vdp_wait_frame();
+    stage_pal();
+    for (t = 0; t < SEQ_END; t++) {
+        if (t < T_ZIP) {                                  /* 亀裂が走る */
+            u8 ny = (u8)(((u16)(t + 1) * 212) / T_ZIP);
+            while (zip < ny) {
+                u8 n = (u8)(((ny - zip) > 8) ? 8 : (ny - zip));
+                u8 w = (u8)(2 + (rnd16() & 2));           /* 幅を揺らして一直線に見せない */
+                seam(zip, n, (u8)(CX - w), (u8)(w * 2), 13);
+                zip = (u8)(zip + n);
+            }
+        } else if (t < T_OPEN) {                          /* 左右へ開く */
+            u8 nh = (u8)(half + 2);
+            if (nh > OPEN_MAX) nh = OPEN_MAX;
+            if (nh > half) {
+                u8 jag = (u8)((rnd16() & 3) << 1);        /* 縁をぎざぎざに(偶数。余分に消すのは無害) */
+                sea_strip((u8)(CX - nh - jag), (u8)((nh - half) + jag));
+                jag = (u8)((rnd16() & 3) << 1);
+                sea_strip((u8)(CX + half), (u8)((nh - half) + jag));
+                half = nh;
+            }
+        } else if (sweep < 4) {                           /* ★端に艦が残らないよう最後に掃く */
+            sea_strip((u8)(40 + sweep * 44), 44);
+            sweep++;
+        }
+        vdp_cmd_wait();          /* ★コマンドの完了待ち。走っている間にスプライト表を叩かない */
+        if (t < T_OPEN) fx_spawn(zip, half);
+        fx_step(half);
+        vdp_wait_frame();
+    }
+    vdp_sprite_hide_from(0);
+}

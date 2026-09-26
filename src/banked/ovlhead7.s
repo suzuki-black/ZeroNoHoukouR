@@ -24,7 +24,7 @@
         jp      stub_ret             ; slot12 crush_wave_off
         jp      stub_zero            ; slot13 crush_wave_y(s16)
         jp      stub_zero            ; slot14 shock_build(u8)
-        jp      stub_ret             ; slot15 rot_zoom
+        jp      stub_ret             ; slot15 rot_zoom(2面の「裂けて開く」は別バンク OVL13 の slot15)
         jp      stub_ret             ; slot16 final_init
         jp      stub_zero            ; slot17 final_frame
         jp      stub_ret             ; slot18 final_bgbul

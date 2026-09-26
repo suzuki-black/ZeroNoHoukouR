@@ -345,6 +345,27 @@ $(BUILD)/ovl7.bin: $(BUILD)/ovl7.ihx tools/ihx2bin.mjs
 	 echo "  ovl_spin: hot_ram=0x$$HR / 0xC600-0xD7FF を借りる OK"
 ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
 
+# 面ごとの撃沈演出のオーバレイ(bank29)。撃沈オーバレイ(ovl7)が 8KB に収まらなくなったので分けた。
+# 撃破演出の最後に読み込み、数秒ブロックして戻る。次の面の stage_setup が通常面のものへ戻す。
+# ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
+OVL13_RELS = $(BUILD)/ovl_crack.rel
+$(BUILD)/ovl13.ihx: $(SRC)/banked/ovl_crack.c $(HDRS) $(BUILD)/ovlhead13.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_crack.c -o $(BUILD)/ovl_crack.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
+	     $(BUILD)/ovlhead13.rel $(OVL13_RELS) $(BUILD)/resident_syms.rel -o $@
+$(BUILD)/ovlhead13.rel: $(SRC)/banked/ovlhead13.s | $(BUILD)
+	sdasz80 -o $@ $<
+$(BUILD)/ovl13.bin: $(BUILD)/ovl13.ihx tools/ihx2bin.mjs
+	@node tools/ihx2bin.mjs $(BUILD)/ovl13.ihx 0xA000 $@; \
+	 SZ=$$(wc -c < $@ | tr -d ' '); \
+	 if [ "$$SZ" -gt 8192 ]; then \
+	   echo "ERROR: ovl13.bin=$${SZ}B が オーバレイ枠 8192B を超過。"; exit 3; \
+	 fi; \
+	 echo "  ovl13.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"; \
+	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl13.map | head -1); \
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl13 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
+ROMPACK_BANKS += --bank 29 $(BUILD)/ovl13.bin
+
 # 中ボス用オーバレイ: 通常面のオーバレイから主砲の弾幕を抜き、中ボスを足す。海の区間で出現の瞬間に入れ替え、戦艦の前に戻す。
 # ★共通部分は ovl.bin と同じ .rel を同じ順で(static の番地を揃えるため)。中ボス本体は最後。
 # ★増槽(ovl_power)は入れない: 中ボス戦の間は戦闘機(銀の敵機)が出ず、その前の増槽は海と一緒に流れ去っている。static も持たないので番地はずれない
@@ -484,7 +505,7 @@ $(BUILD)/p61_b.bin $(BUILD)/p61_c.bin: $(BUILD)/p61_a.bin
 	@true
 ROMPACK_BANKS += --bank 3 $(BUILD)/ovl12.bin
 
-BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/fw200_sh.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/ovl11.bin $(BUILD)/bank60.bin $(BUILD)/bank61.bin $(BUILD)/bank62.bin $(BUILD)/ovl12.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx $(BUILD)/coldsetup.ihx \
+BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl13.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/fw200_sh.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/ovl11.bin $(BUILD)/bank60.bin $(BUILD)/bank61.bin $(BUILD)/bank62.bin $(BUILD)/ovl12.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx $(BUILD)/coldsetup.ihx \
            $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 
