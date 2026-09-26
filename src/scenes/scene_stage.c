@@ -894,17 +894,19 @@ static void results_and_fanfare(void) {
      DFX_SPIN  … 画面を粗くしてきりもみしながら遠ざかる(SCREEN3 のロトズーム)
      DFX_PART  … 火の粉と破片のパーティクル(ovl_part)
      DFX_CRACK … 縦に裂けて左右へ開き、割れ目から炎柱(ovl_crack)
+     DFX_TILT  … 視点が倒れてパースになり、燃える艦が遠ざかって沈む(ovl_tilt)
    ★未割り当ての面は SINK にしてあるので、割り当てを変えるのはこの表 1 行で済む。 */
 #define DFX_SINK  0
 #define DFX_SPIN  1
 #define DFX_PART  2
 #define DFX_CRACK 3
+#define DFX_TILT  4
 static const u8 defeat_fx[5] = {
     /* 1面 */ DFX_SINK,    /* 船尾から沈む(教育面なので素直な絵) */
     /* 2面 */ DFX_CRACK,   /* 空母の飛行甲板が中心線から裂ける */
     /* 3面 */ DFX_SPIN,    /* きりもみ急上昇 */
     /* 4面 */ DFX_PART,    /* 火の粉と破片。★双子なので噴き口は 2 つ(ovl_part) */
-    /* 5面 */ DFX_SINK,
+    /* 5面 */ DFX_TILT,    /* 夜戦。見下ろしの画面が奥へ倒れる(turboR の見せ場) */
 };
 static u8 defeat_kind(void) { return (curstage < 5) ? defeat_fx[curstage] : DFX_SINK; }
 
@@ -935,10 +937,11 @@ static u8 defeat_update(void) {
             /* ★面ごとの演出(2面の「裂けて開く」・3面の「きりもみ」)は別バンク(OVL13)。
                撃沈オーバレイ(ovl7)が 8KB に収まらないため分けた。
                overlay_load は page2=cart の文脈で呼ぶこと。 */
-            if (fx == DFX_CRACK || fx == DFX_SPIN) overlay_load(OVL13_BANK);
+            if (fx != DFX_PART) overlay_load(OVL13_BANK);   /* PART だけ ovl7 に居る */
             ramx_use_ram();          /* ★オーバレイは page2=RAM の文脈でしか呼べない */
             if (fx == DFX_SPIN) spin_away();
             else if (fx == DFX_CRACK) crack_open();
+            else if (fx == DFX_TILT) tilt_away();
             else part_burst();
             ramx_use_cart();
             hot_load();              /* 演出が hot_ram を借りたので戻す */
@@ -974,9 +977,10 @@ u8 stage_update(void) {
         overlay_load(OVL7_BANK);     /* overlay_load は page2=cart の文脈で呼ぶ */
         ramx_use_ram();
         {   u8 fx = defeat_kind();          /* 面の割り当てで試す(curstage を書き換えれば別の面の絵) */
-            if (fx == DFX_CRACK || fx == DFX_SPIN) { ramx_use_cart(); overlay_load(OVL13_BANK); ramx_use_ram(); }
+            if (fx != DFX_PART) { ramx_use_cart(); overlay_load(OVL13_BANK); ramx_use_ram(); }
             if (fx == DFX_SPIN) spin_away();
             else if (fx == DFX_CRACK) crack_open();
+            else if (fx == DFX_TILT) tilt_away();
             else part_burst();
         }
         ramx_use_cart();

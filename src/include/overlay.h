@@ -67,6 +67,7 @@
 #define OVL_SLOT_SPIN           OVL_SLOT_MB_INIT
 #define OVL_SLOT_PART           OVL_SLOT_MB_FRAME   /* 撃沈の火の粉・破片(同じ理由で slot23 を借りる) */
 #define OVL_SLOT_CRACK          OVL_SLOT_ROT_ZOOM   /* 撃沈の「縦に裂けて開く」(宙返りは撃沈中に呼ばないので slot15 を借りる) */
+#define OVL_SLOT_TILT           OVL_SLOT_FINAL_INIT /* 撃沈の「視点が倒れる」(最終面の init は撃沈中に呼ばないので slot16 を借りる) */
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 
@@ -93,7 +94,8 @@ void sink_init(void);                      /* 撃沈シーン(OVL7): 状態を�
 u8   sink_frame(void);                     /* 撃沈シーン(OVL7): 1フレーム。戻り 1=終わった */
 void spin_away(void);                      /* 撃沈シーン(OVL7): 画面を粗くしてきりもみ(数秒ブロックする) */
 void part_burst(void);                     /* 撃沈シーン(OVL7): 火の粉と破片(数秒ブロックする) */
-void crack_open(void);                     /* 撃沈シーン(OVL7): 縦に裂けて左右へ開く(数秒ブロックする) */
+void crack_open(void);                     /* 撃沈シーン(OVL13): 縦に裂けて左右へ開く(数秒ブロックする) */
+void tilt_away(void);                      /* 撃沈シーン(OVL13): 視点が倒れて奥へ沈む(数秒ブロックする) */
 void power_frame(void);                    /* パワーアップ: 銀の敵機が落ちたら増槽を出し、自機が触れたら段階を上げる */
 void mb_init(void);                        /* 中ボス(OVL8): 状態を決め直す */
 void mb_frame(void);                       /* 中ボス(OVL8): 1フレーム。終わったら g_mb=MB_RESTORE */

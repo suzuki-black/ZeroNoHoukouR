@@ -341,10 +341,11 @@ ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
 # 面ごとの撃沈演出のオーバレイ(bank29)。撃沈オーバレイ(ovl7)が 8KB に収まらなくなったので分けた。
 # 撃破演出の最後に読み込み、数秒ブロックして戻る。次の面の stage_setup が通常面のものへ戻す。
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
-OVL13_RELS = $(BUILD)/ovl_spin.rel $(BUILD)/ovl_crack.rel
-$(BUILD)/ovl13.ihx: $(SRC)/banked/ovl_spin.c $(SRC)/banked/ovl_crack.c $(HDRS) $(BUILD)/ovlhead13.rel $(BUILD)/resident_syms.rel
+OVL13_RELS = $(BUILD)/ovl_spin.rel $(BUILD)/ovl_crack.rel $(BUILD)/ovl_tilt.rel
+$(BUILD)/ovl13.ihx: $(SRC)/banked/ovl_spin.c $(SRC)/banked/ovl_crack.c $(SRC)/banked/ovl_tilt.c $(HDRS) $(BUILD)/ovlhead13.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_spin.c -o $(BUILD)/ovl_spin.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_crack.c -o $(BUILD)/ovl_crack.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_tilt.c -o $(BUILD)/ovl_tilt.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead13.rel $(OVL13_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead13.rel: $(SRC)/banked/ovlhead13.s | $(BUILD)

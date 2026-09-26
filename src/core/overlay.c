@@ -111,6 +111,7 @@ u8   sink_frame(void) __naked  { __asm jp 0xA03C __endasm; }
 void spin_away(void) __naked   { __asm jp 0xA042 __endasm; }   /* slot22 を借りる(撃沈のきりもみ) */
 void part_burst(void) __naked  { __asm jp 0xA045 __endasm; }   /* slot23 を借りる(撃沈の火の粉) */
 void crack_open(void) __naked  { __asm jp 0xA02D __endasm; }   /* slot15 を借りる(撃沈の「裂けて開く」) */
+void tilt_away(void) __naked   { __asm jp 0xA030 __endasm; }   /* slot16 を借りる(撃沈の「視点が倒れる」) */
 /* ---- 通常面のオーバレイ(増槽) ---- */
 void power_frame(void) __naked { __asm jp 0xA03F __endasm; }
 /* ---- 中ボスのオーバレイ(OVL8_BANK)だけが持つ入口 ---- */

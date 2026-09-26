@@ -5,6 +5,7 @@
         .module ovlhead13
         .globl  _ovl_crack
         .globl  _ovl_spin
+        .globl  _ovl_tilt
         .area   _CODE
         jp      stub_ret             ; slot0
         jp      stub_ret             ; slot1
@@ -22,7 +23,7 @@
         jp      stub_zero            ; slot13
         jp      stub_zero            ; slot14
         jp      _ovl_crack           ; slot15 ★2面「縦に裂けて左右へ開く」(OVL_SLOT_CRACK)
-        jp      stub_ret             ; slot16 (4面の演出を置くならここ)
+        jp      _ovl_tilt            ; slot16 ★5面「視点が倒れる(Mode7 風パース)」(OVL_SLOT_TILT)
         jp      stub_zero            ; slot17
         jp      stub_ret             ; slot18 (5面の演出を置くならここ)
         jp      stub_ret             ; slot19

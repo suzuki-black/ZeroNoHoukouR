@@ -27,16 +27,9 @@
 #include "scroll.h"
 #include "aa_hot.h"        /* cam(縦スクロールカメラ=世界Y) */
 
-#define TEX_ADDR  0xC600   /* 64x128 テクセル(4bit詰め) = 4,096B。256 境界に置くこと */
-#define TEX       ((u8 *)TEX_ADDR)
-#define SEA_ADDR  0xD600   /* 海タイル 16x16(1B=1テクセル) = 256B。256 境界に置くこと */
-#define SEA       ((u8 *)SEA_ADDR)
+#include "spinfx.h"        /* TEX / SEA / S3_* と、5面のパース(ovl_tilt.c)と共有する土台 */
+
 #define RAMF      ((u8 *)0xD700)   /* 内側ループの RAM 実行先 */
-
-#define TEX_H     124      /* 実際に絵が入っている行数(496 ドット / 4)。124..127 は海 */
-
-#define S3_PAT   0x0000    /* SCREEN3 パターン(色)テーブル: 1,536B */
-#define S3_NAME  0x0800    /* 名前テーブル: 768B */
 #define S3_SATR  0x1B00
 #define S3_SPAT  0x3800
 
@@ -91,7 +84,7 @@ static void read_row(u16 row) {
 /* ───────── 戦艦バッファ B(256x496)を 64x124 テクセル(4bit詰め)へ ─────────
    VRAM の 1 行は 128B(1B=2 ドット)。4 ドットおき＝2 バイトおきに上位ニブルを拾う。
    ついでに左端(海しか無い)から 16x16 の海タイルを作る。 */
-static void grab(void) {
+void spinfx_grab(void) {
     u8 ty, tx;
     /* ★海のタイルは海テンプレート(VRAM 512行〜, 16px)から取る。艦バッファの端から取ると
        船首の絵を「海」として撒いてしまい、背景が縞になる(実際に踏んだ)。 */
@@ -350,7 +343,7 @@ static void frame(void) {
 }
 
 /* SCREEN3 へ。テーブルは自分で設定する(BIOS 既定に依存しない)。 */
-static void enter_s3(void) {
+void spinfx_enter_s3(void) {
     u8 y, x, i;
     raster_off();
     __asm
@@ -382,7 +375,7 @@ void ovl_spin(void) {
     const u8 *s = (const u8 *)strip;
     u16 len = (u16)((const u8 *)strip_end - s);
     if (len > 256) return;                    /* 枠に入らない＝やらない(安全側) */
-    grab();                                   /* 戦艦バッファ B(艦の全長)を吸い出す */
+    spinfx_grab();                            /* 撃破の画面(＋画面外の艦)を吸い出す */
     for (k = 0; k < len; k++) RAMF[k] = s[k]; /* 内側ループを RAM へ(ROM 実行では 7fps) */
     stripr = (void (*)(void))RAMF;
     /* ★回転の中心は**いま画面に見えている中心**のまま動かさない。艦の中心へ寄せると
@@ -392,7 +385,7 @@ void ovl_spin(void) {
     cy  = (u16)((u16)(((cam + 74) >> 2) & 127) << 8);
     cx8 = 0x2000;                             /* 元絵の横の中心(テクセル32) */
     ang = 0; scl = 16; seq_t = 0;
-    enter_s3();
+    spinfx_enter_s3();
     /* ★台本: 撃破の画面が**そのまま粗くなっただけ**の状態で一度止まり(HOLD_T)、
        そこから回転も縮小も加速する。最後まで縮み続ける(倍率の頭打ちは元絵を半分に
        潰して回避)。いきなり回して縮めると「別の絵に切り替わった」ように見える。 */
