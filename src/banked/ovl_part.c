@@ -11,8 +11,12 @@
    ★消去は「海テンプレートの同じ位置の色」で塗り戻す(VRAM を読み戻すと番地設定が倍になる)。
      テンプレート 16 行(2KB)を RAM へ写して引く。
    ★RAM は hot_ram(演出中だけ借りる。終わったら常駐が hot_load() で戻す):
-     0xC600 海テンプレート 2,048B / 0xCE00 粒 6B×200 / 0xD400 内側ループ
-   ★粒 1 個 6B: x(8.8) y(8.8) vx(s8) vy(s8)。y_hi=0xFF は死んだ粒。
+     0xC600 海テンプレート 2,048B(-0xCDFF) / 0xCE00 粒 8B×200(-0xD43F) / 0xD500 内側ループ(331B)
+   ★粒を 6B から 8B(前回描いた位置 px,py を持つ)に広げたとき、粒の置き場が 0xD43F まで伸びて
+     **内側ループのコード(当時 0xD400)を上書きしていた**。演出が数フレーム進んで粒が 192 個を
+     超えた瞬間に RAM のコードが壊れ、機械がリセットする(1面クリアでタイトルに戻る)。
+     置き場を動かすときは「粒の終端 = PRT + PRT_N*PRT_SZ」と CODE の間隔を必ず数えること。
+   ★粒 1 個 8B: x(8.8) y(8.8) vx(s8) vy(s8) px py。y_hi=0xFF は死んだ粒。
    ★y は「画面Y + 48」で持つ。画面の上へ飛び出した粒が 0 を下回って回り込み、
      「即死して撒いた場所に少し残るだけ」になっていたため(実際に踏んだ)。48 ドットぶん上に
      居られるようにして、重力で戻ってくるまで生かす。 */
@@ -23,11 +27,23 @@
 #include "overlay.h"
 #include "scroll.h"
 
-#define TMPL    ((u8 *)0xC600)     /* 海テンプレート 16 行(1 行 128B)。256 境界に置くこと */
-#define PRT     ((u8 *)0xCE00)
+#define TMPL_ADDR 0xC600
+#define PRT_ADDR  0xCE00
+#define CODE_ADDR 0xD500           /* ★粒の終端より後ろ。0xD7FF まで 768B 使える */
+#define TMPL    ((u8 *)TMPL_ADDR)  /* 海テンプレート 16 行(1 行 128B)。256 境界に置くこと */
+#define PRT     ((u8 *)PRT_ADDR)
 #define PRT_N   200                /* 2x2 ドットで 30fps に収まる数(実測) */
 #define PRT_SZ  8                  /* x(2) y(2) vx vy px py。px=0xFF は「前回描いていない」 */
-#define CODE    ((u8 *)0xD400)
+#define CODE    ((u8 *)CODE_ADDR)
+#if (TMPL_ADDR + 16 * 128) > PRT_ADDR
+#error "海テンプレートが粒の置き場に食い込んでいる"
+#endif
+#if (PRT_ADDR + PRT_N * PRT_SZ) > CODE_ADDR
+#error "粒の置き場が RAM 実行コードを上書きする(これで機械がリセットした)"
+#endif
+#if CODE_ADDR + 768 > 0xD800
+#error "RAM 実行コードが hot_ram の借用範囲(0xD7FF)をはみ出す"
+#endif
 
 #define SEQ_FALL 64                /* 噴き口が上から下まで下りるフレーム数 */
 #define SEQ_END  104               /* 全体の尺(約 3.5 秒) */
@@ -213,11 +229,23 @@ static void step_plot(void) __naked {
         ld   b, a
         ld   a, (_vscroll_now)
         add  a, b
-        and  #15
-        add  a, #0xC6             ; TMPL の行(1 行 128B)
-        ld   h, a
-        ld   a, 6(ix)
+        and  #15                  ; テンプレートの行 r(0..15)
+        ld   b, a
+        ;; ★TMPL は 1 行 128B。番地 = 0xC600 + r*128 + (x>>1) なので
+        ;;   上位 = 0xC6 + (r>>1) / 下位 = ((r&1)<<7) | (x>>1)。
+        ;;   ここを「上位 = 0xC6 + r」(1 行 256B のつもり)にしていたため、奇数行は
+        ;;   よその行、r>=2 では **2KB の外(粒の置き場やコード)** を海の色として
+        ;;   塗っていた。海一面に色とりどりのゴミが残るのはこれ(実際に踏んだ)。
         srl  a
+        add  a, #0xC6
+        ld   h, a
+        ld   a, b
+        and  #1
+        rrca                      ; (r&1)<<7
+        ld   l, a
+        ld   a, c                 ; x(ドット)
+        srl  a
+        add  a, l
         ld   l, a
         ld   a, (hl)
         out  (0x98), a
@@ -392,7 +420,7 @@ void ovl_part(void) {
     u16 k, t;
     const u8 *sp = (const u8 *)step_plot;
     u16 len = (u16)((const u8 *)step_plot_end - sp);
-    if (len > 640) return;
+    if (len > 768) return;     /* 0xD500-0xD7FF に収まらないなら演出をあきらめる */
     seed = 0x2468;
     vscroll_now = g_vscroll;
     grab_tmpl();
