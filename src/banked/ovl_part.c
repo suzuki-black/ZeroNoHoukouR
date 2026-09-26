@@ -53,6 +53,7 @@ static u8  emit_y;                 /* 噴き口の画面Y(ドット) */
 static u16 cnt16;
 static u8  vscroll_now;            /* asm から見る縦スクロール(g_vscroll の写し) */
 static u8  pcol;                   /* いま描く粒の色(2 ドット分) */
+static u8  wind;                   /* 爆風の横風(s8)。時間でゆっくり向きが変わる(軌道を反らせる) */
 
 __sfr __at(0x98) PDAT;
 __sfr __at(0x99) PCTL;
@@ -160,12 +161,66 @@ static void step_plot(void) __naked {
         add  hl, de
         ld   2(ix), l
         ld   3(ix), h
+        jr   pq_gtyp
+    pq_backm:                     ; ★中継(jr は ±127。種類分けを足して pq_back0 が遠くなった)
+        jr   pq_back0
+    pq_gtyp:
+        ;; ---- 加速度は粒ごとに 4 種類(下 2bit)。全部「初速＋一定の重力」にすると
+        ;;      どれも同じ放物線＝直線的に見えるため(ユーザー指摘)。 ----
+        ld   a, (_cnt16)
+        and  #3
+        jr   z, pq_g0
+        dec  a
+        jr   z, pq_g1
+        dec  a
+        jr   z, pq_g2
+        ;; --- 3: 渦。上っている間は内へ、落ち始めたら外へ曲がる(S字) ---
         ld   a, 5(ix)
         add  a, #2
         ld   5(ix), a
+        bit  7, a
+        ld   a, 4(ix)
+        jr   nz, pq_g3u
+        inc  a
+        jr   pq_g3s
+    pq_g3u:
+        dec  a
+    pq_g3s:
+        ld   4(ix), a
+        jr   pq_chk
+    pq_g0:
+        ;; --- 0: 重い燃えかす。急な放物線 ---
+        ld   a, 5(ix)
+        add  a, #3
+        ld   5(ix), a
+        jr   pq_chk
+    pq_g1:
+        ;; --- 1: 軽い火の粉。ゆっくり落ちて、時間で向きの変わる風に流される ---
+        ld   a, 5(ix)
+        inc  a
+        ld   5(ix), a
+        ld   a, (_wind)
+        add  a, 4(ix)
+        ld   4(ix), a
+        jr   pq_chk
+    pq_g2:
+        ;; --- 2: 爆風。中心(x=128)から外へ加速する＝外向きに反る ---
+        ld   a, 5(ix)
+        add  a, #2
+        ld   5(ix), a
+        ld   a, 1(ix)
+        cp   #128
+        ld   a, 4(ix)
+        jr   nc, pq_g2r
+        dec  a
+        jr   pq_g2s
+    pq_g2r:
+        inc  a
+    pq_g2s:
+        ld   4(ix), a
         jr   pq_chk
     pq_back:
-        jr   pq_back0
+        jr   pq_backm
     pq_chk:
         ;; ---- 海面(画面の下)・左右の外は消滅 ----
         ld   a, 3(ix)
@@ -308,6 +363,11 @@ static void (*stepr)(void);
 static u8  dbx[DEB_N], dby[DEB_N];      /* 画面座標(ドット) */
 static s8  dvx[DEB_N], dvy[DEB_N];
 static u8  dlive[DEB_N];
+/* 軌道の種類(dlive の bit4-5)。deb_step のコメント参照。 */
+#define DEB_ARC   0x00
+#define DEB_LEAF  0x10
+#define DEB_SPIN  0x20
+#define DEB_FLOAT 0x30
 
 /* 16x16 の破片(4 つの 8x8 パターン = 32 バイト)。左半分 16 行 → 右半分 16 行 の順。
    ★丸い塊を並べると「グラディウス(MSX)1面の溶岩」に見えて破片にならない(ユーザー指摘)。
@@ -377,7 +437,8 @@ static const u8 deb_col[DEB_KIND + 1][16] = {
 };
 
 /* ★dlive[] は 1 バイトに詰める(オーバレイの静的領域は 256B しかない):
-     0 = 出ていない / bit7 = 出ている / bit3 = ポーズ(寝かせた面) / bit0-2 = 次に横転するまでの数。
+     0 = 出ていない / bit7 = 出ている / bit4-5 = 軌道の種類 / bit3 = ポーズ(寝かせた面) /
+     bit0-2 = 次に横転するまでの数(軌道の位相も兼ねる)。
    種類は添字で決まる(i を 6 で割った余り)。色表はスプライトごとに固定なので、
    種類と色表は必ず対にすること(途中で種類を変えると木の色の骨組み等になる)。 */
 static void deb_init(void) {
@@ -402,17 +463,29 @@ static void deb_spawn(void) {
         if (dlive[i]) continue;
         {
             u16 r = rnd16();
+            u8  ty = (u8)((r >> 4) & 0x30);            /* 軌道の種類(bit4-5) */
             dbx[i]  = (u8)(112 + ((r >> 8) & 31));
             dby[i]  = emit_y;
             dvx[i]  = (s8)((r & 15) - 8);
             dvy[i]  = (s8)(((r >> 4) & 15) - 11);
-            dlive[i] = (u8)(0x80 | (r & 0x0F));        /* ポーズと横転位相を散らす */
+            /* ★種類ごとに出だしの勢いを変える。同じ初速だと、どの破片も同じ放物線を描いて
+               「直線的」に見える(ユーザー指摘)。 */
+            if (ty == DEB_LEAF)  { dvy[i] = (s8)(dvy[i] / 2 - 2); }          /* 板きれ: 高く上がらずひらひら */
+            if (ty == DEB_SPIN)  { dvx[i] = (s8)(dvx[i] * 2); dvy[i] = (s8)(dvy[i] + 2); }  /* 螺旋: 横に強く */
+            if (ty == DEB_FLOAT) { dvy[i] = (s8)(dvy[i] - 3); }              /* 軽い破片: 高く舞い上がる */
+            dlive[i] = (u8)(0x80 | ty | (r & 0x0F));   /* ポーズと横転位相も散らす */
         }
         return;
     }
 }
 
-/* 破片を 1 フレーム進めて置き直す */
+/* ★破片を 1 フレーム進めて置き直す。
+   軌道は 4 種類。全部を同じ「初速＋重力」にすると、どれも同じ放物線＝直線的に見えて
+   「破片が飛んでいる」感じにならない(ユーザー指摘)。種類は dlive の bit4-5 に持つ。
+     DEB_ARC   放物線＋空気抵抗 … 素直に飛んで、横の勢いが鈍っていく
+     DEB_LEAF  木の葉          … 落ちるのが遅く、左右へジグザグに翻る
+     DEB_SPIN  螺旋            … 速度ベクトルを毎フレーム少し回す＝弧を描いて外へ逃げる
+     DEB_FLOAT 高く舞う        … 重力が 1/3。高く上がってから、ゆっくり戻ってくる */
 static void deb_step(void) {
     u8 i, base = 0;
     for (i = 0; i < DEB_N; i++) {
@@ -422,15 +495,30 @@ static void deb_step(void) {
         if (base >= DEB_KIND * 8) base = 0;
         if (!d) { vdp_sprite_pos(i, 0, 216, 0); continue; }
         {
+            u8  ty = (u8)(d & 0x30);
+            u8  ph = (u8)(d & 7);                       /* 横転までの数。軌道の位相にも使う */
             s16 nx = (s16)((s16)dbx[i] + dvx[i]);
             s16 ny = (s16)((s16)dby[i] + dvy[i]);
-            if ((i & 3) == 0) dvy[i]++;                 /* 重力(ゆっくり) */
-            else if ((i & 1) == 0) dvy[i]++;
+            if (ty == DEB_ARC) {
+                dvy[i]++;                                           /* 重力 */
+                if (!ph) dvx[i] = (s8)(dvx[i] - (dvx[i] >> 2));     /* 空気抵抗(横だけ鈍る) */
+            } else if (ty == DEB_LEAF) {
+                if (ph & 1) dvy[i]++;                               /* 落ちるのが遅い */
+                if (!ph) dvx[i] = (s8)(-dvx[i]);                    /* 翻って逆へ */
+                if (dvy[i] > 3) dvy[i] = 3;                         /* 終端速度(ひらひら) */
+            } else if (ty == DEB_SPIN) {
+                s8 vx = dvx[i], vy = dvy[i];                        /* 速度を約15度ずつ回す */
+                dvx[i] = (s8)(vx - (vy >> 2));
+                dvy[i] = (s8)(vy + (vx >> 2) + ((ph & 1) ? 1 : 0)); /* 回しつつ重力 */
+            } else {
+                if (!(ph & 3)) dvy[i]++;                            /* 重力 1/3(軽い破片) */
+                if (!ph) dvx[i] = (s8)(dvx[i] - (dvx[i] >> 3));
+            }
             if (nx < 2 || nx > 248 || ny > 205) { dlive[i] = 0; vdp_sprite_pos(i, 0, 216, 0); continue; }
             if (ny < 0) ny = 0;
             dbx[i] = (u8)nx; dby[i] = (u8)ny;
             /* ★横転: 数フレームおきにポーズを入れ替える。速さは破片ごとに変える */
-            { u8 tm = (u8)(d & 7);
+            { u8 tm = ph;
               if (tm) tm--;
               else { d ^= 0x08; tm = (u8)(3 + (i & 3)); }
               dlive[i] = (u8)((d & 0xF8) | tm); }
@@ -497,7 +585,10 @@ void ovl_part(void) {
         if (t < SEQ_FALL) {
             u8 ny = (u8)(((u16)t * 212) / SEQ_FALL);   /* ★表示は 212 行。196 で止めると下に艦が残る */
             while (emit_y < ny) { erase_row(emit_y); emit_y++; }
-            vdp_cmd_wait();   /* ★コピー(VDPコマンド)の完了を待つ。実行中に VRAM を直接叩くと
+            /* ★風は時間で向きが変わる。一定の風だと全部が同じ方向へ流れて、やはり直線に見える。 */
+        { static const s8 wtab[8] = { 0, 1, 2, 1, 0, -1, -2, -1 };
+          wind = (u8)wtab[(t >> 2) & 7]; }
+        vdp_cmd_wait();   /* ★コピー(VDPコマンド)の完了を待つ。実行中に VRAM を直接叩くと
                                  書込みが化ける(粒が VRAM には在るのに画面に出ない状態になっていた) */
             emit((u8)((t < 12) ? 28 : 16));           /* 最初にどっと噴き、以降も絶やさない */
             deb_spawn();                              /* 破片(スプライト)も出す */
