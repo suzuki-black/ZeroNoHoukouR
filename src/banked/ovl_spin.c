@@ -356,7 +356,7 @@ void spinfx_enter_s3(void) {
     vdp_wreg(4, S3_PAT / 0x800);
     vdp_wreg(5, S3_SATR / 0x80);
     vdp_wreg(6, S3_SPAT / 0x800);
-    vdp_palette_game();
+    spinfx_stage_pal();        /* ★CHGMOD が BIOS 既定の色に戻すので面の色を書き直す(夜戦が昼になる) */
     vdp_write_addr(S3_NAME);   /* name = 32*(y/4) + x */
     for (y = 0; y < 24; y++)
         for (x = 0; x < 32; x++) vdp_data((u8)(((y >> 2) << 5) + x));

@@ -21,5 +21,9 @@
 void spinfx_grab(void);
 /* SCREEN3(MULTI COLOUR)へ切り替え、名前表を並べてパターン表を画面にする。 */
 void spinfx_enter_s3(void);
+/* いまの面の基準パレット(時間帯・天候)を書く。★CHGMOD は BIOS 既定の色に戻してしまうので、
+   SCREEN3 へ切り替えた直後に必ず呼ぶ。vdp_palette_game() は 1 面(昼)の色なので使わないこと
+   (5面=夜戦が昼の青い海になる)。 */
+void spinfx_stage_pal(void);
 
 #endif /* SPINFX_H */

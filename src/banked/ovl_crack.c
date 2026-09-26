@@ -19,6 +19,7 @@
 #include "scroll.h"
 #include "aa_hot.h"       /* curstage */
 #include "stage_grade.h"  /* 面ごとの時間帯・天候の基準パレット(2面=夕焼け) */
+#include "spinfx.h"       /* 同じバンクの 3面・5面の演出と共有する */
 
 #define FX      ((u8 *)0xC600)     /* 炎と煙 16 枚 × 4B: x, y, 残り寿命, ポーズ */
 #define FX_N    16
@@ -164,8 +165,9 @@ static void fx_step(u8 half) {
 static void white_pal(void) { u8 i; for (i = 0; i < 16; i++) vdp_set_pal(i, 7, 7, 7); }
 
 /* ★閃光から戻すときは **その面の** パレットへ戻すこと。vdp_palette_game() は 1 面(昼)の色なので、
-   2 面(夕焼け)でこれを呼ぶと海が昼の青に戻ってしまう(実際に踏んだ)。 */
-static void stage_pal(void) {
+   2 面(夕焼け)でこれを呼ぶと海が昼の青に戻ってしまう(実際に踏んだ)。
+   ★同じ理由で SCREEN3 の演出(3面・5面)も CHGMOD の後にこれを呼ぶ。バンク内で共有する。 */
+void spinfx_stage_pal(void) {
     u8 i, s = (u8)((curstage < 5) ? curstage : 0);
     for (i = 0; i < 16; i++) {
         const u8 *c = pal_stage[s][i];
@@ -184,7 +186,7 @@ void ovl_crack(void) {
     white_pal();                 /* ★閃光はパレットだけ=帯域ゼロ */
     vdp_wait_frame();
     vdp_wait_frame();
-    stage_pal();
+    spinfx_stage_pal();
     for (t = 0; t < SEQ_END; t++) {
         if (t < T_ZIP) {                                  /* 亀裂が走る */
             u8 ny = (u8)(((u16)(t + 1) * 212) / T_ZIP);
