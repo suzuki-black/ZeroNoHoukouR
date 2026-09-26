@@ -900,10 +900,10 @@ static void results_and_fanfare(void) {
 #define DFX_PART  2
 #define DFX_CRACK 3
 static const u8 defeat_fx[5] = {
-    /* 1面 */ DFX_PART,    /* 火の粉と破片 */
+    /* 1面 */ DFX_SINK,    /* 船尾から沈む(教育面なので素直な絵) */
     /* 2面 */ DFX_CRACK,   /* 空母の飛行甲板が中心線から裂ける */
-    /* 3面 */ DFX_SPIN,
-    /* 4面 */ DFX_SINK,
+    /* 3面 */ DFX_SPIN,    /* きりもみ急上昇 */
+    /* 4面 */ DFX_PART,    /* 火の粉と破片。★双子なので噴き口は 2 つ(ovl_part) */
     /* 5面 */ DFX_SINK,
 };
 static u8 defeat_kind(void) { return (curstage < 5) ? defeat_fx[curstage] : DFX_SINK; }

@@ -26,6 +26,7 @@
 #include "raster.h"
 #include "overlay.h"
 #include "scroll.h"
+#include "aa_hot.h"      /* curstage(4面=双子艦だけ噴き口が 2 つ) */
 
 #define TMPL_ADDR 0xC600
 #define PRT_ADDR  0xCE00
@@ -54,6 +55,9 @@ static u16 cnt16;
 static u8  vscroll_now;            /* asm から見る縦スクロール(g_vscroll の写し) */
 static u8  pcol;                   /* いま描く粒の色(2 ドット分) */
 static u8  wind;                   /* 爆風の横風(s8)。時間でゆっくり向きが変わる(軌道を反らせる) */
+/* 噴き口の中心 -16(ここに 0..31 の散らしを足す)。★4面の双子艦は艦が 2 隻あるので 2 か所から噴く。
+   艦の中心は ship_render の paint_hull_at と同じ 76 / 180(単艦は 128)。 */
+static u8  cx0, cx1;
 
 __sfr __at(0x98) PDAT;
 __sfr __at(0x99) PCTL;
@@ -464,7 +468,7 @@ static void deb_spawn(void) {
         {
             u16 r = rnd16();
             u8  ty = (u8)((r >> 4) & 0x30);            /* 軌道の種類(bit4-5) */
-            dbx[i]  = (u8)(112 + ((r >> 8) & 31));
+            dbx[i]  = (u8)(((i & 1) ? cx1 : cx0) + ((r >> 8) & 31));
             dby[i]  = emit_y;
             dvx[i]  = (s8)((r & 15) - 8);
             dvy[i]  = (s8)(((r >> 4) & 15) - 11);
@@ -537,7 +541,7 @@ static void emit(u8 n) {
         {
             u16 r = rnd16();
             p[0] = (u8)(r & 0xFF);
-            p[1] = (u8)(112 + ((r >> 8) & 31));        /* x(ドット): 艦の中心付近 */
+            p[1] = (u8)(((i & 1) ? cx1 : cx0) + ((r >> 8) & 31));   /* x(ドット): 艦の中心付近 */
             p[2] = (u8)(r >> 5);
             p[3] = (u8)(emit_y + YBIAS);
             r = rnd16();
@@ -568,6 +572,8 @@ void ovl_part(void) {
     u16 len = (u16)((const u8 *)step_plot_end - sp);
     if (len > 768) return;     /* 0xD500-0xD7FF に収まらないなら演出をあきらめる */
     seed = 0x2468;
+    if (curstage == 3) { cx0 = 76 - 16; cx1 = 180 - 16; }   /* 双子艦: 2 隻それぞれから */
+    else               { cx0 = 128 - 16; cx1 = 128 - 16; }
     vscroll_now = g_vscroll;
     grab_tmpl();
     for (k = 0; k < PRT_N; k++) { PRT[k * PRT_SZ + 3] = 0xFF; PRT[k * PRT_SZ + 6] = 0xFF; }
