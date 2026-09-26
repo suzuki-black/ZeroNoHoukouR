@@ -318,11 +318,10 @@ ROMPACK_BANKS += --asset 32 $(BUILD)/boss_vram.bin --asset 40 $(BUILD)/boss_vram
 
 # 撃沈シーンのオーバレイ: 撃破の瞬間に通常面のものと入れ替える。パレット(面の天候つき)は同じソースを別名で入れる。
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
-OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel $(BUILD)/ovl_spin.rel $(BUILD)/ovl_part.rel
-$(BUILD)/ovl7.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(SRC)/banked/ovl_spin.c $(SRC)/banked/ovl_part.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
+OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel $(BUILD)/ovl_part.rel
+$(BUILD)/ovl7.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(SRC)/banked/ovl_part.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_SINK $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl7_palette.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_sink.c -o $(BUILD)/ovl_sink.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_spin.c -o $(BUILD)/ovl_spin.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_part.c -o $(BUILD)/ovl_part.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead7.rel $(OVL7_RELS) $(BUILD)/resident_syms.rel -o $@
@@ -336,20 +335,15 @@ $(BUILD)/ovl7.bin: $(BUILD)/ovl7.ihx tools/ihx2bin.mjs
 	 fi; \
 	 echo "  ovl7.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"; \
 	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl7.map | head -1); \
-	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl7 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi; \
-	 HR=$$(sed -n 's/^ *\([0-9A-F]\{8\}\)  *_hot_ram .*/\1/p' $(BUILD)/rom.map | head -1); \
-	 HRD=$$((16#$$HR)); \
-	 if [ $$HRD -gt 50688 ] || [ $$((HRD+5696)) -lt 55296 ]; then \
-	   echo "ERROR: ovl_spin は hot_ram の 0xC600-0xD7FF(元絵＋RAM実行)を借りる。hot_ram=0x$$HR では収まらない"; exit 3; \
-	 fi; \
-	 echo "  ovl_spin: hot_ram=0x$$HR / 0xC600-0xD7FF を借りる OK"
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl7 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
 ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
 
 # 面ごとの撃沈演出のオーバレイ(bank29)。撃沈オーバレイ(ovl7)が 8KB に収まらなくなったので分けた。
 # 撃破演出の最後に読み込み、数秒ブロックして戻る。次の面の stage_setup が通常面のものへ戻す。
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
-OVL13_RELS = $(BUILD)/ovl_crack.rel
-$(BUILD)/ovl13.ihx: $(SRC)/banked/ovl_crack.c $(HDRS) $(BUILD)/ovlhead13.rel $(BUILD)/resident_syms.rel
+OVL13_RELS = $(BUILD)/ovl_spin.rel $(BUILD)/ovl_crack.rel
+$(BUILD)/ovl13.ihx: $(SRC)/banked/ovl_spin.c $(SRC)/banked/ovl_crack.c $(HDRS) $(BUILD)/ovlhead13.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_spin.c -o $(BUILD)/ovl_spin.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_crack.c -o $(BUILD)/ovl_crack.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead13.rel $(OVL13_RELS) $(BUILD)/resident_syms.rel -o $@
@@ -363,7 +357,13 @@ $(BUILD)/ovl13.bin: $(BUILD)/ovl13.ihx tools/ihx2bin.mjs
 	 fi; \
 	 echo "  ovl13.bin=$${SZ}B / 8192B (残り$$((8192-SZ))B)"; \
 	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl13.map | head -1); \
-	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl13 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
+	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl13 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi; \
+	 HR=$$(sed -n 's/^ *\([0-9A-F]\{8\}\)  *_hot_ram .*/\1/p' $(BUILD)/rom.map | head -1); \
+	 HRD=$$((16#$$HR)); \
+	 if [ $$HRD -gt 50688 ] || [ $$((HRD+5696)) -lt 55296 ]; then \
+	   echo "ERROR: ovl_spin は hot_ram の 0xC600-0xD7FF(元絵＋RAM実行)を借りる。hot_ram=0x$$HR では収まらない"; exit 3; \
+	 fi; \
+	 echo "  ovl_spin/ovl_crack: hot_ram=0x$$HR / 0xC600-0xD7FF を借りる OK"
 ROMPACK_BANKS += --bank 29 $(BUILD)/ovl13.bin
 
 # 中ボス用オーバレイ: 通常面のオーバレイから主砲の弾幕を抜き、中ボスを足す。海の区間で出現の瞬間に入れ替え、戦艦の前に戻す。

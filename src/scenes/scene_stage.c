@@ -932,9 +932,10 @@ static u8 defeat_update(void) {
            元絵と内側ループは hot_ram を借りるので、終わったら hot_load() で戻す。
            SCREEN5 への復帰は結果画面の前にここで行う(CHGMOD は VRAM を広く消す)。 */
         if (g_ovl_ok && fx != DFX_SINK) {
-            /* ★2面の「裂けて開く」は別バンク(OVL13)。撃沈オーバレイが 8KB に収まらないため。
+            /* ★面ごとの演出(2面の「裂けて開く」・3面の「きりもみ」)は別バンク(OVL13)。
+               撃沈オーバレイ(ovl7)が 8KB に収まらないため分けた。
                overlay_load は page2=cart の文脈で呼ぶこと。 */
-            if (fx == DFX_CRACK) overlay_load(OVL13_BANK);
+            if (fx == DFX_CRACK || fx == DFX_SPIN) overlay_load(OVL13_BANK);
             ramx_use_ram();          /* ★オーバレイは page2=RAM の文脈でしか呼べない */
             if (fx == DFX_SPIN) spin_away();
             else if (fx == DFX_CRACK) crack_open();
@@ -973,7 +974,7 @@ u8 stage_update(void) {
         overlay_load(OVL7_BANK);     /* overlay_load は page2=cart の文脈で呼ぶ */
         ramx_use_ram();
         {   u8 fx = defeat_kind();          /* 面の割り当てで試す(curstage を書き換えれば別の面の絵) */
-            if (fx == DFX_CRACK) { ramx_use_cart(); overlay_load(OVL13_BANK); ramx_use_ram(); }
+            if (fx == DFX_CRACK || fx == DFX_SPIN) { ramx_use_cart(); overlay_load(OVL13_BANK); ramx_use_ram(); }
             if (fx == DFX_SPIN) spin_away();
             else if (fx == DFX_CRACK) crack_open();
             else part_burst();
