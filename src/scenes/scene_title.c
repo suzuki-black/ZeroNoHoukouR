@@ -9,6 +9,8 @@
    banked_entry が g_scene_phase(0=init/1=update)で分岐し、update 結果を g_scene_ret に書く。 */
 #include "input.h"
 #include "scene.h"
+#include "vdp.h"        /* vdp_write_addr / vdp_data / vdp_glyph(常駐) */
+#include "gamestate.h"  /* g_hiscore(電源が入っている間だけのハイスコア) */
 
 /* 隠しコマンド(コナミ): 上上下下左右左右 B A。成立で設定メニュー(SC_CONFIG)を開く。
    B=INP_TRIGB(キーB / ジョイ トリガ2 / キーM), A=INP_TRIG(キーA / スペース / ジョイ トリガ1)。 */
@@ -17,8 +19,38 @@ static const u8 konami[10] = {
 };
 static u8 kidx;   /* コナミ入力の進捗。RAM(data-loc)。init で0。 */
 
+/* ★タイトルへハイスコアを「無理矢理」載せる。
+   タイトルは SCREEN12(YJK 自然画)で、4 ドットごとに J/K を共有する。
+   **J=K=0 のときバイトは「明度だけ」＝灰色**になるので、byte = Y<<3 で
+   白(0xF8)と黒(0x00)を置けば、絵の上に白黒の文字を打てる(色はにじまない)。
+   ★x は 4 の倍数にすること(J/K の組が 4 ドット単位。ずらすと隣の 4 ドットの色を壊す)。
+   ★ここは SCREEN5 の描画(vdp_text/vdp_fill)を使ってはいけない(YJK 画が壊れる)。
+     画そのものは常駐が bcall の前に毎回流し込むので、ここで書いた文字も入場のたびに描き直す。 */
+static void yjk_text(u8 x, u8 y, const char *s) {
+    u8 r, c, i;
+    for (i = 0; s[i]; i++) {
+        const u8 *g = vdp_glyph((u8)s[i]);
+        for (r = 0; r < 8; r++) {
+            u8 bits = g[r];
+            vdp_write_addr((u16)((u16)(y + r) * 256 + x + ((u16)i << 3)));
+            for (c = 0; c < 8; c++, bits = (u8)(bits << 1)) vdp_data((u8)((bits & 0x80) ? 0xF8 : 0x00));
+        }
+    }
+}
+
+static void title_hiscore(void) {
+    char buf[6];
+    u16 v = g_hiscore;
+    u8 i;
+    for (i = 5; i > 0; i--) { buf[i - 1] = (char)('0' + (u8)(v % 10)); v /= 10; }
+    buf[5] = 0;
+    yjk_text(8, 194, "HI");
+    yjk_text(32, 194, buf);
+}
+
 static void title_init(void) {
-    kidx = 0;   /* 画は常駐が表示済み。ここは進捗リセットのみ(SCREEN12を壊さぬよう描画しない)。 */
+    kidx = 0;   /* 画は常駐が表示済み。ここで描いてよいのは YJK の明度だけの文字(下の title_hiscore)。 */
+    title_hiscore();
 }
 
 static u8 title_update(void) {

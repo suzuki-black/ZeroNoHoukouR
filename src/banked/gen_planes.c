@@ -339,6 +339,13 @@ static void card_text_impl(u8 stage, const char *nm) {
     vdp_text_s(168, 18, 15, 1, 2, num);
     vdp_text_s(48, 44, 11, 1, 2, "- TARGET -");
     vdp_text_s((u8)(128 - n * 8), 176, 15, 1, 2, nm);
+    /* ★ハイスコアは「電源が入っている間だけ」の 1 件(g_hiscore)。面の開始ごとに出す。
+       ゲーム画面(HUD)へ出すとスプライトの枠と 1 走査線 8 枚の制限に当たるので、
+       止まっている画面(カード・戦果・ゲームオーバー・タイトル)にだけ出す。 */
+    if (g_score > g_hiscore) g_hiscore = g_score;
+    fmt_score(g_hiscore);
+    vdp_text(88, 196, 14, 1, "HI");
+    vdp_text(120, 196, 14, 1, scorebuf);
 }
 
 /* ★5面の中ボス(P-61)の準備: スプライトを全部 2 倍に拡大(MAG)するので、絵の表A(0x7800)の64枚を半分(左上 8x8)に
