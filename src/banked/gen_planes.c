@@ -344,9 +344,9 @@ static void card_text_impl(u8 stage, const char *nm) {
        止まっている画面(カード・戦果・ゲームオーバー・タイトル)にだけ出す。 */
     if (g_score > g_hiscore) g_hiscore = g_score;
     fmt_score(g_hiscore);
-    /* ★淡灰(14)の等倍だと青い下地に沈んで読めなかった(ユーザー指摘)。白・2倍角で艦名の下へ。 */
-    vdp_text_s(64, 194, 15, 1, 2, "HI");
-    vdp_text_s(112, 194, 15, 1, 2, scorebuf);
+    /* ★淡灰(14)だと青い下地に沈んで読めなかった(ユーザー指摘)。白の等倍で艦名の下へ。 */
+    vdp_text(96, 196, 15, 1, "HI");
+    vdp_text(120, 196, 15, 1, scorebuf);
 }
 
 /* ★5面の中ボス(P-61)の準備: スプライトを全部 2 倍に拡大(MAG)するので、絵の表A(0x7800)の64枚を半分(左上 8x8)に
