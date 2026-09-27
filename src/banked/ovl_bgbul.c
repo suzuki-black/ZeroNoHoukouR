@@ -243,7 +243,18 @@ void pb_add(s16 x, s16 y, s8 vx, s8 vy) {
     }
 }
 static void pb_erase(PB *b) { pb_w = 2; pb_h = 0; pb_oh = 4; pb_ox = pb_nx = b->sx; pb_oy = pb_ny = b->ry; pb_blit(); b->on = 0; }
-void pb_clear(void) { u8 i; for (i = 0; i < PB_N; i++) if (pbv[i].on) pb_erase(&pbv[i]); }
+/* ★全部消す。pb_r14(R#14 の控え)を必ず無効化してから消すこと。
+   pb_blit は「R#14 は値が変わるときだけ書く」最適化をしているので、控えが実物とずれていると
+   **消す絵がよその 16KB ページへ飛び**、画面には弾が残ったままになる。
+   pb_add / pb_update は 0xFF を書いてから blit しているが、ここだけ抜けていた。
+   前に blit してから今日までの間に vdp_write_addr(毎フレーム何度も呼ぶ。中で必ず R#14 を書く)が
+   挟まるので、控えはほぼ確実にずれている＝中ボスを倒したあと背景の弾が消えずに残っていた
+   (5面でユーザーが踏んだ)。 */
+void pb_clear(void) {
+    u8 i;
+    pb_r14 = 0xFF;
+    for (i = 0; i < PB_N; i++) if (pbv[i].on) pb_erase(&pbv[i]);
+}
 void pb_update(void) {
     u8 i, cl = (u8)cam;
     PB *b = pbv;
