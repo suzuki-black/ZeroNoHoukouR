@@ -14,3 +14,6 @@ GAME.BIN
 GAME_DEBUG*.ROM
 *.ROM.tmp
 __pycache__/
+
+# 作業中に置いた画像(素材ではない。リポジトリには入れない)
+Copilot_*.png
