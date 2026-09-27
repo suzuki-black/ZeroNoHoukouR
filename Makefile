@@ -221,7 +221,8 @@ $(BUILD)/coldsetup.ihx: $(SRC)/banked/coldsetup.c $(HDRS) $(BUILD)/bankhead.rel 
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/coldsetup.rel $(BUILD)/resident_syms.rel -o $@
 
-# DEBUG_PROF の冷たい側(自己診断画面・区間別µs表示)を bank29 へ(20〜23 は4面の中ボスの絵)。常駐リクレイムのため prof.c から移設。
+# DEBUG_PROF の冷たい側(自己診断画面・区間別µs表示)を bank31 へ(20〜23 は4面の中ボスの絵)。常駐リクレイムのため prof.c から移設。
+# ★以前は bank29 だったが、そこは面ごとの撃沈演出(ovl13)が常時使うようになったので移した。
 # 通常ビルドでは一切作らない(バンクも消費しない)。
 # ★-Wl-b_HOME: このバンクだけ u32 の乗除算(acc_us)を使うので SDCC の long ランタイム(_HOME 領域)が
 #   リンクされる。既定では _DATA(0xE000)の後ろに置かれ、バンク窓(0xA000-0xBFFF)の外へ落ちて
@@ -514,7 +515,7 @@ BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl13.b
 ifdef MAGTEST
   DEFS          += -DMAGTEST
   BANK_IHX      += $(BUILD)/scene_magtest.ihx
-  ROMPACK_BANKS += --bank 31 $(BUILD)/scene_magtest.ihx   # ★空きバンクは 29(DEBUG_PROF)と 31 だけ。31 を HSTEST と共用する(両者は排他)
+  ROMPACK_BANKS += --bank 31 $(BUILD)/scene_magtest.ihx   # ★空きバンクは 31 だけ(29 は撃沈演出 ovl13)。31 を HSTEST/DEBUG_PROF と共用する(排他)
 ifdef HSTEST
   $(error MAGTEST と HSTEST は bank31 を共用するので同時に指定できない)
 endif
@@ -543,7 +544,7 @@ endif
 ifdef S3TEST
   DEFS          += -DS3TEST
   BANK_IHX      += $(BUILD)/scene_s3test.ihx
-  ROMPACK_BANKS += --bank 31 $(BUILD)/scene_s3test.ihx   # ★空きバンクは 29(DEBUG_PROF)と 31 だけ。31 は検証ROMで共用(排他)
+  ROMPACK_BANKS += --bank 31 $(BUILD)/scene_s3test.ihx   # ★空きバンクは 31 だけ(29 は撃沈演出 ovl13)。31 は検証ROM/DEBUG_PROF で共用(排他)
 ifdef HSTEST
   $(error S3TEST と HSTEST は bank31 を共用するので同時に指定できない)
 endif
@@ -564,8 +565,22 @@ ifdef BGTEST
   DEFS          += -DBGTEST
 endif
 ifdef DEBUG_PROF
+  # ★bank29 は面ごとの撃沈演出(ovl13)が常に使うようになったので、自己診断は bank31(検証ROMの枠)へ移した。
+  #   bank31 は検証ROM各種と共用なので同時指定はできない。
+  ifdef MAGTEST
+    $(error DEBUG_PROF と MAGTEST は bank31 を共用するので同時に指定できない)
+  endif
+  ifdef HSTEST
+    $(error DEBUG_PROF と HSTEST は bank31 を共用するので同時に指定できない)
+  endif
+  ifdef S3TEST
+    $(error DEBUG_PROF と S3TEST は bank31 を共用するので同時に指定できない)
+  endif
+  ifdef PARTTEST
+    $(error DEBUG_PROF と PARTTEST は bank31 を共用するので同時に指定できない)
+  endif
   BANK_IHX      += $(BUILD)/prof_bank.ihx
-  ROMPACK_BANKS += --bank 29 $(BUILD)/prof_bank.ihx
+  ROMPACK_BANKS += --bank 31 $(BUILD)/prof_bank.ihx
 endif
 
 GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk assets/cards.bin

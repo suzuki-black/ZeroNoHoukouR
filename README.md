@@ -71,8 +71,14 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
 - **Final stage: the XB-19 giant bomber** — a magnified sprite band with walls, background-drawn
   bullets, six weak points, and an intro that is timed to its entrance music.
 - **5 capital-ship bosses, fully destructible:** Bismarck → Essex-class carrier → HMS Hood →
-  the twin battleships → USS Iowa. Every main turret and all 23 anti-aircraft mounts can be shot
-  away; a destroyed ship sinks stern-first beneath the waves.
+  the twin battleships → USS Iowa. Every main turret and all 23 anti-aircraft mounts can be shot away.
+- **A different destruction sequence for every ship**, each built on a different technique:
+  Bismarck sinks stern-first; the carrier's flight deck **splits down the centre line** and is swallowed
+  by the sea, with fire, smoke and debris thrown from the crack; Hood is frozen as a screenshot,
+  **re-rendered coarse in SCREEN 3 and spun away** until it is a tumbling speck; the twins throw
+  **200 sparks and 12 two-sprite debris pieces** from both hulls; and Iowa ends with the **top-down view
+  tilting into perspective** — a horizon and a starfield appear, the superstructure stands up, and the
+  burning ship recedes into the night sea (Mode 7-style, computed per scanline, 1.5 KB of output a frame).
 - **Mega crash (bomb):** procedural lightning and thunder, then a magnified "wall of water"
   tsunami sweeps the screen and clears enemy bullets.
 - **Loop manoeuvre:** the plane pulls up and grows as it climbs (pre-baked frames copied by the VDP);
@@ -84,6 +90,8 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
   day and weather (day / sunset / storm with lightning / morning fog / night).
 - **H.TIMI 60 Hz PSG driver** with **original music** for every stage, the mid-bosses and the final
   boss, plus sound effects.
+- **High score** (kept while the machine is on) on the title screen, the stage card, the results
+  screen, game over and the ending.
 
 ### Controls
 | Input | Action |
@@ -158,7 +166,7 @@ docs/          design & development notes
 | 1 | *(untitled)* | — | A BASIC prototype written with [FunctionBASIC](https://github.com/suzuki-black/FunctionBASIC). Currently being remade; no longer in any repository. |
 | 2 | **零の咆哮** *Zero no Houkou* | [BattleshipProto](https://github.com/suzuki-black/BattleshipProto) (private) | Rewritten in C + Z80 (SDCC). 128 KB mega-ROM for MSX2+ / turboR, 5 stages. |
 | 3 | **零の咆哮 改** *Zero no Houkou Kai* | [BattleshipProtoR](https://github.com/suzuki-black/BattleshipProtoR) (public) | A ground-up turboR engine. 256 KB, v0.2.0. The clean, playable baseline. |
-| 4 | **真 零の咆哮** *Shin Zero no Houkou* | this repository | The turboR spectacle built on top of it. 512 KB, v0.1.0. |
+| 4 | **真 零の咆哮** *Shin Zero no Houkou* | this repository | The turboR spectacle built on top of it. 512 KB, v0.2.0. |
 
 1. **The BASIC prototype.** It started as a one-stage vertical shooter in MSX-BASIC (SCREEN 5),
    written in FunctionBASIC's structured dialect and transpiled to line-numbered BASIC. The
@@ -271,7 +279,13 @@ silhouettes may differ from the real thing.)
 - **最終面は巨大爆撃機 XB-19**。拡大スプライトの帯と壁、背景に描く弾、6か所の弱点、登場曲に合わせた
   登場演出。
 - **全破壊できる5隻の大型艦**: ビスマルク → エセックス級空母 → HMS フッド → 双子戦艦 → USS アイオワ。
-  主砲と対空砲23基をすべて撃ち落とせ、撃沈すると船尾から海へ沈んでいきます。
+  主砲と対空砲23基をすべて撃ち落とせます。
+- **撃破演出は艦ごとに別物**。それぞれ違う技で作ってあります:
+  ビスマルクは船尾から沈み、空母は**飛行甲板が中心線から縦に裂けて**左右へ開き海に呑まれ（割れ目から
+  炎柱・黒煙・破片）、フッドは**撃破の瞬間の画面をそのまま SCREEN3 で取り込んできりもみ**しながら
+  点になるまで遠ざかり、双子艦は**火の粉 200 と 2枚重ねの破片 12 個**を 2 隻それぞれから噴き上げ、
+  アイオワは**見下ろしの画面が奥へ倒れてパースになります**（地平線と星空が出て、上部構造が立ち上がり、
+  燃えたまま夜の海へ遠ざかる。行ごとに 1/z を計算する Mode 7 風で、出力は 1 フレーム 1.5KB だけ）。
 - **メガクラッシュ（ボム）**: 手続き生成の稲妻と雷鳴のあと、拡大スプライトの「水の壁」の津波が画面を
   駆け上がり、敵弾を消します。
 - **宙返り**: 引き起こして上昇しながら大きくなる（VDP に焼いたコマを写すだけ）。回っている間は敵弾が下を抜けます。
@@ -279,6 +293,8 @@ silhouettes may differ from the real thing.)
 - **走査線とパレットの技**: フレームの途中でスプライト表を切り替えて32枚の上限を越える、R#23 による衝撃波の
   ゆがみ、帯ごとの横スクロール、時間帯と天候（昼／夕焼け／稲光の荒天／朝霧／夜戦）を作るパレットエンジン。
 - **H.TIMI 60Hz 割込みの PSG 音ドライバ**。各面・中ボス・最終面の曲はすべて本作のためのオリジナルで、効果音付き。
+- **ハイスコア**（電源が入っている間だけ）をタイトル・ステージ開始カード・結果画面・ゲームオーバー・
+  エンディングに表示。
 
 ### 操作
 | 入力 | 動作 |
@@ -350,7 +366,7 @@ docs/          設計・開発ノート
 | 1 | （タイトルなし） | — | [FunctionBASIC](https://github.com/suzuki-black/FunctionBASIC) で書いた BASIC のプロトタイプ。現在リメイク中で、リポジトリには残っていません。 |
 | 2 | **零の咆哮** | [BattleshipProto](https://github.com/suzuki-black/BattleshipProto)（非公開） | C＋Z80（SDCC）で書き直し。MSX2+／turboR 用 128KB メガROM・全5面。 |
 | 3 | **零の咆哮 改** | [BattleshipProtoR](https://github.com/suzuki-black/BattleshipProtoR)（公開） | turboR 専用に一から作ったエンジン。256KB・v0.2.0。遊べる素の土台。 |
-| 4 | **真 零の咆哮** | 本リポジトリ | その上に turboR の見せ場を積んだもの。512KB・v0.1.0。 |
+| 4 | **真 零の咆哮** | 本リポジトリ | その上に turboR の見せ場を積んだもの。512KB・v0.2.0。 |
 
 1. **BASIC のプロトタイプ。** 最初は MSX-BASIC（SCREEN 5）の1面だけの縦スクロールシューティングでした。
    FunctionBASIC の構造化 BASIC で書き、行番号付きの BASIC へ変換して動かしていました。「戦艦」は文字どおり
