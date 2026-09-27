@@ -9,6 +9,7 @@
 #include "vdp.h"
 #include "input.h"
 #include "scene.h"
+#include "gamestate.h"   /* g_score / g_hiscore */
 
 #define END_SPD  4     /* 4フレームで1px=約15px/s(ゆっくり) */
 #define END_BG   1     /* 背景=濃紺 */
@@ -157,7 +158,21 @@ static u8 run_ending(void) {
     /* THE END(静止)→ 保持 → タイトル */
     vdp_set_vscroll(0);
     vdp_fill(0, 0, 256, 256, END_BG);
-    vdp_text_s((u8)(128 - 7 * 8), 92, END_TX, END_BG, 2, "THE END");   /* 7字×16=112, 中央 */
+    vdp_text_s((u8)(128 - 7 * 8), 76, END_TX, END_BG, 2, "THE END");   /* 7字×16=112, 中央 */
+    /* ★最後にスコアを出す(ユーザー指定)。ハイスコアは電源が入っている間だけの 1 件。 */
+    { char buf[6];
+      u16 v = g_score;
+      u8 i;
+      if (g_score > g_hiscore) g_hiscore = g_score;
+      for (i = 5; i > 0; i--) { buf[i - 1] = (char)('0' + (u8)(v % 10)); v /= 10; }
+      buf[5] = 0;
+      vdp_text((u8)(128 - 11 * 4), 120, END_TX, END_BG, "YOUR SCORE");
+      vdp_text((u8)(128 - 5 * 4), 136, END_TX, END_BG, buf);
+      v = g_hiscore;
+      for (i = 5; i > 0; i--) { buf[i - 1] = (char)('0' + (u8)(v % 10)); v /= 10; }
+      buf[5] = 0;
+      vdp_text((u8)(128 - 9 * 4), 160, END_TX, END_BG, "HI SCORE");
+      vdp_text((u8)(128 - 5 * 4), 176, END_TX, END_BG, buf); }
     for (f = 0; f < 600; f++) {                      /* 約10秒(トリガで即) */
         input_poll();
         if (g_input_edge & INP_TRIG) break;
