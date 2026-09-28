@@ -36,17 +36,20 @@ def scatter(rows_fill, seed, base=None):
         if base is not None: rows[r]&=base[r]
     return rows
 
-# ---- 波頭(crest): 上端は透明、そこから下は白い塊。輪郭の高さは左右端を row4 に揃える ----
-# ★斜めの壁にするので、**コマの中の波頭も同じ傾きで斜めに切る**。
-#   コマは列ごとに SHEAR(=16px 画面) ずつ下がる。拡大で 1 パターン行 = 画面2px なので、
-#   16px = パターン 8 行。パターン列 px の波頭行は px/2 が「直線」。
-#   継ぎ目: コマ c の px=15 は行7(画面+14px) / コマ c+1 の px=0 は行0 だが 16px 下 → 連続。
-#   その直線に、両端(px=0,15)では 0 になるうねりを足す。
-def slope(px): return px // 8   # SHEAR=4 画面px/列 = 2パターン行/コマ
+# ---- 波頭(crest): 上端は透明、そこから下は白い塊 ----
+# ★コマの中の波頭にも**その列の傾き**を持たせる。そうしないと 32px ごとに水平な段が並び、
+#   「区分的一次関数の傾き0」= 階段に見える(実機の指摘)。
+#   列 c と c+1 の画面Y の差 d は、斜め(SHEAR=4px)から うねりの増分 を引いたもの:
+#       d(i) = SHEAR - (lift[i+1] - lift[i])
+#   拡大で 1 パターン行 = 画面2px なので、コマの中では d/2 行ぶん下げながら切る。
+#   うねりを**三角形**にすると d の取る値が 3 種類に収まり、波頭のコマも 3 枚で済む。
+LIFT   = [0, 8, 16, 24, 24, 24, 16, 8]    # 列ごとの持ち上げ量(画面px)。増分は +8,+8,+8,0,0,-8,-8,-8
+CRESTK = [0, 0, 0,  1,  1,  2,  2, 2]     # その列で使う波頭のコマ(下の SLOPE の番号)
+SLOPE  = [-2, +2, +6]                     # コマの中で下げるパターン行数(= d/2。d = -4, +4, +12)
 wob  = [0,1,2,3,3,3,2,1,1,2,3,3,2,1,1,0]   # 山(両端0)
-wob2 = [0,1,2,2,3,4,4,3,3,4,4,3,2,2,1,0]   # 谷(両端0)
-hA=[max(0, slope(c) + 4 - wob[c])  for c in range(16)]
-hB=[max(0, slope(c) + 4 + wob2[c]) for c in range(16)]
+def crest_h(S):
+    """S = コマの左端から右端までに下げるパターン行数。両端は うねり 0 で継ぎ目を合わせる。"""
+    return [max(0, min(15, 4 + (c * S) // 16 - wob[c])) for c in range(16)]
 def crest_mask(h):
     m=[0]*16
     for c in range(16):
@@ -69,14 +72,17 @@ F_BODY  = [90,88,86,88, 30,86,84,86, 82,40,80,78, 74,68,25,60]
 F_FOOT  = [55,48,40,44, 30,36,30,26, 22,18,14,16, 12, 9, 6, 4]
 
 def build():
-    ca=crest_mask(hA); cb=crest_mask(hB)
-    A=scatter(F_CREST, 0x1234, ca); ma=mist(hA,0x77)
-    B=scatter(F_CREST, 0x9ABC, cb); mb=mist(hB,0x55)
-    for r in range(16): A[r]|=ma[r]; B[r]|=mb[r]
-    FACE=scatter(F_FACE, 0x4242)
+    """戻り: 波頭3種(傾き別) + 胴 + 面 + 裾。**この順で VRAM に焼き、この順で枠へ入れる**。"""
+    cr=[]
+    for k,(S,seed) in enumerate(zip(SLOPE,(0x1234,0x9ABC,0x5A5A))):
+        h=crest_h(S)
+        P=scatter(F_CREST, seed, crest_mask(h)); m=mist(h, seed^0x77)
+        for r in range(16): P[r]|=m[r]
+        cr.append(P)
     BODY=scatter(F_BODY, 0xBEEF)
+    FACE=scatter(F_FACE, 0x4242)
     FOOT=scatter(F_FOOT, 0x0DED)
-    return A,B,FACE,BODY,FOOT
+    return cr[0],cr[1],cr[2],BODY,FACE,FOOT
 
 # 色表: 高密度の行=地の色 / 低密度の行=散らす別色
 # ★色は**塊で**置く。1行おきに替えると拡大で2px の横縞になり、水でなく鎧戸に見える(一度そうなった)。
@@ -90,7 +96,7 @@ C2=[ 2, 2, 2, 2, 14, 2, 2, 1,  1, 7, 1, 1,  1, 1, 7, 1]   # 胴: 明るい水→
 C3=[ 1, 1, 1, 7,  1, 1, 7, 1,  7, 1, 7, 1,  7, 1, 7, 7]   # 裾: 海の地色と濃紺の粒＝引き波の乱れ
 
 def preview(path):
-    A,B,FACE,BODY,FOOT=build()
+    C0p,C1p,C2p,BODY,FACE,FOOT=build()
     W,H=256,200
     im=Image.new('RGB',(W,H))
     px=im.load()
@@ -102,33 +108,38 @@ def preview(path):
         px[rng.n()|(rng.n()&1)*0, rng.n()*H//256]=rgb(2)
     for _ in range(2000):
         px[rng.n(), rng.n()*H//256]=rgb(7)
-    rowpat=[(A,B),(FACE,BODY),(BODY,FACE),(FOOT,FOOT)]
+    crest=[C0p,C1p,C2p]
     rowcol=[C0,C1,C2,C3]
-    top=16
+    top=40
     SHEAR=4    # 列ごとに下げる画面px(斜めの角度)
     # ★★傾きには上限がある: 段の間隔(32px)= SHEAR × 列数 のときだけ、32枚の y が
     #   SHEAR px 間隔で**均等**に並び、どの32px窓にもちょうど8枚=制限ぴったりになる。
     #   8列なら SHEAR=4。これより急にすると y が重複/偏って 1走査線8枚を超える。
     #   コマ内の波頭も同じ傾き(2パターン行/コマ)で切らないと継ぎ目に段が出る。
+    ph=0
     for rw in range(4):
         for col in range(8):
-            pat = rowpat[rw][(col+rw)&1]
+            i=(col+ph)&7
+            if   rw==0: pat=crest[CRESTK[i]]
+            elif rw==3: pat=FOOT
+            else:       pat=(BODY,FACE)[(col+rw+ph)&1]
             colt= rowcol[rw]
+            lift=LIFT[i]
             for pr in range(16):
                 for pc in range(16):
                     if pat[pr]&(0x8000>>pc):
                         c=rgb(colt[pr])
-                        X=col*32+pc*2; Y=top+rw*32+col*SHEAR+pr*2
+                        X=col*32+pc*2; Y=top+rw*32+col*SHEAR+15-lift+pr*2
                         for dy in range(2):
                             for dx in range(2):
                                 if 0<=X+dx<W and 0<=Y+dy<H: px[X+dx,Y+dy]=c
     im.resize((W*2,H*2),Image.NEAREST).save(path)
 
 def cdata():
-    A,B,FACE,BODY,FOOT=build()
-    names=("CRESTA","CRESTB","FACE","BODY","FOOT")
+    ps=build()
+    names=("波頭 上り(-4px)","波頭 下り(+4px)","波頭 急な下り(+12px)","胴","面","裾")
     out=[]
-    for n,p in zip(names,(A,B,FACE,BODY,FOOT)):
+    for n,p in zip(names,ps):
         L=[(r>>8)&0xFF for r in p]; R_=[r&0xFF for r in p]; b=L+R_
         out.append("    /* %s */\n    { %s,\n      %s },"%(n,
             ", ".join("0x%02X"%x for x in b[:16]), ", ".join("0x%02X"%x for x in b[16:])))

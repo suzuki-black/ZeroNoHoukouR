@@ -80,6 +80,10 @@ static void seg(s16 x0, u8 y0, s16 x1, u8 y1, u8 c) {
     }
 }
 
+/* 芯の外側に重ねる光芒(外側2本が淡色、内側2本が芯色)。 */
+static const s8 glow_ofs[4] = { -3, 3, -1, 1 };
+static const u8 glow_col[4] = { BOLT_GLOW, BOLT_GLOW, BOLT_CORE, BOLT_CORE };
+
 /* 中点変位で (x0,y0)→(x1,y1) をギザギザに引く。
    sway=変位の最大幅 / nseg=分割数 / glow=1 なら芯の隣に光芒も引く。
    ★平滑化(隣接点との変化量制限)と envelope(終点で変位0)が稲妻らしさの要。 */
@@ -106,10 +110,13 @@ static void jag(s16 x0, u8 y0, s16 x1, u8 y1, u8 nseg, u8 sway, u8 glow) {
         /* ★太さ: 芯を3本(x-1,x,x+1)の白で引き、その外側に光芒を2本。1本だけだと細すぎて
            16色の海の上では稲妻に見えない(実機で指摘された)。枝は細いまま(本物も枝は細い)。 */
         if (glow) {
-            seg((s16)(px - 3), py, (s16)(x - 3), y, BOLT_GLOW);
-            seg((s16)(px + 3), py, (s16)(x + 3), y, BOLT_GLOW);
-            seg((s16)(px - 1), py, (s16)(x - 1), y, BOLT_CORE);
-            seg((s16)(px + 1), py, (s16)(x + 1), y, BOLT_CORE);
+            /* ★引数5つの関数を4回展開すると呼び出しだけで100B近く食う(枠が8KBぴったりで効く)。
+               並べる順は変えずに表引きのループへ。描画結果は同じ。 */
+            u8 j;
+            for (j = 0; j < 4; j++) {
+                s16 o = (s16)glow_ofs[j];
+                seg((s16)(px + o), py, (s16)(x + o), y, glow_col[j]);
+            }
         }
         seg(px, py, x, y, BOLT_CORE);
         px = x; py = y;
@@ -184,26 +191,22 @@ void ovl_crush_bolts(u8 seed) {
 #define WAVE_COLS 8    /* 8枚 × 32px = 256px = 画面幅(1走査線ちょうど8枚) */
 #define WAVE_ROWS 4    /* 4段 × 32px = 128px の厚み(段は重ならないので枚数制限は増えない) */
 
-/* コマ5種。★SPR_WAVE4 は HUD のボム棒(SPR_CRUSH)と枠を共有する。津波の間は HUD を出さないので
-   奪ってよいが、終わったら hud_colors() が棒のパターンを描き直す。 */
-static const u8 wave_pat[5][32] = {
-    /* CRESTA: 波頭の山 */
-    { 0x00, 0x1C, 0x3E, 0x77, 0xFF, 0xFD, 0xEF, 0xEF, 0xFF, 0x5F, 0xFF, 0xF0, 0xDF, 0xFF, 0xFF, 0xE7,
-      0x00, 0x88, 0x34, 0x7A, 0xFE, 0xFF, 0xDF, 0xFF, 0x9F, 0xBC, 0xFF, 0x25, 0xFF, 0xFF, 0xFF, 0xFE },
-    /* CRESTB: 波頭の谷 */
-    { 0x00, 0x00, 0x00, 0x00, 0x80, 0xE4, 0x74, 0xBD, 0xFF, 0xA8, 0xFF, 0x79, 0xFF, 0xFF, 0x7F, 0x7E,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x43, 0x4F, 0x0F, 0xFB, 0x7B, 0x99, 0xFF, 0xFD, 0xFF, 0xFF },
-    /* FACE: 波の面(泡の線＋粒) */
-    { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x40, 0xBF, 0xFF, 0xFE, 0xEF, 0x22, 0xFF, 0xFF, 0xFB, 0xCF,
-      0xFF, 0xFF, 0xFF, 0xEF, 0x55, 0x7F, 0x54, 0xFE, 0x53, 0xFF, 0xFF, 0x00, 0xBB, 0x9F, 0xFE, 0xF7 },
-    /* BODY: 胴(粗い粒) */
-    { 0xFF, 0xFF, 0xFF, 0xCF, 0x18, 0xED, 0xFF, 0xDF, 0xB3, 0xC9, 0xE7, 0x7D, 0xE6, 0xA7, 0x84, 0x4E,
-      0xBF, 0xFD, 0xDF, 0xFF, 0x84, 0x7B, 0xF6, 0xFF, 0x2F, 0x1B, 0xEF, 0x7E, 0xDE, 0x7A, 0x00, 0xB1 },
-    /* FOOT: 裾(引き波の乱れ。疎らに散って海へ溶ける) */
-    { 0x47, 0xE7, 0x52, 0x39, 0x20, 0x83, 0x98, 0x21, 0x22, 0x03, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
-      0x43, 0x2A, 0x1A, 0xEC, 0x90, 0x24, 0x00, 0x10, 0x08, 0x10, 0x00, 0x11, 0x04, 0x80, 0x01, 0x00 },
+/* コマ6種(波頭3＋面＋胴＋裾)。★津波の間は HUD も敵も出さないので、空いている枠を借りる:
+   裾は HUD のボム棒(SPR_WAVE4=SPR_CRUSH)、面は階級章(SPR_PWRLV)。終わったら棒は hud_colors() が、
+   階級章は ovl_crush_wave_off() が描き直す。 */
+/* ★コマの絵はここには無い: 面の準備(ship_render.c の load_sprites_impl)が VRAM の
+   WAVE_ART_VRAM(221行)へ焼いてある。ここでは読み戻してパターン枠へ入れるだけ。
+   絵をこの .c に置くと 160B で、いちばん詰まっているオーバレイ(ovl9)が入らない。 */
+static u8 pbuf[32];            /* VRAM から読み戻す作業場(static は 0xEE00〜の 256B 枠。RAM なのでコード枠は食わない) */
+/* 枠の割り当て。★波頭を傾き別に3枚持つため、階級章の枠(SPR_PWRLV)を1枚借りる。
+   借りた枠は津波の終わり(ovl_crush_wave_off)に控えから描き直す。ボム棒(SPR_WAVE4=SPR_CRUSH)は
+   従来どおり hud が描き直す。絵は面の準備が VRAM(WAVE_ART_VRAM)へ**この順で**焼いてある。 */
+static const u8 wave_pnum[6] = {
+    SPR_WAVE0, SPR_WAVE0 + 4, SPR_WAVE0 + 8,   /* 波頭: 上り / 下り / 急な下り */
+    SPR_WAVE0 + 12,                            /* 胴 */
+    SPR_PWRLV,                                 /* 面(借り物) */
+    SPR_WAVE4,                                 /* 裾(ボム棒と共有) */
 };
-static const u8 wave_pnum[5] = { SPR_WAVE0, SPR_WAVE0 + 4, SPR_WAVE0 + 8, SPR_WAVE0 + 12, SPR_WAVE4 };
 
 /* 段ごとの行別カラー(mode2 は色が行単位＝拡大時は1エントリが画面2ライン)。
    ★色は**塊で**置く。1行おきに替えると拡大で2px の横縞になり、水ではなく鎧戸に見える(実際そうなった)。
@@ -213,20 +216,27 @@ static const u8 wave_pnum[5] = { SPR_WAVE0, SPR_WAVE0 + 4, SPR_WAVE0 + 8, SPR_WA
      穴が目立たないので低い塗り率でも破綻せず、粒だけが効く。
    ★逆に濃紺で厚く塗ると画面下半分が黒い塊になり艦も海も飲み込む(これも一度やって失敗した)。
      15=白 / 14=淡青灰 / 2=明るい水 / 1=海の地色 / 7=濃紺(影)。 */
-static const u8 wcol0[16] = { 15,15,15,15,15,15,15,15, 15,14,14, 7,  7, 7, 7,14 };  /* 白い泡→淡→**lipの下の濃い影**→下面の淡 */
-static const u8 wcol1[16] = {  2,15, 2, 2, 2, 2,15, 2,  2, 2, 2,14,  2, 2, 2, 2 };  /* 面: 明るい水＋泡の線＋粒 */
-static const u8 wcol2[16] = {  2, 2, 2, 2,14, 2, 2, 1,  1, 7, 1, 1,  1, 1, 7, 1 };  /* 胴: 明るい水→海の地色＋濃紺の粒 */
-static const u8 wcol3[16] = {  1, 1, 1, 7, 1, 1, 7, 1,  7, 1, 7, 1,  7, 1, 7, 7 };  /* 裾: 引き波の乱れ */
+/* ★4段ぶんを1本に繋いである(段 r は wcol + r*16)。別々の配列にして4か所から呼ぶと
+   呼び出しが4回ぶん増える。枠が1バイト単位で効くので、ループ1本に畳んである。 */
+static const u8 wcol[4 * 16] = {
+    15,15,15,15,15,15,15,15, 15,14,14, 7,  7, 7, 7,14,   /* 0 白い泡→淡→**lipの下の濃い影**→下面の淡 */
+     2,15, 2, 2, 2, 2,15, 2,  2, 2, 2,14,  2, 2, 2, 2,   /* 1 面: 明るい水＋泡の線＋粒 */
+     2, 2, 2, 2,14, 2, 2, 1,  1, 7, 1, 1,  1, 1, 7, 1,   /* 2 胴: 明るい水→海の地色＋濃紺の粒 */
+     1, 1, 1, 7, 1, 1, 7, 1,  7, 1, 7, 1,  7, 1, 7, 7,   /* 3 裾: 引き波の乱れ */
+};
 
 /* 波のコマと色をVRAMへ置き、スプライトを拡大モードにする。津波の1フレーム目に1回だけ。 */
 void ovl_crush_wave_init(void) {
-    u8 i;
-    for (i = 0; i < 5; i++) vdp_sprite_pattern(wave_pnum[i], wave_pat[i]);
-    for (i = 0; i < WAVE_COLS; i++) {
-        vdp_sprite_color_tab(i,                     wcol0);
-        vdp_sprite_color_tab((u8)(WAVE_COLS + i),   wcol1);
-        vdp_sprite_color_tab((u8)(WAVE_COLS*2 + i), wcol2);
-        vdp_sprite_color_tab((u8)(WAVE_COLS*3 + i), wcol3);
+    u8 i, j, r;
+    vdp_cmd_wait();                       /* 直前の稲妻(LINE)が終わってから VRAM を直に読む */
+    for (i = 0; i < 6; i++) {
+        vdp_read_addr((u16)(WAVE_ART_VRAM + ((u16)i << 5)));
+        for (j = 0; j < 32; j++) pbuf[j] = vdp_read_data();
+        vdp_sprite_pattern(wave_pnum[i], pbuf);   /* ★表B(4面の中ボス)への写しも既存のまま効く */
+    }
+    for (r = 0; r < WAVE_ROWS; r++) {
+        const u8 *p = wcol + ((u16)r << 4);
+        for (i = 0; i < WAVE_COLS; i++) vdp_sprite_color_tab((u8)((r << 3) + i), p);
     }
     vdp_sprite_mag(1);
 }
@@ -236,31 +246,51 @@ s16 ovl_crush_wave_y(u8 step) {
     return (s16)((s16)CRUSH_WAVE_Y0 - (s16)(((u16)step * (u16)step) / CRUSH_WAVE_ACC));
 }
 
+/* ───────── 波のうねり(3D の波・設計メモ F) ─────────
+   ★いままでは列ごとに一定量下げる「斜めの直線」だった。直線は板に見えるので、**列ごとに
+     高さ**を持たせる。位相が時間で流れるので、うねりが横へ走って見える。
+   ★★それだけだと 32px の板を上下させるだけで、コマの中の波頭は水平のまま＝**傾き0の階段**に
+     見える(指摘された)。そこで**コマの中の波頭にもその列の傾きを焼いて**ある。列 c と c+1 の
+     画面Y の差は d = SHEAR - (lift[i+1] - lift[i])。うねりを**三角形**にすると d の取る値が
+     3 種類(-4 / +4 / +12)に収まるので、波頭のコマも3枚で足りる(tools/gen_wave.py が焼く)。
+     結果、隣り合うコマの波頭が端で繋がり、折れ線＝曲線に見える。
+   ★段(行)はぜんぶ同じ量だけ動かす＝列をまるごと上下させる。段ごとに変えると段の間隔が
+     32px からずれ、**隙間が開く**(背景が透ける)か**重なって1走査線に同じ列が2枚**乗り、
+     8枚制限を割って波が消える。列ごと動かすかぎり間隔は 32px のままで安全。 */
+static const u8 lift[8]   = { 0, 8, 16, 24, 24, 24, 16, 8 };   /* 持ち上げ量(画面px)。増分 +8,+8,+8,0,0,-8,-8,-8 */
+static const u8 crestk[8] = { 0, 0,  0,  1,  1,  2,  2, 2 };   /* その列で使う波頭のコマ(wave_pnum の番号) */
+
 /* 津波を1フレームぶん置く。
    ★上下へはみ出すコマは 32px ぶんまで負Yのままクリップさせる(退避すると端から食いちぎられて
      見える)。それより外は Y=220 へ退避する(負Yのまま置くと 216=表示停止マーカを踏んで
      以降のスプライトが全部消える)。 */
 void ovl_crush_wave(u8 step) {
     s16 base = ovl_crush_wave_y(step);
-    u8 r, c, ph = (u8)(step >> 2);   /* 泡の位相(4フレームに1回入替え=波頭がうねって見える) */
-    for (r = 0; r < WAVE_ROWS; r++) {
-        s16 y0 = (s16)(base + (s16)((u16)r << 5));
-        for (c = 0; c < WAVE_COLS; c++) {
-            /* ★斜め: 列ごとに CRUSH_WAVE_SHEAR px 下げる。まっすぐだと MSX 感が強い(実機で指摘)。
-               ★★傾きには上限がある。段の間隔 32px = SHEAR × 列数(8) のとき、32枚の y が
-                 SHEAR px 間隔で**均等**に並び、どの走査線にもちょうど8枚＝制限ぴったりになる。
-                 SHEAR=16 にしたら y が偏って制限を超え、しかも段ごとの色帯が 16px の階段になった。
-                 波頭のパターンも同じ傾き(2パターン行/コマ)で切ってあるので継ぎ目に段は出ない。 */
-            s16 y = (s16)(y0 + (s16)((u16)c * CRUSH_WAVE_SHEAR));
+    u8  c, r, ph = (u8)(step >> 2);   /* 泡の位相(4フレームに1回入替え=波頭がうねって見える) */
+    /* ★列を外側にして、斜めとうねりは**列ごとに1回**だけ足す。段は 32px ずつ下へ数えるだけ
+       (毎枚 s16 の掛け算をやり直すより小さく、速い)。 */
+    for (c = 0; c < WAVE_COLS; c++) {
+        /* ★斜め(CRUSH_WAVE_SHEAR)はそのまま: 段の間隔 32px = SHEAR×列数(8) で釣り合っていて、
+           崩すと 1 走査線 8 枚を超える。そこへ列ごとのうねりを足して波の形にする。 */
+        u8  i = (u8)(c + ph) & 7;
+        s16 y = (s16)(base + (s16)((u16)c * CRUSH_WAVE_SHEAR) + 15 - (s16)lift[i]);
+        u8  x = (u8)(c << 5);
+        for (r = 0; r < WAVE_ROWS; r++) {
             u8 sl = (u8)((r << 3) + c);
             u8 pt;
             /* ★同じコマを横に並べると 32px ごとに柄が繰り返して見える。2種を列ごとに
                市松で入れ替え、段どうしでも入れ替えて繰り返しを崩す。 */
-            if (r == 0)                  pt = wave_pnum[(u8)((c + ph) & 1)];
-            else if (r == WAVE_ROWS - 1) pt = wave_pnum[4];
-            else                         pt = wave_pnum[(u8)(2 + ((c + r) & 1))];
+            /* ★波頭のコマは**その列が尾根か谷か**で選ぶ。CRESTA は山、CRESTB は谷(上4行が空)で
+               絵の中の波頭の高さが違うので、持ち上げ量と向きが揃い、段差が一段細かくなる。
+               列ごとに市松で振っていた頃より、うねりが一本の線として繋がって見える。 */
+            if (r == 0)                  pt = wave_pnum[crestk[i]];
+            else if (r == WAVE_ROWS - 1) pt = wave_pnum[5];
+            /* ★胴の2段は面(FACE)と粒(BODY)の入替え。列と段で市松にしたうえで**位相も足す**ので、
+               同じ場所のタイルが時間でも入れ替わる＝水面が流れて churn して見える(タイル入替)。 */
+            else                         pt = wave_pnum[(u8)(3 + ((c + r + ph) & 1))];
             if (y < -32 || y > 211) vdp_sprite_pos(sl, 0, 220, pt);
-            else                    vdp_sprite_pos(sl, (u8)(c << 5), (u8)y, pt);
+            else                    vdp_sprite_pos(sl, x, (u8)y, pt);
+            y += 32;
         }
     }
 }
@@ -271,6 +301,13 @@ void ovl_crush_wave(u8 step) {
 void ovl_crush_wave_off(void) {
     u8 i;
     vdp_sprite_mag(0);
+    /* ★借りた階級章の枠(SPR_PWRLV)を返す。控えは面の準備が VRAM の7枚目へ焼いてある。
+       階級章は本数を色表で決める＝絵は固定なので、ここで描き直せば元どおり。
+       ボム棒(SPR_WAVE4=SPR_CRUSH)は呼び側の hud_colors() が描き直す。 */
+    vdp_cmd_wait();
+    vdp_read_addr((u16)(WAVE_ART_VRAM + 6 * 32));
+    for (i = 0; i < 32; i++) pbuf[i] = vdp_read_data();
+    vdp_sprite_pattern(SPR_PWRLV, pbuf);
     for (i = 0; i < WAVE_COLS * WAVE_ROWS; i++) vdp_sprite_pos(i, 0, 220, wave_pnum[0]);
 }
 
