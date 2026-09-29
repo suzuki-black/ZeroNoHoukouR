@@ -2,6 +2,7 @@
    behavior は type 別の関数ポインタ表(generalization の要)。描画は今は LMMV 矩形で代用し、
    本番でスプライト/run_ops に差し替える(APIは据え置き)。 */
 #include "entity.h"
+#include "hud.h"   /* SPR_TOP: HUD は最後尾の枠なので、ここより後ろへ書かない */
 #include "vdp.h"
 #include "fire.h"
 #include "sprites.h"
@@ -205,7 +206,7 @@ void ent_resolve_collisions(void) {
 
 void ent_reset(void) {
     u8 i;
-    g_spr_limit = 32;   /* 既定=全slot。分割を使うシーンだけが後から下げる */
+    g_spr_limit = SPR_TOP;   /* 既定=HUD の手前まで。分割を使うシーンだけが後から下げる */
     for (i = 0; i < ENT_MAX; i++) pool[i].active = 0;
     for (i = 0; i < 32; i++) { slot_col[i] = 0xFF; slot_ctab[i] = 0; }   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す) */
     g_ebul = 0;
@@ -381,7 +382,7 @@ void ent_draw_all(void) {
     }
     /* 自機を固定最優先スロット(g_spr_base)へ */
     /* ★宙返り中は本体を描かない(2×2 合成が HUD 直後の4 slot に描いている)。影は下の影パスで描く。 */
-    if (player && !g_loop_t && slot < 32) slot = draw1(slot, player);
+    if (player && !g_loop_t && slot < SPR_TOP) slot = draw1(slot, player);
     /* ★中ボスが出ている間は枠が 5〜9 枚しか無く、最後に描く影が必ず溢れて自機の影が消えた(実機で指摘)。
        その間だけ自機の影を自機の直後に描く(scene_stage が中ボスの間だけ自機の shadow を 2 にする)。 */
     /* ★枠が尽きていたら描かない。2面の中ボスが手前(18枚)に居る間に宙返り(4枚)すると HUD 9 と合わせて 31 枚が埋まり、
@@ -421,13 +422,11 @@ void ent_draw_all(void) {
             s16 y0 = (s16)(spop_y[i] - 16);                /* 真上=1タイル上 */
             s16 xmax = (s16)(256 - (s16)nd * 8);           /* nd桁が右端で切れない上限 */
             u8 k;
-            /* ★HUD の帯を避ける。スプライトは枠番号が小さいほど手前で、HUD は枠 0..8＝最前面なので、
-               ポップが HUD に重なると数字の上に数字が乗って読めない(ユーザー指摘)。
-               並び自体を入れ替えるとスロット地図(中ボス・弾幕・宙返りの予約)を作り直すことになるため、
-               **重なる場所に置かない**ことで避ける。上: スコア数字は y=2..9 → 12 から下へ。
-               下: ボムの棒は y=190..205 → 186 まで。 */
-            if (y0 < 12)  y0 = 12;                         /* 上端クランプ(HUD のスコア行を避ける) */
-            if (y0 > 186) y0 = 186;                        /* 下端クランプ(ボムの棒を避ける) */
+            /* ★画面内クランプのみ。HUD は最後尾の枠(最低優先)へ移したので、ポップは HUD の
+               **手前**に出る＝重なっても読める。以前は HUD が最前面だったので、ポップを
+               y=12..186 に押し込んで重ならないようにしていた(その必要が無くなった)。 */
+            if (y0 < 1)   y0 = 1;
+            if (y0 > 194) y0 = 194;
             if (x0 < 0)   x0 = 0;
             if (x0 > xmax) x0 = xmax;
             for (k = 0; k < nd && slot < g_spr_limit; k++) {
@@ -441,7 +440,7 @@ void ent_draw_all(void) {
     /* ★パワーアップ段階のアイコンは**いちばん最後**=最低優先(1走査線8枚を超えたら弾ではなくこれが落ちる)。
        HUD の枠(優先度が高い)に置いていたら、中ボス戦で弾がアイコンの行で消えると実機で指摘された。
        ★5面の中ボスの間は拡大(MAG)なので出さない(g_pwr_icon=0。代わりにオーバレイが背景へ描く)。 */
-    if (g_pwr_icon && slot < 32) { /* ★枠は scene_stage が1つ予約してある(g_spr_limit-1)。ただし枠が尽きたときは出さない(上の★) */
+    if (g_pwr_icon && slot < SPR_TOP) { /* ★枠は scene_stage が1つ予約してある(g_spr_limit-1)。ただし枠が尽きたときは出さない(上の★) */
         const u8 *tab = pwr_col[g_pwr];
         if (slot_ctab[slot] != tab) { vdp_sprite_color_tab(slot, tab); slot_ctab[slot] = tab; slot_col[slot] = 0xFF; }
         vdp_sat_pos(slot, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);

@@ -556,9 +556,10 @@ static void player_shadow(u8 v) {
     for (i = 0; i < ENT_MAX; i++, e++) if (e->active && e->type == ET_PLAYER) e->shadow = v;
 }
 
-/* 枠 sl〜31 を画面外へ(中ボスの出現・退場で共用。常駐の節約) */
+/* 枠 sl〜SPR_TOP-1 を画面外へ(中ボスの出現・退場で共用。常駐の節約)。
+   ★SPR_TOP で止めること: その先は HUD の固定枠で、消すと 1 フレームだけ HUD が点滅する。 */
 static void spr_hide_from(u8 sl) {
-    for (; sl < 32; sl++) vdp_sprite_pos(sl, 0, 220, 0);
+    for (; sl < SPR_TOP; sl++) vdp_sprite_pos(sl, 0, 220, 0);
 }
 
 /* ★中ボスの後片付け(VDP と借りもの)。中ボスが終わったときと、**中ボス戦の最中にミスしたとき**の両方から呼ぶ。
@@ -573,8 +574,9 @@ void mb_restore_hw(void) {
     vdp_copy(0, MB_SAVE_Y, 0, MB_PAT_ROW_A, 256, 2);           /* 砲身と艦載機のパターンを戻す */
     vdp_copy(0, (u16)(MB_SAVE_Y + 2), 0, MB_PAT_ROW_B, 256, 4);
     g_mb_n = 0;
-    g_spr_hide_to = 0;   /* ★末尾の枠に停止マーカを置かない指定も戻す。残っていると、この後の描画で中ボスの枠が
-                            また現れた(5面のミスで中ボスの絵が残って見えた) */
+    g_spr_hide_to = SPR_TOP;   /* ★中ボスぶんの指定は戻すが、HUD の手前に停止マーカを置く形には戻さない
+                                  (0 にすると HUD が消える)。残していると、この後の描画で中ボスの枠が
+                                  また現れた(5面のミスで中ボスの絵が残って見えた) */
 }
 
 void mb_finish(void) {
@@ -1285,13 +1287,16 @@ u8 stage_update(void) {
             }
         }
     }
-    g_spr_base = (u8)((g_loop_t ? 4 : 0)
-                      + ((g_mb == MB_ACTIVE && curstage == 4) ? 0 : HUD_SLOTS));
-                      /* 5面の中ボスの間は HUD の枠も使う(HUD は背景に描く) */
+    /* ★エンティティは slot0 から＝HUD より手前(HUD は最後尾 HUD_SL0..31 = 最低優先)。
+       宙返りの2×2合成(ovl_rot)が 0..3 を使う間だけ 4 つ後ろから詰める。 */
+    g_spr_base = (u8)(g_loop_t ? 4 : 0);
+    /* ★使ってよい上限。ふだんは HUD の手前(SPR_TOP)まで。5面の中ボスの間だけ HUD を背景に
+       描くので、HUD の枠も含めて 32 枚すべて使える。 */
+    {   u8 sp_top = (u8)((g_mb == MB_ACTIVE && curstage == 4) ? 32 : SPR_TOP);
     /* ★パワーアップ段階のアイコン: ent_draw_all が**最後の枠**(最低優先)に描く。
        5面の中ボスの間は拡大(MAG)なので出さない(オーバレイが背景へ描く)。 */
     g_pwr_icon = (u8)(!(g_mb == MB_ACTIVE && curstage == 4));   /* 通常弾でも1本出す(段階が無いのではなく最下段) */
-    g_spr_limit = (u8)((g_cbul_live || g_rage) ? (32 - CURTAIN_SLOTS) : 32);
+    g_spr_limit = (u8)((g_cbul_live || g_rage) ? (u8)(sp_top - CURTAIN_SLOTS) : sp_top);
     /* ★中ボスはふだん末尾の枠(最低優先=混んだら中ボスが欠ける)。ただし**自機より高い所に居る間**は
        手前(HUD の直後)へ置き、エンティティをその後ろへ下げる(2面の中ボスが上昇中=自機の上を通る)。 */
     if (g_mb == MB_ACTIVE) {
@@ -1300,16 +1305,20 @@ u8 stage_update(void) {
            絵の枚数が増えた瞬間に先頭が HUD の枠へはみ出し、ボム棒の色が変わりアイコンが消えた(実機で指摘)。 */
         u8 s0, e;
         if (g_mb_front) { s0 = g_spr_base; g_spr_base = (u8)(g_spr_base + g_mb_n); e = g_spr_base; }
-        else            { g_spr_limit = s0 = (u8)(32 - g_mb_n); e = 32; }
+        else            { g_spr_limit = s0 = (u8)(sp_top - g_mb_n); e = sp_top; }
         /* 枠の範囲が変わった(先頭でも末尾でも)=持ち主が変わった: エンティティの色キャッシュを捨て、中ボスにも
            色を置き直させる。★手前のときは先頭が動かず末尾だけ伸びるので、末尾も見ること(見ていなかったら、
            伸びたぶんの影が前の持ち主の色のまま出た=実機で「影の色が変」) */
         if (s0 != g_mb_s0 || e != g_mb_end) { g_mb_s0 = s0; g_mb_end = e; g_mb_recol = 1; ent_spr_cache_inval(0); }   /* 5面はエンティティが 0 から */
     }
-    g_spr_hide_to = (u8)((g_mb == MB_ACTIVE && g_mb_end == 32) ? g_spr_limit : 0);   /* ★その手前に停止マーカを置かない(vdp.c) */
+    /* ★停止マーカ(Y=216)は**絶対に HUD より手前へ置かない**(置くと HUD が全部消える)。
+       g_spr_hide_to を常に上限へ向けておけば、vdp.c は空き枠を画面外(Y=220)で埋めるだけで
+       マーカを書かない。中ボスが末尾に居るときはその手前まで。 */
+    g_spr_hide_to = (u8)((g_mb == MB_ACTIVE && g_mb_end == sp_top) ? g_spr_limit : sp_top);
     g_spr_limit = (u8)(g_spr_limit - g_pwr_icon);   /* ★アイコンのぶんを1枠予約(敵/弾はその手前まで)。
                                                        予約しないと中ボス戦のように枠が少ないときアイコンが
                                                        出ずっぱりで消えた(実機で「消えている時間が長い」と指摘)。 */
+    }
     if (curstage == STAGE_FINAL && g_ovl_ok) final_bgbul();   /* ★弾を背景へ(スプライトでは描かせない) */
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
     if (g_mb == MB_ACTIVE) mb_frame();   /* ★中ボス: ent_draw_all の**後**(その停止マーカを埋め直して末尾の枠へ置く) */
@@ -1333,7 +1342,7 @@ u8 stage_update(void) {
         bgm_play(BGM_MIDBOSS);
         {   /* ★中ボスが出る瞬間: 枠に残った敵機・敵弾の属性を消す(中ボスは末尾の枠を自分で書くまで数フレームかかる。
                5面は拡大がかかって2倍で見えた=実機で指摘)。敵そのものは直前のフェードアウト(ovl_power.c)で消えている */
-            spr_hide_from(HUD_SLOTS);
+            spr_hide_from(0);   /* ★エンティティは 0 から(HUD は最後尾で、直後に hud_draw が書く) */
             scorepop_reset();
             g_mb_front = 0; g_mb_s0 = 0xFF;   /* ★枠の並びは既定(末尾)から始める */
         }

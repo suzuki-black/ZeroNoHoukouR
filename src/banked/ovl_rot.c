@@ -44,7 +44,7 @@ void mag_shrink(const u8 *src, u8 *dst) {
 }
 #define LOOP_SL 0          /* 5面の中ボスの間は HUD を背景に描くので、宙返りの4枚は 0..3 */
 #else
-#define LOOP_SL HUD_SLOTS
+#define LOOP_SL 0          /* ★HUD は最後尾へ移したので、宙返りの合成は先頭 0..3 */
 #endif
 
 void ovl_rot_zoom(u8 k) {

@@ -184,6 +184,8 @@ static void pb_spawn(s16 x, s16 y, u8 ang, u8 spd) {
 
 /* ---- 中ボスのスプライト(拡大で 1 マス 32 ドット) ---- */
 static void put_sprites(void) {
+    /* ★この面だけは HUD を背景に描くので、スプライトは 32 枚すべて使える(常駐も sp_top=32 で
+       同じ値を g_mb_s0 に入れている)。 */
     u8 c, j = 0, pass, sl, s0 = (u8)(32 - g_mb_n);
     s16 bx = bxx(), by = byy();
     const u8 *col = (const u8 *)(MB_BUF + 708);
@@ -240,7 +242,7 @@ static void finish(void) {
     vdp_wreg(6, 0x0F);                              /* 絵の表Aへ */
     if (kpts) scorepop_add((s16)(cx - 8), (s16)(cy - 8), kpts);   /* ★撃墜の点数: 拡大中に出すと数字が2倍に見えた(実機で指摘) */
     ent_spr_cache_inval(0);
-    g_spr_base = HUD_SLOTS; g_spr_limit = 32; g_spr_hide_to = 0;
+    g_spr_base = 0; g_spr_limit = 32; g_spr_hide_to = 0;   /* ★この面の中ボスの間は HUD を背景に描くので 32 枚すべて使う */
     ent_draw_all();                                 /* いつもの並び(HUD の後ろ)で描き直す */
     hud_colors();
     hud_draw(g_score, g_lives);

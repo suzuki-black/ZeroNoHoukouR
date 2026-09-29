@@ -214,11 +214,17 @@ static void tone_wait(u8 lo, u8 n) {
      さらにアイコンを**別の枠に足して**描いていたため、元のアイコン(捨てる前の段階)が上に残って減らないように見えた
      (実機で「ぽっぽっと鳴っている間、ボムもパワーアップ表示も減らない」と指摘)。 */
 #define ICON_SL ((u8)(g_spr_used - 1))   /* パワーアップのアイコンの枠(ent_draw_all がいつも最後に描く) */
+
+/* from..SPR_TOP-1 を画面外へ。★停止マーカ(vdp_sprite_hide_from)は使えない: HUD は最後尾の
+   枠(SPR_TOP..31)に居るので、その手前にマーカを置くと投棄の間ずっと HUD が消える。 */
+static void hide_to_hud(u8 from) {
+    for (; from < SPR_TOP; from++) vdp_sprite_pos(from, 0, 220, 0);
+}
 static void drop_fg(s8 dx, u8 tank) {
     s16 x = (s16)(g_player_x + dx), y = (s16)(g_player_y + 4);
     u8 sl = g_spr_used, i, v = 15;                      /* 捨てる物はアイコンの次の枠(そこにあった停止マーカの位置) */
     if (tank) vdp_sprite_color_tab(sl, barrel_col); else vdp_sprite_color(sl, 13);   /* 増槽=金属 / 爆弾=ほぼ黒 */
-    vdp_sprite_hide_from((u8)(sl + 1));
+    hide_to_hud((u8)(sl + 1));
     PSG_R = 0; PSG_V = 210; PSG_R = 1; PSG_V = 0;       /* 投下の音(「ぽっ」) */
     for (i = 0; i < 25; i++) {
         PSG_R = 8; PSG_V = v; v = (u8)((v > 3) ? v - 4 : 0);
@@ -228,7 +234,7 @@ static void drop_fg(s8 dx, u8 tank) {
         vdp_wait_frame();
     }
     PSG_R = 8; PSG_V = 0;
-    vdp_sprite_hide_from(sl);                            /* 停止マーカを元の位置へ */
+    hide_to_hud(sl);                                     /* 落とし終わり: 枠を空にする(HUD は残す) */
 }
 
 /* ★投棄: 増槽 → 爆弾 の順に 1 つずつ。減らす → 表示を直す → 落とす(音) の順 */

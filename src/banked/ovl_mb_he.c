@@ -31,6 +31,7 @@
 #include "raster.h"     /* g_ras */
 #include "hotcode.h"    /* hb_*: 背景に描く弾(hot_hb.c。RAM 常駐) */
 #include "midboss.h"
+#include "hud.h"       /* SPR_TOP: HUD は最後尾の枠 */
 #include "sprites.h"    /* SPR_EXP0(撃墜の火の玉) */
 
 __sfr __at(0x98) HE_DAT;
@@ -43,7 +44,7 @@ extern u8 rnd(void);
 #define HE_DASH_T   45
 #define HE_WARN_T   12
 #define HE_FOG_T    60      /* 霧から浮かび上がる(30 フレームずつ 霧の色→灰) */
-#define HE_SLOT0    14      /* 各帯の中ボスの枠 14..31 */
+#define HE_SLOT0    (SPR_TOP - 18)  /* 各帯の中ボスの枠(18枚)。★HUD は最後尾(SPR_TOP..31)なのでその手前 */
 #define HE_PIERCE   0x7ABE
 #define HE_SH_OFF   12      /* 影を右下へずらす量 */
 #define HE_COLBUF   0xE500  /* 2機の機体の色(最大14枚×16B×2=448B)。曲データ(0xE100〜, gen_assets が 1024B 以下を検証)の後ろ、
