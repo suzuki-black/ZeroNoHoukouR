@@ -225,10 +225,12 @@ void ovl_mb_frame(void) {
        登場のときと同じ手順で描き直す(嵐の中からもう一度現れる絵になる)。沈みかけの艦は消えたままにする。 */
     if (g_mb_recol) {
         g_mb_recol = 0;
-        if (st == ST_RUN) {
-            for (k = 0; k < 2; k++) if (sk[k] == SK_SINK) { er[k] = 0; sk[k] = SK_GONE; }
-            if (sk[0] != SK_GONE || sk[1] != SK_GONE) { st = ST_DRAW; dk = 0; row = 0; g_mb_req = DD_REQ0; g_mb_new = 0; }
-        }
+        /* ★st==ST_RUN(戦闘中)に限ってはいけない。**登場の描画中(ST_DRAW)でもボムは撃てる**し、
+           登場は2行ずつで6秒ほどかかるので、その間に撃たれる方がむしろ普通。ここで弾くと
+           描き直しが握り潰され、**すでに描いてあった艦体だけが消えて砲身(スプライト)が残る**
+           (「潜水艦の本体が消えて砲台だけ残る」と指摘された)。描画中なら**最初からやり直す**。 */
+        for (k = 0; k < 2; k++) if (sk[k] == SK_SINK) { er[k] = 0; sk[k] = SK_GONE; }
+        if (sk[0] != SK_GONE || sk[1] != SK_GONE) { st = ST_DRAW; dk = 0; row = 0; g_mb_req = DD_REQ0; g_mb_new = 0; }
     }
     t++; wph++;
     if (g_dd_flash) g_dd_flash--;
