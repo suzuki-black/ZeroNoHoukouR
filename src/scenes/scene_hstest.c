@@ -47,11 +47,12 @@ static const u8 pat_box[32] = {
     0xFF,0xFF, 0x81,0x81, 0xBD,0xBD, 0xA5,0xA5, 0xA5,0xA5, 0xBD,0xBD, 0x81,0x81, 0xFF,0xFF,
 };
 
-static void num3(u8 x, u8 y, u8 v) {
-    char s[4];
-    s[0] = (char)('0' + v / 100); s[1] = (char)('0' + (v / 10) % 10); s[2] = (char)('0' + v % 10); s[3] = 0;
+static void num2(u8 x, u8 y, u8 v) {   /* 2桁。★3桁だと右端が切れて読めない機種がある */
+    char s[3];
+    s[0] = (char)('0' + (v / 10) % 10); s[1] = (char)('0' + v % 10); s[2] = 0;
     vdp_text(x, y, 15, 1, s);
 }
+
 
 /* 背景: 8 ドットごとの縦線＋16 行ごとの横線＋斜めの線。横のずれも継ぎ目も読める絵にする。 */
 static void draw_bg(void) {
@@ -62,15 +63,19 @@ static void draw_bg(void) {
     }
     for (y = 0; y < 180; y = (u8)(y + 16)) vdp_fill(0, y, 256, 1, 7);       /* 16 行ごとの横線(帯の目安) */
     for (y = 0; y < 180; y++) vdp_fill((u16)((y + 20) & 255), y, 2, 1, 11); /* 斜めの赤線(継ぎ目の段差が読める) */
-    vdp_text(2, 2, 15, 1, "R#26/27 SPLIT TEST");
-    vdp_text(2, 182, 14, 1, "SPACE:MODE UD:AMP LR:BANDS M:MSK");
-    if (mode == 6) vdp_text(2, 170, 11, 1, "COUNT COLOR BANDS = SPLITS THAT WORKED");
-    if (mode == 5) vdp_text(2, 170, 11, 1, "LINE106 -> RIGHT 32DOT");
-    vdp_text(2, 192, 15, 1, "MODE");
-    vdp_text(42, 192, 12, 1, mode_name[mode]);
-    vdp_text(140, 192, 15, 1, "AMP");   num3(172, 192, amp);
-    vdp_text(200, 192, 15, 1, "N");     num3(212, 192, (u8)(bands + 1));
-    vdp_text(2, 202, 15, 1, msk ? "MSK=1 HIDE LEFT 8" : "MSK=0 SHOW LEFT 8");
+    /* ★文字は画面の**内側**へ寄せる。実機＋TV はオーバースキャンで上下左右が切れ、
+       右端(x=212)に出していた N が枠外になって読めなかった(指摘された)。
+       いちばん大事な N とモードは x=16〜, y=180 の 1 行にまとめる。 */
+    vdp_text(16, 8, 15, 1, "SPLIT TEST");
+    if (mode == 6) vdp_text(16, 160, 11, 1, "COUNT COLOR BANDS");
+    if (mode == 5) vdp_text(16, 160, 11, 1, "LINE106 RIGHT 32");
+    vdp_text(16, 180, 15, 1, "N");                                  /* ★測るのはこれ */
+    num2(32, 180, (u8)(bands + 1));
+    vdp_text(56, 180, 12, 1, mode_name[mode]);
+    vdp_text(16, 190, 14, 1, "SPACE:MODE LR:N");
+    vdp_text(16, 200, 14, 1, "UD:AMP  M:MSK  AMP");
+    num2(176, 200, amp);
+
 }
 
 /* 見かけの横位置 sh(+で右へ)を R#26/R#27 へ。式は scene_stage.c の apply_weave と同じ。 */
