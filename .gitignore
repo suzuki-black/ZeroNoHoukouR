@@ -14,6 +14,10 @@ GAME.BIN
 GAME_DEBUG*.ROM
 *.ROM.tmp
 __pycache__/
+# 検証ROM(make hstest 等がリポジトリ直下に置く。curl のパスを固定するため build/ ではなくここ)
+TEST.ROM
+# 実機から読み戻した内容(curl で取ったもの)
+readback.bin
 
 # 作業中に置いた画像(素材ではない。リポジトリには入れない)
 Copilot_*.png

@@ -592,5 +592,40 @@ run: GAME.ROM
 
 MACHINE ?= C-BIOS_MSX2+_JP
 
+# ============================================================================
+#  実機(ESERAMair)への転送。★curl のパスを毎回書き換えずに済むよう、成果物は
+#  **リポジトリ直下の固定名**に置く: 製品=GAME.ROM / 検証ROM=TEST.ROM
+#    make send            … GAME.ROM を実機へ
+#    make hstest          … 分割の測定ROMを TEST.ROM として作る
+#    make hstest send-test … 作って送る
+#  ★ブラウザの File Manager は 512KB でタイムアウトするので curl を使うこと。
+#  ★ホスト名は ESERAM= で変えられる(例: make send ESERAM=192.168.1.50)。
+# ============================================================================
+ESERAM ?= eseram.local
+ESERAM_URL = http://$(ESERAM):8080
+
+send: GAME.ROM
+	@curl -fsS -X POST "$(ESERAM_URL)/ram/fill" >/dev/null && echo "  似非RAM クリア"
+	@curl -fsS -H "Content-Type: application/octet-stream" --data-binary @GAME.ROM "$(ESERAM_URL)/ram?start=0x0" \
+	  && echo "  GAME.ROM を送った($$(wc -c < GAME.ROM)B)。MSX をリセットしてください"
+
+send-test: TEST.ROM
+	@curl -fsS -X POST "$(ESERAM_URL)/ram/fill" >/dev/null && echo "  似非RAM クリア"
+	@curl -fsS -H "Content-Type: application/octet-stream" --data-binary @TEST.ROM "$(ESERAM_URL)/ram?start=0x0" \
+	  && echo "  TEST.ROM を送った($$(wc -c < TEST.ROM)B)。MSX をリセットしてください"
+
+# 実機が持っている内容を読み戻して、送ったものと一致するか確かめる
+verify: GAME.ROM
+	@curl -fsS "$(ESERAM_URL)/ram?start=0&size=$$(wc -c < GAME.ROM | tr -d " ")" -o readback.bin \
+	  && cmp -s readback.bin GAME.ROM && echo "  一致 OK" || echo "  ★不一致"
+
+# 検証ROM(走査線分割の本数を数える)を TEST.ROM として作る
+hstest:
+	$(MAKE) clean
+	$(MAKE) HSTEST=1
+	@mv GAME.ROM TEST.ROM && echo "  TEST.ROM を作った(make send-test で実機へ)"
+
+.PHONY: send send-test verify hstest run clean
+
 clean:
 	rm -rf $(BUILD) GAME.ROM
