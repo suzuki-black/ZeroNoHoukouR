@@ -31,7 +31,15 @@ static u8 t;
 
 /* sin 1周期を 16 段で(±64 を 1/64 で正規化)。帯ごとの横位置＝amp * sin16[i] / 64 */
 static const s8 sin16[16] = { 0, 24, 45, 59, 64, 59, 45, 24, 0, -24, -45, -59, -64, -59, -45, -24 };
-static const char *const mode_name[6] = { "COARSE+FINE", "FINE ONLY  ", "COARSE ONLY", "NO SPLIT   ", "FROZEN WAVE", "2BAND STATIC" };
+static const char *const mode_name[7] = { "COARSE+FINE", "FINE ONLY  ", "COARSE ONLY", "NO SPLIT   ", "FROZEN WAVE", "2BAND STATIC", "COLOR BANDS " };
+
+/* ★モード6(COLOR BANDS)用: 帯ごとの地の色。**分割が何本効いたかを目で数えるため**のモード。
+   横スクロール(R#26/27)は「効いているのに画面が動かない」ことがあり得る(openMSX がそうだった)ので、
+   色なら「効かなかった分割＝上の帯と同じ色」で確実に分かる。隣り合う帯は必ず別の色にする。
+   ★帯0は地の色(暗い青)にしておく。モードを抜けたときこの色が残るため。 */
+static const u8 band_r[8] = { 1, 7, 0, 7, 0, 5, 7, 2 };
+static const u8 band_g[8] = { 2, 0, 5, 7, 0, 5, 4, 2 };
+static const u8 band_b[8] = { 5, 0, 0, 0, 7, 0, 7, 2 };
 
 /* 市松と縦縞。横にずれたことが一目で分かる絵。 */
 static const u8 pat_box[32] = {
@@ -56,6 +64,7 @@ static void draw_bg(void) {
     for (y = 0; y < 180; y++) vdp_fill((u16)((y + 20) & 255), y, 2, 1, 11); /* 斜めの赤線(継ぎ目の段差が読める) */
     vdp_text(2, 2, 15, 1, "R#26/27 SPLIT TEST");
     vdp_text(2, 182, 14, 1, "SPACE:MODE UD:AMP LR:BANDS M:MSK");
+    if (mode == 6) vdp_text(2, 170, 11, 1, "COUNT COLOR BANDS = SPLITS THAT WORKED");
     if (mode == 5) vdp_text(2, 170, 11, 1, "LINE106 -> RIGHT 32DOT");
     vdp_text(2, 192, 15, 1, "MODE");
     vdp_text(42, 192, 12, 1, mode_name[mode]);
@@ -73,6 +82,21 @@ static void arm(void) {
     u8 i, n;
     if (mode == 3) {                       /* 分割なし: 全画面を同じ量で揺らす(基準。継ぎ目が出ないことの確認) */
         raster_off();
+        return;
+    }
+    if (mode == 6) {
+        /* ★分割が何本効いたかを**数える**モード。帯ごとに地の色(パレット1番)だけを変える。
+           白/橙の格子線(色15/12)は変わらないので目盛りとして使える。
+           見方: 色の境目を数える。境目が bands+1 本ぶんあれば全部効いている。
+                 途中から色が変わらなくなったら、そこから先の分割が落ちている。 */
+        for (i = 0; i <= bands; i++) {
+            g_ras[i].line = (u8)(i * (u8)(176 / (bands + 1)));
+            g_ras[i].reg  = RAS_NOREG;
+            g_ras[i].reg2 = RAS_NOREG;
+            g_ras[i].pidx = 1;
+            g_ras[i].pr = band_r[i & 7]; g_ras[i].pg = band_g[i & 7]; g_ras[i].pb = band_b[i & 7];
+        }
+        raster_arm((u8)(bands + 1));
         return;
     }
     if (mode == 5) {
@@ -121,7 +145,11 @@ static void hstest_init(void) {
 
 static u8 hstest_update(void) {
     t++;
-    if (g_input_edge & INP_TRIG)  { mode = (u8)((mode + 1) % 6); draw_bg(); }
+    if (g_input_edge & INP_TRIG)  {
+        mode = (u8)((mode + 1) % 7);
+        vdp_set_pal(1, band_r[0], band_g[0], band_b[0]);   /* ★色モードを抜けても地の色が残らないように戻す */
+        draw_bg();
+    }
     if (g_input_edge & INP_TRIGB) { msk = (u8)(msk ^ 1); vdp_wreg(25, (u8)(msk ? 0x02 : 0x00)); draw_bg(); }  /* R#25 bit1=MSK */
     if ((g_input_edge & INP_UP)    && amp < 32) { amp = (u8)(amp + 2); draw_bg(); }
     if ((g_input_edge & INP_DOWN)  && amp > 2)  { amp = (u8)(amp - 2); draw_bg(); }
