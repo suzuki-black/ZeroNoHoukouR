@@ -1344,11 +1344,16 @@ u8 stage_update(void) {
        ★バンク31 は本編が使っていない(検証ROM/DEBUG_PROF と排他なので、この測定ビルドでは空き)。 */
     {   static u16 nfr;
         volatile u8 *w = BANK_SWAP_WIN;
+        u8 ok;
         nfr++;
         bank_data(31);
         w[0] = 'Z'; w[1] = 'E'; w[2] = 'R'; w[3] = 'O';
         w[4] = (u8)nfr; w[5] = (u8)(nfr >> 8);
+        /* ★書けたかを**その場で読み戻して**判定する。curl の読み方やオフセットの疑いを排除するため、
+           結果は**画面の枠の色**(R#7)で出す: 緑=書けた / 橙=書けない。 */
+        ok = (u8)(w[0] == 'Z' && w[3] == 'O' && w[4] == (u8)nfr);
         bank_restore();
+        vdp_wreg(7, ok ? 3 : 12);
     }
 #endif
 

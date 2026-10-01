@@ -120,6 +120,21 @@ u8  g_fps;         /* 実FPS(JIFFY増分を校正して算出)。hud_drawが2桁
 u16 g_frame;       /* ★JIFFY非依存: ループ毎+1。ストップウォッチ実測用(検証)。hud_drawが4桁表示 */
 static u16 fps_n = 1;  /* JIFFYの1VBLANKあたり増分(実機turboRでは1でない疑い=起動時に実測校正) */
 #endif
+/* ★フレームの同期。**フレーム先頭(t0)から n ティック目まで**待つ＝絶対時刻での同期。
+   ★これを「処理のあとで vdp_wait_frame() を n 回」にしてはいけない。あの形だと処理が 1 VBLANK を
+     超えたぶんがそのまま尺に足し算され、30fps のつもりが 20fps/15fps に落ちる
+     (実機BIOS の openMSX で 17fps を実測した原因がこれだった。2026-10-01)。
+   ★すでに n ティック以上かかっているフレームは**待たずに出る**。遅れを次フレームへ持ち越さない
+     (持ち越すと一度詰まると延々 20fps のままになる)。VBLANK 整列は保てないが、処理が 1 VBLANK を
+     超えている時点で描画は表示区間へかかっているので、整列しても得は無い。
+   ★JIFFY が止まってもハングしないよう、待ちはガード付き。 */
+static u16 ft0;
+
+static void frame_sync(u16 t0, u8 n) {
+    volatile u16 *jf = (volatile u16 *)0xFC9E;
+    while ((u16)(*jf - t0) < n) { }   /* 既に n ティック過ぎていたら即出る(遅れを引きずらない) */
+}
+
 void scene_run(u8 cur) {
     g_scene = cur;
     scene_video_enter(cur);  /* ビデオモード確立(SC_TITLEはSCREEN12化＋YJK流し込み)を先に */
@@ -133,6 +148,7 @@ void scene_run(u8 cur) {
       a = *jf; g = 0; while (*jf == a && ++g) { }   /* ちょうど1VBLANK分 */
       b = *jf; fps_n = (u16)(b - a); if (fps_n == 0) fps_n = 1; }
 #endif
+    ft0 = *(volatile u16 *)0xFC9E;   /* 最初のフレームの基準 */
     for (;;) {
 #ifdef DEBUG_PROF
         u16 _pc = prof_tick();   /* 計算区間(input+update)開始 */
@@ -172,15 +188,14 @@ void scene_run(u8 cur) {
         if (cur == SC_STAGE) {   /* ★計測はステージ(SCREEN5)中のみ。タイトル(SCREEN12)でpage切替すると壊れる */
             u16 comp = (u16)(prof_tick() - _pc);   /* 計算区間tick(cmd_wait含む) */
             g_prof_acc[PF_COMPUTE] += comp;
-            vdp_wait_frame();                       /* 空き(PF_WAIT)は vdp_wait_frame 内で計上 */
-            if (!g_crush_t) vdp_wait_frame();       /* ★2 VBLANK目=30fps固定(クラッシュ中は60fps) */
+            frame_sync(ft0, (u8)((!g_crush_t) ? 2 : 1));
             prof_frame_end(comp);
         } else {
-            vdp_wait_frame();
+            frame_sync(ft0, 1);
         }
 #else
-        vdp_wait_frame();
-        if (cur == SC_STAGE && !g_crush_t) vdp_wait_frame();   /* ★2 VBLANK目=30fps固定(クラッシュ中は60fps) */
+        frame_sync(ft0, (u8)((cur == SC_STAGE && !g_crush_t) ? 2 : 1));
 #endif
+        ft0 = *(volatile u16 *)0xFC9E;   /* 次のフレームの基準(同期の出口＝ティック境界) */
     }
 }
