@@ -1335,6 +1335,23 @@ u8 stage_update(void) {
        VDP並列化はVRAM非接触の純CPU(=海interleaveのAI)とだけ行う。 */
     PROF_CALL(PF_FIRE, fire_draw());
     ramx_use_cart();    /* ★§4-3: ホット区間終了→page1/page2をカートリッジへ戻す(以降のバンキング=ミス/クリア/setup可) */
+#ifdef RAMPROBE
+    /* ★実機テレメトリの可否を見る(make clean && make RAMPROBE=1)。ESERAMair のカート RAM へ
+       MSX 側から書けるなら、ここに測定値を置いて PC から curl で読める:
+         curl "http://eseram.local:8080/ram?start=0x3E000&size=16" | xxd
+       → "ZERO" の後ろの 16bit がフレーム数。読むたびに増えていれば**生きた経路**。
+       ★ここは page2 が cart の区間(ホット区間の外)。0xA000 の窓は bank_data で差し替える。
+       ★バンク31 は本編が使っていない(検証ROM/DEBUG_PROF と排他なので、この測定ビルドでは空き)。 */
+    {   static u16 nfr;
+        volatile u8 *w = BANK_SWAP_WIN;
+        nfr++;
+        bank_data(31);
+        w[0] = 'Z'; w[1] = 'E'; w[2] = 'R'; w[3] = 'O';
+        w[4] = (u8)nfr; w[5] = (u8)(nfr >> 8);
+        bank_restore();
+    }
+#endif
+
 
     /* ★中ボスのオーバレイ入れ替えは page2 が cart のここで(overlay.h の制約4)。 */
     if (g_mb == MB_ACTIVE && g_mb_req != 0xFF) mb_fetch();   /* ★中ボスの向き: ROM から読む(書くのは次のフレームのオーバレイ) */

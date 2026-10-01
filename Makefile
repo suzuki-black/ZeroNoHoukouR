@@ -22,6 +22,12 @@ ifdef DEBUG_FPS
 endif
 # ── page2(常駐bank2)のRAM実行を切る(実機A/B計測用): make clean && make DEBUG_PROF=1 NO_RAMX2=1
 #    page1 のみRAM実行=旧挙動のROMを作り、page2 も足した版との差分を実機で測るためのスイッチ。
+# ── 実機テレメトリの可否を見る: make clean && make RAMPROBE=1
+#    ゲームが毎フレーム バンク31 の先頭へ署名＋フレーム数を書く。PC から:
+#      curl "http://eseram.local:8080/ram?start=0x3E000&size=16" | xxd
+ifdef RAMPROBE
+  DEFS += -DRAMPROBE
+endif
 ifdef NO_RAMX2
   DEFS += -DNO_RAMX2
 endif
