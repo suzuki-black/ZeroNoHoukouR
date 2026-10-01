@@ -12,6 +12,7 @@
 #include "player.h"     /* g_player_x/y(艦載機の自機追尾) */
 
 u8 g_spr_base;          /* エンティティ描画の開始スプライトスロット(先頭はHUDが確保) */
+u8 g_sat_dirty;         /* 1=控え(sat_shadow)が更新済み＝次の VBLANK で SAT へ吐く(scene.c) */
 u8 g_spr_used;          /* ★ent_draw_all が使い終えたスロット数(=次に空いているslot)。
                            ラスタ分割で「余りスロットを帯ごとに別の弾で埋める」ために公開する。 */
 u8 g_spr_limit;         /* ★ent_draw_all が使ってよいslotの上限。ラスタ分割で追加スプライトを出すときは
@@ -446,9 +447,14 @@ void ent_draw_all(void) {
         vdp_sat_pos(slot, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);
         slot++;
     }
-    /* ★A6: 溜めた属性(g_spr_base..slot-1)を1回のバーストでSATへ(flush内で停止マーカも直書き)。 */
-    vdp_sat_flush(g_spr_base, slot);
+    /* ★A6: 溜めた属性(g_spr_base..slot-1)は**ここでは VRAM へ書かない**。印だけ立て、
+       実際の転送(vdp_sat_flush)は次の VBLANK で scene.c のループが行う。
+       ★理由: ent_draw_all はフレームの中ほど(実測で走査線 115 行目付近)から走り、SAT の転送は
+         133 行目あたりになる。表示の真っ只中で属性を書き替えるので、**上半分は古い座標・
+         下半分は新しい座標**で描かれ、実機で「スプライトの走査線抜け」として見えていた
+         (2026-10-01 に openMSX＋実機BIOS の VDP_line_in_frame で確認)。 */
     g_spr_used = slot;
+    g_sat_dirty = 1;
     rot++;
 }
 

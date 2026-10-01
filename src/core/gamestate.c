@@ -5,6 +5,7 @@ u8  g_difficulty = 1;   /* NORMAL */
 u8  g_lives_idx  = 1;   /* 3機     */
 u8  g_durability = 1;   /* 耐久HP(既定=1=一撃死。今の難度だと3面まで行けて簡単すぎるため) */
 u8  g_view       = 0;   /* 画面ビューア: 0=通常/1=カードのみ/2=結果のみ(config設定) */
+u8  g_hud_on;    /* 1=今フレーム HUD を描いてよい(scene.c が VBLANK で描く。scene_stage が決める) */
 u8  g_stage_sel  = 0;   /* 1面     */
 u8  g_continue   = 1;   /* 継続ON  */
 u8  g_invinc     = 0;   /* 無敵OFF */

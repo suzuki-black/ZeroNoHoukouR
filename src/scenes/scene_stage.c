@@ -1019,7 +1019,6 @@ u8 stage_update(void) {
           vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % (amp * 2 + 1)) - (s16)amp)); }
         /* 残数表示は稲妻の間だけ出す(発動直後に減った数を見せる)。津波の間はスプライトが
            拡大モードなので HUD を出すと巨大化して破綻する＝32枚すべてを波に明け渡す。 */
-        if (g_crush_t > CRUSH_WAVE_T0) hud_draw(g_score, g_lives);
         if (g_ovl_ok) {
             ramx_use_ram();
             if (pal_need_reset) { pal_need_reset = 0; pal_reset(); }
@@ -1206,10 +1205,12 @@ u8 stage_update(void) {
     /* ★画面揺れ: 被弾/砲台撃破で数フレーム、R#23を縦±2pxジッタ(既存scroll上に上書き)。 */
     if (g_shake) { g_shake--; vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 5) - 2)); }
 
-    /* HUD は R#23(縦スクロール)設定直後・エンティティ描画より前に確定させる。
-       画面最上部のHUDは最もラスタ競合しやすく、重い ent_draw_all の後に書くと
-       ラスタが既に上端を通過→R#23とズレて1px上下振動する(旧版で残っていた不具合)。 */
-    if (!(g_mb == MB_ACTIVE && curstage == 4)) hud_draw(g_score, g_lives);   /* ★5面の中ボスの間は拡大(MAG)なので HUD は背景に描く */
+    /* ★HUD は**ここでは描かない**。scene.c のループが次の VBLANK で描く(走査線 0〜20 行目)。
+       画面最上部の HUD は最もラスタ競合しやすく、表示が始まってから書くと
+       ラスタが既に上端を通過→R#23 とズレて 1px 上下振動する。ここ(走査線 42 行目付近)では
+       もう遅い(実測。2026-10-01)。描いてよいかの条件だけ渡す。 */
+    g_hud_on = (u8)(!(g_mb == MB_ACTIVE && curstage == 4)            /* 5面の中ボスの間は背景に描く */
+                    && (!g_crush_t || g_crush_t > CRUSH_WAVE_T0));   /* 津波の間は32枚すべてを波が使う */
 
     /* ★スプライト分割をゲームに統合: 行 CURTAIN_SPLIT_LINE で R#5 をセットBへ切替える。
        両セットには ent_draw_all の内容が丸ごとミラーされている(g_spr_dual)ので、

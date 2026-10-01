@@ -585,19 +585,6 @@ void vdp_sat_flush(u8 from, u8 live) {
     }
 }
 
-/* ---- スプライト表セットの切替(ラスタ分割用) ----
-   ★セットBは「ラスタ分割で下帯だけ別の32枚を出す」ためのもの。切替は R#5 の1本だけなので
-     分割行(HBLANK)でも間に合う(RasSplit の reg/val にそのまま載る)。 */
-void vdp_sprite_setbase(u8 r5) { vdp_wreg(5, r5); }
-
-/* セットBを使える状態にする(起動時/シーン初期化で1回)。色表を単色で埋め、全枚を画面外へ。
-   ★色表は 32枚 × 16B = 512B。毎フレーム書くものではない(ここで一度だけ)。 */
-void vdp_sprite_setb_init(u8 color) {
-    u16 i;
-    vdp_write_addr(SPR_COLOR_B);
-    for (i = 0; i < 32 * 16; i++) VDP_DAT = color;
-    for (i = 0; i < 32; i++) { vdp_write_addr((u16)(SPR_ATTR_B + i * 4)); VDP_DAT = 216; }
-}
 
 /* セットBの属性を1枚書く(Y は表示Y-1、縦スクロール補正はセットAと同じ規約)。 */
 void vdp_sprite_pos_b(u8 slot, u8 x, u8 y, u8 patnum) {
@@ -608,27 +595,7 @@ void vdp_sprite_pos_b(u8 slot, u8 x, u8 y, u8 patnum) {
     VDP_DAT = 0;
 }
 
-/* セットBの slot 以降を停止マーカで隠す。 */
-void vdp_sprite_hide_from_b(u8 slot) {
-    vdp_write_addr((u16)(SPR_ATTR_B + (u16)slot * 4));
-    VDP_DAT = 216;
-}
 
-/* ---- セットA限定の書き込み(g_spr_dual でもミラーしない) ----
-   ★分割の追加スプライトは「上帯はA・下帯はB」と**別内容**を同じslotに置くので、
-     ミラー版(vdp_sprite_pos)ではなくこちらを使う。両セットで別内容にしてよいのは、
-     そのスプライトが分割線をまたがない(片方の帯に完全に収まる)ときだけ。 */
-void vdp_sprite_pos_a(u8 slot, u8 x, u8 y, u8 patnum) {
-    vdp_write_addr(SPR_ATTR + (u16)slot * 4);
-    VDP_DAT = spr_y(y);
-    VDP_DAT = x;
-    VDP_DAT = patnum;
-    VDP_DAT = 0;
-}
-void vdp_sprite_hide_from_a(u8 slot) {
-    vdp_write_addr(SPR_ATTR + (u16)slot * 4);
-    VDP_DAT = 216;
-}
 /* セットA/B それぞれの色表を単色で1枚ぶん書く(追加スプライト用)。 */
 void vdp_sprite_color_a(u8 slot, u8 color) {
     u8 i; vdp_write_addr(SPR_COLOR + (u16)slot * 16);

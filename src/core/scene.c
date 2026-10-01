@@ -5,6 +5,8 @@
 #include "scene.h"
 #include "raster.h"
 #include "vdp.h"
+#include "entity.h"   /* g_sat_dirty / g_spr_base / g_spr_used */
+#include "hud.h"      /* hud_draw: VBLANK 中に描く */   /* g_sat_dirty / g_spr_base / g_spr_used */
 #include "input.h"
 #include "vdp.h"
 #include "bank.h"
@@ -197,5 +199,11 @@ void scene_run(u8 cur) {
         frame_sync(ft0, (u8)((cur == SC_STAGE && !g_crush_t) ? 2 : 1));
 #endif
         ft0 = *(volatile u16 *)0xFC9E;   /* 次のフレームの基準(同期の出口＝ティック境界) */
+        /* ★スプライト属性の転送は**ここ**(VBLANK の直後)で。ent_draw_all の中で書くと
+           フレームの中ほど(走査線 130 行目付近)になり、画面の上半分と下半分で座標が食い違って
+           「走査線抜け」に見える(実機で多発。2026-10-01 に走査線番号で確認)。
+           控え(sat_shadow)は RAM なのでいつ作ってもよく、VRAM へ出す時刻だけが問題。 */
+        if (cur == SC_STAGE && g_hud_on) hud_draw(g_score, g_lives);   /* ★HUD も VBLANK 中に(上端は最もラスタ競合しやすい) */
+        if (g_sat_dirty) { g_sat_dirty = 0; vdp_sat_flush(g_spr_base, g_spr_used); }
     }
 }
