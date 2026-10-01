@@ -147,6 +147,14 @@ $(BUILD)/crt0rom.rel: $(SRC)/crt0rom.s | $(BUILD)
 $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc $(CODELOC) --data-loc $(DATALOC) \
 	     $(BUILD)/crt0rom.rel $(RESIDENT_RELS) -o $@
+# ★未定義シンボルは sdld では**警告だけ**で ihx が出てしまう(呼び出しは call 0x0000 ＝実機では
+#   BIOS コールドスタート＝本体リセット=「タイトルへ戻る」)。しかも失敗した ihx がディスクに残ると
+#   次の make が「新しいから作り直さない」と判断してそのまま ROM を焼く。必ず消して止める。
+	@if grep -q "Undefined Global" $(BUILD)/rom.map; then \
+	   echo "ERROR: 常駐のリンクに未定義シンボルがある(sdld は警告しか出さない=call 0x0000 で実機リセット):"; \
+	   grep "Undefined Global" $(BUILD)/rom.map; \
+	   rm -f $@; exit 2; \
+	 fi
 	@A=$$(awk '/^DEF _ramexec_page2_to_ram /{print $$3}' $(BUILD)/rom.noi); \
 	 if [ -z "$$A" ]; then echo "ERROR: rom.noi に _ramexec_page2_to_ram が無い"; exit 2; fi; \
 	 if [ $$(printf '%d' $$A) -ge $$(printf '%d' 0x6000) ]; then \
@@ -590,6 +598,13 @@ ifdef DEBUG_PROF
 endif
 
 GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk assets/cards.bin
+# ★常駐・バンクシーン・オーバレイ・hot のすべてのリンク結果(.map)を一括で検査する。
+#   未定義シンボルは警告のまま通り、その呼び出しは call 0x0000 ＝実機では本体リセットになる。
+	@if grep -l "Undefined Global" $(BUILD)/*.map >/dev/null 2>&1; then \
+	   echo "ERROR: 未定義シンボルを含むリンクがある(call 0x0000 ＝実機リセット):"; \
+	   grep -H "Undefined Global" $(BUILD)/*.map; \
+	   rm -f $@; exit 2; \
+	 fi
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)
 
 # openMSX で起動 → 数秒後にスクショ → 終了(headless 検証)
