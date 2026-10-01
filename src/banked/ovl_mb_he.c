@@ -222,10 +222,17 @@ void ovl_mb_frame(void) {
         move(hx8[f8], hy8[f8]);
         tgt = (u8)(d8 << 2);
         if (++st_t == 12) { if (!(gone & 1) && !dt[0]) shoot(0); if (!(gone & 2) && !dt[1]) shoot(1); sfx(2, SFX_EFIRE); }
-        if (st_t >= (hurt ? HE_AIM_T / 2 : HE_AIM_T) && fcur == tgt) { st = ST_DASH; st_t = 0; }
+        /* ★どちらかが墜ちている間は突進に入らない。他の中ボス(1面 Fw 200 など)は撃墜されると
+           ST_DIE へ入り、**その場をゆっくり動くだけ**になる。双子は撃墜を dt[] で持ち、動きの
+           状態機械は回り続けていたので「撃破の火の玉のまま高速で飛び出す」ことがあった
+           (実機で「違和感しかない」と指摘)。火が消えたら次の突進へ入る。 */
+        if (!dt[0] && !dt[1] && st_t >= (hurt ? HE_AIM_T / 2 : HE_AIM_T) && fcur == tgt) { st = ST_DASH; st_t = 0; }
         if (t >= HE_TIMEOUT) st = ST_LEAVE;
         break; }
     case ST_DASH:                                  /* 予告(白く明滅)のあと、一直線に突っ込む */
+        /* ★予告(白い明滅)の最中に墜ちたら、突進には入らず狙いへ戻す。既に突進に入っていれば
+           そのまま走り切る(「高速移動を始めてからなら分かる」=実機の指摘のとおり)。 */
+        if ((dt[0] || dt[1]) && st_t <= HE_WARN_T) { aim(); break; }
         if (++st_t <= HE_WARN_T) {
             if ((st_t & 3) == 1 && !crush) { hcool[0] = hcool[1] = 0; flash(0); flash(1); }   /* 1フレーム白→戻る、を繰り返す=明滅 */
         } else if (move(dx8[d8], dy8[d8]) || (hurt && move(hx8[d8], hy8[d8])) || st_t >= HE_WARN_T + HE_DASH_T) aim();
