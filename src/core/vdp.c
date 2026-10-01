@@ -66,6 +66,7 @@ void vdp_screen5(void) {
         call 0x005F            ; CHGMOD
     __endasm;
     vdp_wreg(25, 0x00);        /* YJK/YAE/SP2/MSK を全クリア(SCREEN12 残留対策) */
+    g_msk = 0;                 /* ★R#25 を直接 0 にしたので控えも合わせる */
 }
 
 /* ゲーム標準パレット(SCREEN5)。CHGMOD は既定パレットに戻すので、SCREEN5 へ入る度に張り直す。
@@ -385,6 +386,19 @@ void vdp_set_vscroll(u8 v) {
 void vdp_set_hscroll(u8 coarse, u8 fine) {
     vdp_wreg(26, coarse & 0x3F);   /* 8px単位の粗スクロール */
     vdp_wreg(27, fine & 0x07);     /* 0-7 の微スクロール    */
+}
+
+/* ★R#27(ドット単位の横スクロール)を使う間は R#25 の MSK を立てる、が V9958 の作法。
+   MSK=0 のまま R#27 を動かすと、表示の開始が R#27 ドットぶん右へずれ、**左端の黒帯が
+   0〜7 ドットの間で毎フレーム伸び縮みする**(MSX2 の SET ADJUST 擬似スクロールと同じ見え方。
+   実機で指摘され、openMSX+実機BIOS で左端の位置を測って確認: MSK=0 で 0〜7 ドット変動 /
+   MSK=1 で 8 ドット固定)。MSK=1 なら幅は常に 8 ドットなので動かない。
+   ★MSK は**スプライトも削る**(左端 8 ドットに掛かる絵は欠ける)。自機は g_msk を見て
+   x>=8 に制限する(player.c)。HUD は全て x>=8 なので影響しない。 */
+u8 g_msk;   /* 1=左端8ドットをマスク中。中ボスの帯ずらし(ovl_mb_dd)が一時的に上書きした後、ここへ戻す */
+void vdp_msk(u8 on) {
+    g_msk = on;
+    vdp_wreg(25, (u8)(on ? 0x02 : 0x00));
 }
 
 /* SCREEN5 表示ページ。R#2 = 0x1F | (page<<5)。page0=0x1F(base 0x0000)/page1=0x3F(base 0x8000)。 */

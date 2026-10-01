@@ -25,6 +25,12 @@ static Entity pool[ENT_MAX];
 
 /* 各スプライトスロットに最後に書いた単色(0xFF=coltab/未確定=強制書換)。色表の重複16B書込みを省く。 */
 static u8 slot_col[32];
+/* ★1=その枠の色表を**次の VBLANK で** VRAM へ書く(ent_col_flush)。
+   色表を ent_draw_all の中で書くと、SAT を VBLANK へ寄せた以降は**色だけ1フレーム先**になり、
+   表示の途中(実測で走査線 172 行目)で枠の色が次フレームの持ち主の色に変わる＝画面の下半分が
+   別の色で描かれる。自機の落ち影(13)の枠が点数ポップ(15)に変わる瞬間が「影が白く点滅」だった
+   (2026-10-02 に openMSX＋実機BIOS で、色表を VBLANK 直後と走査線 172 で読み比べて確認)。 */
+static u8 cdirty[32];
 /* ★A1: 各スロットに最後に書いた行別色表(coltab)のポインタ(0=単色書込み後で無効)。
    同一slotに同一coltabが既に載っていれば16B書込みを省く。単色書込み時は必ず 0 にして
    「そのslotのVRAMはもう coltab でない」を記録する(=以後の同ポインタ判定が VRAM 実体と一致)。 */
@@ -209,7 +215,7 @@ void ent_reset(void) {
     u8 i;
     g_spr_limit = SPR_TOP;   /* 既定=HUD の手前まで。分割を使うシーンだけが後から下げる */
     for (i = 0; i < ENT_MAX; i++) pool[i].active = 0;
-    for (i = 0; i < 32; i++) { slot_col[i] = 0xFF; slot_ctab[i] = 0; }   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す) */
+    ent_spr_cache_inval(0);   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す)＋保留中の印も捨てる */
     g_ebul = 0;
     scorepop_reset();   /* ★破壊点数ポップアップも面開始/再開でクリア */
 }
@@ -250,7 +256,7 @@ Entity *ent_spawn(u8 type) {
 u8 pwr_col[PWR_MAX + 1][16];
 
 static void spr_col1(u8 slot, u8 color) {
-    if (slot_col[slot] != color) { vdp_sprite_color(slot, color); slot_col[slot] = color; slot_ctab[slot] = 0; }
+    if (slot_col[slot] != color) { slot_col[slot] = color; slot_ctab[slot] = 0; cdirty[slot] = 1; }
 }
 /* ★draw1: 描画の最ホットパス(毎フレーム最大32回)。SDCCのCコードは Entity* をレジスタに保持できず
    フィールドアクセス毎に pop/push でスタック往復＋IXフレーム＋4引数の vdp_sat_pos 呼びでスタック渡し、と
@@ -312,8 +318,12 @@ static u8 draw1(u8 slot, const Entity *e) __naked {
         sbc  hl, de                ; ==coltab?
         jr   z, 00019$             ; 同一=16B書込省略
         ld   (_d1ctab), de         ; coltab退避
-        ld   a, (_d1slot)
-        call _vdp_sprite_color_tab ; A=slot, DE=coltab
+        ld   a, (_d1slot)          ; cdirty[slot]=1(VRAMへは VBLANK で)
+        ld   l, a
+        ld   h, #0
+        ld   bc, #_cdirty
+        add  hl, bc
+        ld   (hl), #1
         ld   a, (_d1slot)          ; slot_ctab[slot]=coltab
         ld   l, a
         ld   h, #0
@@ -443,7 +453,7 @@ void ent_draw_all(void) {
        ★5面の中ボスの間は拡大(MAG)なので出さない(g_pwr_icon=0。代わりにオーバレイが背景へ描く)。 */
     if (g_pwr_icon && slot < SPR_TOP) { /* ★枠は scene_stage が1つ予約してある(g_spr_limit-1)。ただし枠が尽きたときは出さない(上の★) */
         const u8 *tab = pwr_col[g_pwr];
-        if (slot_ctab[slot] != tab) { vdp_sprite_color_tab(slot, tab); slot_ctab[slot] = tab; slot_col[slot] = 0xFF; }
+        if (slot_ctab[slot] != tab) { slot_ctab[slot] = tab; slot_col[slot] = 0xFF; cdirty[slot] = 1; }
         vdp_sat_pos(slot, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);
         slot++;
     }
@@ -458,9 +468,21 @@ void ent_draw_all(void) {
     rot++;
 }
 
+/* ★溜めた色表を VRAM へ(scene.c のループが VBLANK で呼ぶ)。SAT の転送と**同じフレームの割当て**を
+   書くので、色と位置が食い違わない。印が立っている枠だけなので空いていれば一瞬で終わる。 */
+void ent_col_flush(void) {
+    u8 i;
+    for (i = 0; i < 32; i++) {
+        if (!cdirty[i]) continue;
+        cdirty[i] = 0;
+        if (slot_ctab[i]) vdp_sprite_color_tab(i, slot_ctab[i]);
+        else               vdp_sprite_color(i, slot_col[i]);
+    }
+}
+
 /* 指定slot以降の色キャッシュを無効化する。★分割の追加スプライトが色表を直接書いたときに呼ぶこと。
    これを怠ると、次に同じslotをエンティティが使ったとき「色は既に正しい」と誤判定して書き直さない。 */
 void ent_spr_cache_inval(u8 from) {
     u8 i;
-    for (i = from; i < 32; i++) { slot_col[i] = 0xFF; slot_ctab[i] = 0; }
+    for (i = from; i < 32; i++) { slot_col[i] = 0xFF; slot_ctab[i] = 0; cdirty[i] = 0; }   /* ★保留中の印も捨てる */
 }

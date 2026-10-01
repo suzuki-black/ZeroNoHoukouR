@@ -9,6 +9,13 @@ DATALOC  = 0xC000       # RAM(page3)先頭。BSS/初期化データはここか�
 
 PROFILE  = debug        # debug | release
 OPT_DEBUG   = --max-allocs-per-node 3000
+# ★常駐だけは割付の探索をもっと回す(--max-allocs-per-node 9000)。レジスタ割付が改善して
+#   スピル(スタック往復)が減るので**小さくなる上に速くなる**。実測の節約: sound 264B /
+#   fire 186B / vdp 148B / hud 147B / scroll 38B / scene_stage 22B(合計 800B 強)。
+#   ★player.c と ramexec.c だけは逆に太る(+76/+9)ので 3000 のまま(Makefile で個別指定)。
+#   ★オーバレイ(8KB 窓に詰める)には効かせない: 1バイトも余っていないものがあり、
+#     太った瞬間にビルドが止まる。$(OPT) のままにしておく。
+OPT_RES     = --max-allocs-per-node 9000
 OPT_RELEASE = --opt-code-size --max-allocs-per-node 9000
 
 # ── MegaROM(ASCII8, 512KB=64bank×8KB)レイアウト(rompack が強制) ──

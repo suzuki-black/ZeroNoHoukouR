@@ -209,7 +209,7 @@ static u8 erase_rows(u8 k) {
 
 static void finish(void) {
     g_sea_skip = 0;
-    vdp_wreg(25, 0x00);
+    vdp_msk(g_msk);   /* ★0 に落とさない: 蛇行(R#27)が続いていれば MSK は立てたまま(左端が暴れる) */
     vdp_set_hscroll(0, 0);
     g_dd_flash = g_dd_flash2 = 0;
     mb_finish();

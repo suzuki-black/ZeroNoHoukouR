@@ -109,4 +109,8 @@ void vdp_sprite_color_a(u8 slot, u8 color);
 void vdp_sprite_color_b(u8 slot, u8 color);
 void vdp_sprite_pos_b(u8 slot, u8 x, u8 y, u8 patnum);
 
+/* ★左端8ドットのマスク(R#25 bit1)。R#27 のドット単位スクロールを使う間は必ず立てる(詳細は vdp.c)。 */
+extern u8 g_msk;          /* 1=マスク中。自機の左限界(player.c)と中ボスの帯ずらしの復帰に使う */
+void vdp_msk(u8 on);
+
 #endif /* VDP_H */

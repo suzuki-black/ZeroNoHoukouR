@@ -133,6 +133,16 @@ $(BUILD)/version.h: FORCE | $(BUILD)
 vpath %.c $(CORE) $(SCENES)
 
 $(BUILD)/%.rel: %.c $(HDRS) | $(BUILD)
+	sdcc -m$(TARGET) -c $(OPT) $(OPT_RES) $(DEFS) $(INC) $< -o $@
+
+# ★この3つだけは $(OPT_RES) を効かせない。player は +76B / ramexec は +9B と**太り**、
+#   entity は __naked の ASM と相性が悪く sdcc が内部エラーで落ちる
+#   (error 9: FATAL Compiler Internal Error in gen.c。いずれも実測)。
+$(BUILD)/player.rel: $(SRC)/core/player.c $(HDRS) | $(BUILD)
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $< -o $@
+$(BUILD)/ramexec.rel: $(SRC)/core/ramexec.c $(HDRS) | $(BUILD)
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $< -o $@
+$(BUILD)/entity.rel: $(SRC)/core/entity.c $(HDRS) | $(BUILD)
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $< -o $@
 
 $(BUILD)/crt0rom.rel: $(SRC)/crt0rom.s | $(BUILD)
