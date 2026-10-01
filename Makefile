@@ -386,10 +386,10 @@ $(BUILD)/ovl13.bin: $(BUILD)/ovl13.ihx tools/ihx2bin.mjs
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl13 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi; \
 	 HR=$$(sed -n 's/^ *\([0-9A-F]\{8\}\)  *_hot_ram .*/\1/p' $(BUILD)/rom.map | head -1); \
 	 HRD=$$((16#$$HR)); \
-	 if [ $$HRD -gt 50688 ] || [ $$((HRD+5696)) -lt 55296 ]; then \
-	   echo "ERROR: ovl_spin は hot_ram の 0xC600-0xD7FF(元絵＋RAM実行)を借りる。hot_ram=0x$$HR では収まらない"; exit 3; \
+	 if [ $$HRD -gt 50688 ] || [ $$((HRD+5696)) -lt 55808 ]; then \
+	   echo "ERROR: ovl_spin は hot_ram の 0xC600-0xD9FF(元絵＋RAM実行＋海の作り置き)を借りる。hot_ram=0x$$HR では収まらない"; exit 3; \
 	 fi; \
-	 echo "  ovl_spin/ovl_crack: hot_ram=0x$$HR / 0xC600-0xD7FF を借りる OK"
+	 echo "  ovl_spin/ovl_crack: hot_ram=0x$$HR / 0xC600-0xD9FF を借りる OK"
 ROMPACK_BANKS += --bank 29 $(BUILD)/ovl13.bin
 
 # 中ボス用オーバレイ: 通常面のオーバレイから主砲の弾幕を抜き、中ボスを足す。海の区間で出現の瞬間に入れ替え、戦艦の前に戻す。

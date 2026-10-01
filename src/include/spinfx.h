@@ -11,6 +11,12 @@
 #define TEX       ((u8 *)TEX_ADDR)
 #define SEA_ADDR  0xD600   /* 海タイル 16x16(1B=1テクセル) = 256B */
 #define SEA       ((u8 *)SEA_ADDR)
+/* ★海で埋める 1 行(32B=64テクセル)の作り置き。行の中身は ty の下位4ビットだけで決まるので
+   16 行あれば足りる(16x32B = 512B)。毎回作り直すと tex_halve の 8 割がこの計算に消える
+   (実測: 1回の tex_halve が 197ms = 実機で「一瞬停止」)。grab のときに一度だけ作る。
+   ★0xD800-0xD9FF も hot_ram の中(Makefile が範囲検査する)。 */
+#define SROW_ADDR 0xD800
+#define SROW      ((u8 *)SROW_ADDR)
 #define TEX_H     124      /* 元絵に絵が入っている行数(496 ドット / 4)。124.. は海 */
 
 #define S3_PAT    0x0000   /* SCREEN3 パターン(色)テーブル: 1,536B */

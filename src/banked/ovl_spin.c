@@ -36,6 +36,10 @@
 #define SCL_MAX  40        /* 1 ブロック 2.5 テクセル。これ以上は折り返して像が並ぶ */
 #define HOLD_T   10        /* 最初は止めておくフレーム数(撃破の画面のまま) */
 #define SEQ_END  64        /* 約 3.5 秒 */
+/* ★1 VBLANK あたりに進める台本の歩数(8.8)。73/256 = 0.285 歩 ＝ 1 歩 3.5 フレーム。
+   いまの描画は 1 枚に 3〜4 フレームかかる(実測)ので、これで**従来とほぼ同じ所要時間**
+   (64 歩 ≒ 224 フレーム ≒ 3.7 秒)のまま、画面の動きだけが一定になる。 */
+#define SPIN_SPEED 73
 
 static u8  ang;
 static u16 scl;
@@ -96,11 +100,17 @@ void spinfx_grab(void) {
             SEA[((u16)ty << 4) | (u8)((tx << 1) + 1)] = (u8)(b >> 4);
         }
     }
+    /* ★海で埋める行を 16 行ぶん作り置く(以後は写すだけ。tex_halve の山を崩すため) */
+    for (ty = 0; ty < 16; ty++) {
+        u8 *d = &SROW[(u16)ty << 5];
+        for (tx = 0; tx < 32; tx++) d[tx] = (u8)((SEA[((u16)ty << 4) | (u8)((tx << 1) & 15)] << 4)
+                                                 | SEA[((u16)ty << 4) | (u8)(((tx << 1) + 1) & 15)]);
+    }
     for (ty = 0; ty < 128; ty++) {
         u8 *d = &TEX[(u16)ty << 5];            /* 1 行 32B(64 テクセル) */
         if (ty >= TEX_H) {                     /* 絵の下の余り: 海タイルで埋める */
-            for (tx = 0; tx < 32; tx++) d[tx] = (u8)((SEA[((ty & 15) << 4) | ((tx << 1) & 15)] << 4)
-                                                    | SEA[((ty & 15) << 4) | (((tx << 1) + 1) & 15)]);
+            const u8 *sr = &SROW[(u16)(ty & 15) << 5];
+            for (tx = 0; tx < 32; tx++) d[tx] = sr[tx];
             continue;
         }
         /* ★元絵は「撃破の瞬間の画面そのもの」。画面に映っている行は**表示リング**から取る
@@ -287,14 +297,6 @@ static void strip_end(void) __naked { __asm ret __endasm; }
 
 static void (*stripr)(void);   /* hot_ram へ写した strip */
 
-/* 海のタイルから 1 行ぶん(32B=64テクセル)作る。 */
-static void sea_row(u8 *d, u8 ty) {
-    u8 tx;
-    for (tx = 0; tx < 32; tx++)
-        d[tx] = (u8)((SEA[((u16)(ty & 15) << 4) | (u8)((tx << 1) & 15)] << 4)
-                     | SEA[((u16)(ty & 15) << 4) | (u8)(((tx << 1) + 1) & 15)]);
-}
-
 /* ★元絵を半分の解像度に作り直す(1 テクセル = 4 → 8 ドット)。
    座標が 8.8 の 16bit なので、倍率は SCL_MAX(≒2.7倍)より上げられない
    (画面端で s16 を溢れ、元絵が折り返して何枚も出る)。そこで**元絵の方を半分に潰し**、
@@ -302,18 +304,66 @@ static void sea_row(u8 *d, u8 ty) {
    ★詰め方: テクセルは 4bit。出力テクセル tx = 入力テクセル 2tx = 入力バイト tx の上位ニブル。
      出力バイト tx には入力バイト 2tx・2tx+1 の上位ニブルが入る。出力は入力より手前なので
      同じ行を上書きしながら進んでも壊れない。 */
-static void tex_halve(void) {
-    u8 ty, tx;
+/* ★内側は asm。SDCC の添字アクセス(sp[(u8)(tx<<1)] 等)は 1 バイトあたり 400 サイクル超かかり、
+   tex_halve 全体で 130ms = 実機で「一瞬停止」になっていた(実測)。ポインタを進めるだけの
+   素直なループなので asm にすると 10 分の 1 以下になる。引数は静的変数で渡す(この TU の作法)。 */
+static u8 *hv_d;
+static const u8 *hv_s;
+static u16 hv_n;
+/* 入力 16 バイト対 → 出力 16 バイト(上位ニブルだけを拾って詰める)。 */
+static void halve_row(void) __naked {
+    __asm
+        ld   hl, (_hv_s)
+        ld   de, (_hv_d)
+        ld   b, #16
+    hv_l:
+        ld   a, (hl)
+        and  #0xF0
+        ld   c, a
+        inc  hl
+        ld   a, (hl)
+        inc  hl
+        rrca
+        rrca
+        rrca
+        rrca
+        and  #0x0F
+        or   c
+        ld   (de), a
+        inc  de
+        djnz hv_l
+        ret
+    __endasm;
+}
+/* hv_s → hv_d へ hv_n バイト写す。 */
+static void cp_row(void) __naked {
+    __asm
+        ld   hl, (_hv_s)
+        ld   de, (_hv_d)
+        ld   bc, (_hv_n)
+        ldir
+        ret
+    __endasm;
+}
+
+static void tex_halve(u8 first) {
+    u8 ty;
     for (ty = 0; ty < 64; ty++) {
         u8 *d = &TEX[(u16)ty << 5];
-        const u8 *sp = &TEX[(u16)((u16)ty << 1) << 5];
-        for (tx = 0; tx < 16; tx++) {
-            u8 a = sp[(u8)(tx << 1)], b = sp[(u8)((tx << 1) + 1)];
-            d[tx] = (u8)((a & 0xF0) | (b >> 4));
-        }
-        { u8 sea[32]; sea_row(sea, ty); for (tx = 16; tx < 32; tx++) d[tx] = sea[tx]; }
+        hv_d = d; hv_s = &TEX[(u16)((u16)ty << 1) << 5];
+        halve_row();
+        hv_d = d + 16; hv_s = &SROW[((u16)(ty & 15) << 5) + 16]; hv_n = 16;
+        cp_row();                                      /* 右半分は海(作り置きから写す) */
     }
-    for (ty = 64; ty < 128; ty++) sea_row(&TEX[(u16)ty << 5], ty);
+    /* ★下半分(行 64..127)は海そのもの。**1回目だけ**必要:
+         1回目は艦の絵(行 64..123)が入っているので消さないと残る。
+         2回目は前回ここへ書いた海と ty の下位4ビットが同じ＝**同じ内容**になるので触らない
+         (1回目 64行 + 2回目 64行 ぶんの写しが丸ごと消える)。 */
+    if (first)
+        for (ty = 64; ty < 128; ty++) {
+            hv_d = &TEX[(u16)ty << 5]; hv_s = &SROW[(u16)(ty & 15) << 5]; hv_n = 32;
+            cp_row();
+        }
 }
 
 /* 1 画面ぶん(1,536B)。パターン表の並び＝帯 g(8行) → セル列 cx → 帯の中の行。
@@ -390,19 +440,35 @@ void ovl_spin(void) {
        そこから回転も縮小も加速する。最後まで縮み続ける(倍率の頭打ちは元絵を半分に
        潰して回避)。いきなり回して縮めると「別の絵に切り替わった」ように見える。 */
     { u8 halves = 0;
+      u16 acc = 0;                                  /* 進んだ台本の歩数(8.8) */
+      u16 jp = *(volatile u16 *)0xFC9E;             /* JIFFY(VBLANK カウンタ) */
       while (seq_t <= SEQ_END) {
-        u16 t = seq_t++;
-        if (t >= HOLD_T) {
-            u16 d = (u16)(t - HOLD_T);
-            ang = (u8)(ang + 1 + (u8)(d >> 3));   /* だんだん速く回る */
-            scl = (u16)(scl + 1 + (d >> 4));      /* だんだん速く縮む */
-            if (scl > SCL_MAX) {
-                if (halves < 2) { tex_halve(); halves++; scl >>= 1; cy >>= 1; cx8 >>= 1; }
-                else scl = SCL_MAX;
-            }
-        }
         frame();
         vdp_wait_frame();
+        /* ★台本は**経過フレーム数に比例**して進める。1 枚描くのに 3 枚ぶんかかったり
+           4 枚ぶんかかったりする(1536B を毎フレーム書くので 15〜20fps)ので、
+           「1 枚描いたら 1 歩」にすると**見かけの回転速度が 33% 変わる**＝止まったり急いだりして
+           見える(実機で「一瞬停止が何回も」と指摘された正体のひとつ)。経過ぶんだけ進めれば
+           描ける枚数が変わっても**画面の動きは一定**になる。 */
+        {   u16 jn = *(volatile u16 *)0xFC9E;
+            u8  dt = (u8)(jn - jp);
+            jp = jn;
+            if (dt == 0) dt = 1;
+            if (dt > 8)  dt = 8;                    /* 外れ値(演出の外で止まった等)は抑える */
+            acc = (u16)(acc + (u16)dt * SPIN_SPEED);
+        }
+        while (seq_t <= (u16)(acc >> 8) && seq_t <= SEQ_END) {
+            u16 t = seq_t++;
+            if (t >= HOLD_T) {
+                u16 d = (u16)(t - HOLD_T);
+                ang = (u8)(ang + 1 + (u8)(d >> 3));   /* だんだん速く回る */
+                scl = (u16)(scl + 1 + (d >> 4));      /* だんだん速く縮む */
+                if (scl > SCL_MAX) {
+                    if (halves < 2) { tex_halve((u8)(halves == 0)); halves++; scl >>= 1; cy >>= 1; cx8 >>= 1; }
+                    else scl = SCL_MAX;
+                }
+            }
+        }
       }
     }
     for (k = 0; k < 16; k++) vdp_set_pal((u8)k, 7, 7, 7);   /* 白で飛ばして終わる */
