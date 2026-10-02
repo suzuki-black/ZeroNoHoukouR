@@ -236,9 +236,12 @@ static void opll_pad_init(void) {
     fmPadIdx = 0xFF; fmPadNote = 0xFF; fmMelIdx = 0xFF; fmMelNote = 0xFF;
 }
 
-/* ★まずは**1面の曲(track 1)だけ**に付けて実機で感触を見る(ユーザー指定)。
-   良ければこの判定を広げるだけで全曲へ回る。 */
-#define FM_DRUM_TRACK(t) ((t) == 1)
+/* ★**全曲に付ける**(2026-10-03。1面の曲で実機の感触を確かめたうえでユーザー指定)。
+   ★範囲外の track は bgm_play が曲を読まずに戻るので、ここで弾いて FM を仕込まない
+     (仕込むと曲が無いのにリズムモードと音色だけ残る)。
+   ★ドラムの無い曲(drumOn=0: エンディング・海イントロ・警報)は bgm_drum が呼ばれないので
+     リズム音源は鳴らない。和音(ベース譜)と主旋律の重ねだけが乗る。 */
+#define FM_DRUM_TRACK(t) ((t) < BGM_TRACK_COUNT)
 
 static void opll_rhythm_init(void) {
     if (!g_opll) return;
