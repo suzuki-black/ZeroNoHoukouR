@@ -2,6 +2,7 @@
    ゲームロジックは書かない(巨大 main() を作らないという規律の起点)。 */
 #include "sys.h"
 #include "sound.h"
+#include "opll.h"
 #include "scene.h"
 #include "hotcode.h"
 #include "ramexec.h"
@@ -20,6 +21,7 @@ void main(void) {
 #ifdef DEBUG_PROF
     prof_selftest();      /* 実機µs自己診断(CPUモード比/VDP I/O単価/HMMM所要)→トリガで抜ける */
 #endif
+    opll_init();          /* ★FM(MSX-MUSIC)の検出。turboR は必ず内蔵。無ければ以降 FM は鳴らさない */
     sound_init();         /* PSG初期化 + H.TIMI 60Hz ISR 設置 */
     raster_init();        /* ★ラスタ分割の土台: H.KEYI へフック設置(音ISRの H.TIMI とは別フック) */
     scene_run(SC_TITLE);  /* タイトル(SCREEN12/YJK)から。以降ここから戻らない */

@@ -77,6 +77,7 @@ RESIDENT_RELS = \
   $(BUILD)/bank.rel \
   $(BUILD)/input.rel \
   $(BUILD)/sound.rel \
+  $(BUILD)/opll.rel \
   $(BUILD)/sprites.rel \
   $(BUILD)/gamestate.rel \
   $(BUILD)/entity.rel \
@@ -544,6 +545,12 @@ ifdef HSTEST
   $(error MAGTEST と HSTEST は bank31 を共用するので同時に指定できない)
 endif
 endif
+# ── 検証: FM(MSX-MUSIC)が鳴るか: make clean && make OPLLTEST=1
+#    起動直後に和音(440/660/880Hz)を鳴らしっぱなしにする。openMSX なら soundlog で録って確かめる。
+ifdef OPLLTEST
+  DEFS += -DOPLLTEST
+endif
+
 # ── 検証: SCREEN3 でパーティクルを何粒飛ばせるか: make clean && make PARTTEST=1
 ifdef PARTTEST
   DEFS          += -DPARTTEST
