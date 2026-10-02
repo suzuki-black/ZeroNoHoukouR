@@ -174,6 +174,32 @@ static u8 fmPadIdx;                 /* 直前に鳴らしたベース音符の�
    ★伸ばす和音なので 1 フレーム遅れても聞こえない(ドラムは拍が命なので ISR のまま)。 */
 static u8 fmPadNote = 0xFF;         /* 次に置く和音の根音(0xFF=用事なし) */
 
+/* ───────── 主旋律の重ね(ch3) ─────────
+   ★PSG の主旋律が音を変えた瞬間に、**1 オクターブ下**で同じ音を ch3 へ置く。
+     同じ高さに重ねると PSG の輪郭が消えるので、下に敷いて太さだけ足す。
+   ★音色はホルン(9)。立ち上がりが柔らかく伸びるので PSG の角と喧嘩しない
+     (トランペット(7)のような鋭い音だと主旋律が二重に聞こえて濁る)。
+   ★2 本重ねない。ch4/ch5 は空けておく(将来の余地)。 */
+#define OPLL_MEL_CH   3
+#define OPLL_MEL_INST 9             /* 9=ホルン */
+#define OPLL_MEL_VOL  3             /* 0=最大 / 15=無音。主旋律より一段低く敷く */
+static u8 fmMelIdx;                 /* 直前に鳴らした主旋律の音符の添字 */
+static u8 fmMelNote = 0xFF;         /* 次に置く音(0xFF=用事なし / 0xFE=切る) */
+
+static void opll_mel_off(void) { opll_w((u8)(0x20 + OPLL_MEL_CH), 0); }
+
+static void opll_mel(u8 note) {
+    u16 f;
+    u8  blk;
+    if (note >= 48) { opll_mel_off(); return; }       /* 休符は切る */
+    if (note >= 12) note = (u8)(note - 12);           /* ★1 オクターブ下へ(下げられる時だけ) */
+    blk = (u8)(2 + note / 12);
+    f   = opll_fnum[note % 12];
+    opll_w((u8)(0x20 + OPLL_MEL_CH), 0);              /* いったんキーオフ(打ち直し) */
+    opll_w((u8)(0x10 + OPLL_MEL_CH), (u8)(f & 0xFF));
+    opll_w((u8)(0x20 + OPLL_MEL_CH), (u8)(0x30 | (blk << 1) | (u8)(f >> 8)));
+}
+
 static void opll_chord_off(void) {
     u8 i;
     for (i = 0; i < 3; i++) opll_w((u8)(0x20 + i), 0);
@@ -198,15 +224,16 @@ static void opll_chord(u8 note) {
 /* ★本体のループが VBLANK の仕事を終えてから呼ぶ(scene.c)。予約された和音を実際に書く。 */
 void fm_flush(void) {
     u8 n = fmPadNote;
-    if (n == 0xFF) return;
-    fmPadNote = 0xFF;
-    opll_chord(n);
+    if (n != 0xFF) { fmPadNote = 0xFF; opll_chord(n); }
+    n = fmMelNote;
+    if (n != 0xFF) { fmMelNote = 0xFF; opll_mel(n); }
 }
 
 static void opll_pad_init(void) {
     u8 i;
     for (i = 0; i < 3; i++) opll_w((u8)(0x30 + i), (u8)((OPLL_PAD_INST << 4) | OPLL_PAD_VOL));
-    fmPadIdx = 0xFF; fmPadNote = 0xFF;
+    opll_w((u8)(0x30 + OPLL_MEL_CH), (u8)((OPLL_MEL_INST << 4) | OPLL_MEL_VOL));
+    fmPadIdx = 0xFF; fmPadNote = 0xFF; fmMelIdx = 0xFF; fmMelNote = 0xFF;
 }
 
 /* ★まずは**1面の曲(track 1)だけ**に付けて実機で感触を見る(ユーザー指定)。
@@ -230,6 +257,7 @@ static void opll_rhythm_off(void) {
     if (!g_opll) return;
     opll_w(OPLL_RHY_REG, 0);                   /* リズムモードごと落とす */
     opll_chord_off();                          /* 和音も切る(鳴らしっぱなしにしない) */
+    opll_mel_off();                            /* 主旋律の重ねも切る */
 }
 
 void bgm_play(u8 track) {
@@ -336,8 +364,11 @@ void bgm_update(void) {
     if (!bgmOn) return;
     bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, melLoop, 0,       0, melPeak, melSus, melVib, 0,         0);           /* ★メロディ(chA)は死守=SFXに絶対譲らない */
     bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basLoop, basStep, 1, basPeak, basSus, 0, bassSweep, sfx_busy_b);  /* ★ベース(chB)がSFX(SHOT/PHIT)に譲る */
-    /* ★FM の和音: ベースの音符が変わった瞬間だけ**予約**する(書くのは本体のループ=fm_flush) */
-    if (fmDrum && bIdx != fmPadIdx) { fmPadIdx = bIdx; fmPadNote = bas_n[bIdx]; }
+    /* ★FM の和音と主旋律の重ね: 音符が変わった瞬間だけ**予約**する(書くのは本体のループ=fm_flush) */
+    if (fmDrum) {
+        if (bIdx != fmPadIdx) { fmPadIdx = bIdx; fmPadNote = bas_n[bIdx]; }
+        if (mIdx != fmMelIdx) { fmMelIdx = mIdx; fmMelNote = mel_n[mIdx]; }
+    }
     if (!drmGate && bIdx == basLoop && bTrem == (u8)(basStep - 1)) { drmGate = 1; drmIdx = 15; drmT = 0; }   /* ★本編の頭(ベースがループ位置に来た瞬間)でドラムを小節頭から入れる */
     if (drumOn && drmGate) bgm_drum(sfx_busy_c);
 }
