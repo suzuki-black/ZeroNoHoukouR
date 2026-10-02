@@ -150,7 +150,10 @@ static u8  bgmLoaded;   /* 1=bgm_ram に曲が載っている(bgm_resume の安�
    ★音量は 0 が最大・15 が無音。PSG を食わないよう控えめから始める。 */
 #define OPLL_RHY_REG  0x0E          /* bit5=リズムモード / bit4=BD / bit3=SD / bit2=TOM / bit1=TC / bit0=HH */
 #define OPLL_RHY_ON   0x20          /* リズムモードだけ立てた状態(全部 off) */
-static const u8 opll_rhy[4] = { 0, 0x10, 0x08, 0x01 };   /* 0=無 / 1=キック→BD / 2=スネア→SD / 3=ハット→HH */
+/* 0=無 / 1=キック→BD / 2=スネア→SD / 3=ハット→**HH＋シンバル(TC)**。
+   ★ハットだけだと最大音量にしても埋もれた(帯域比 1.03→1.54 倍止まり)。OPLL の HH は
+     短くて細いので、明るく伸びる TC を重ねて抜けを作る。 */
+static const u8 opll_rhy[4] = { 0, 0x10, 0x08, 0x03 };
 static u8 fmDrum;                   /* 1=この曲は FM を重ねる(ドラム＋和音) */
 
 /* ───────── FM の和音(ベースの下支え) ─────────
@@ -160,7 +163,7 @@ static u8 fmDrum;                   /* 1=この曲は FM を重ねる(ドラム�
    ★リズムは ch6,7,8 を使うので、和音は ch0〜2 に置く(主旋律の重ねは ch3〜5 が空く)。
    ★音色はオルガン(8)。伸びるので「パッド」になり、PSG の輪郭を消さない。 */
 #define OPLL_PAD_INST 8             /* 8=オルガン */
-#define OPLL_PAD_VOL  6             /* 0=最大 / 15=無音。PSG を食わない程度から */
+#define OPLL_PAD_VOL  0             /* 0=最大 / 15=無音。★6→2→0。「ベースが聞こえない」(実機指摘) */
 static const u16 opll_fnum[12] = { 172,183,194,205,217,230,244,258,274,290,307,326 };
                                     /* C..B。block=2 で C2(=音符 0)。誤差は最大 0.25% */
 static const u8 fm_chord[3] = { 0, 7, 12 };   /* 根音 / 5度 / オクターブ上 */
@@ -216,9 +219,10 @@ static void opll_rhythm_init(void) {
     opll_w(0x16, 0x20); opll_w(0x26, 0x05);   /* BD    */
     opll_w(0x17, 0x50); opll_w(0x27, 0x05);   /* HH/SD */
     opll_w(0x18, 0xC0); opll_w(0x28, 0x01);   /* TOM/TC */
-    opll_w(0x36, 0x02);                        /* BD の音量(0=最大) */
-    opll_w(0x37, 0x43);                        /* 上位=HH(4) / 下位=SD(3) */
-    opll_w(0x38, 0xFF);                        /* TOM/TC は使わない=無音 */
+    opll_w(0x36, 0x01);                        /* BD の音量(0=最大) */
+    opll_w(0x37, 0x01);                        /* 上位=HH(0=最大) / 下位=SD(1)。★HH は 4 では
+                                                  まったく聞こえなかった(帯域比 1.03 倍=実質ゼロ) */
+    opll_w(0x38, 0xF0);                        /* 上位=TOM(無音) / 下位=TC(0=最大。ハットに重ねる) */
     opll_w(OPLL_RHY_REG, OPLL_RHY_ON);         /* リズムモード on、全部 off */
     opll_pad_init();                           /* 和音(ch0-2)の音色と音量も仕込む */
 }
