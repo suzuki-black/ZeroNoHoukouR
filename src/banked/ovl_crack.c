@@ -197,7 +197,7 @@ static s8 dvx[DB_N], dvy[DB_N];
 
 static void db_init(void) {
     u8 i, k = 0;
-    for (i = 0; i < DEB_KIND * 2; i++) {
+    for (i = 0; i < DEB_IMG; i++) {
         vdp_sprite_pattern((u8)(DB_PAT + i * 4), deb_rim[i]);
         vdp_sprite_pattern((u8)(DB_PAT + DEB_PATB + i * 4), deb_body[i]);
     }
@@ -244,10 +244,17 @@ static void db_step(void) {
             }
             if (ny < 0) ny = 0;
             dbx[i] = (u8)nx; dby[i] = (u8)ny;
+            /* ★横転: **一定方向**へ 4 コマ送る(面 → 斜め → 真横 → 斜め裏)。
+               2 コマの入れ替えだと「震えている」ようにしか見えない(アニメの作画の定石。
+               苦労と教訓 §16-36)。真横のコマは板の側面＝細い光の筋なので、回るたびに一瞬光る。
+               コマは dlive の bit3(下位)と bit6(上位)に持つ(bit0-2 は時間と軌道の位相で埋まっている)。 */
             { u8 tm = ph;
-              if (tm) tm--; else { d ^= 0x08; tm = (u8)(3 + (i & 3)); }
+              if (tm) tm--;
+              else { u8 po = (u8)(((((d >> 3) & 1) | ((d >> 5) & 2)) + 1) & 3);
+                     d = (u8)((d & 0xB7) | ((po & 1) << 3) | ((po & 2) << 5));
+                     tm = (u8)(2 + (i & 3)); }
               dlive[i] = (u8)((d & 0xF8) | tm); }
-            {   u8 pat = (u8)(DB_PAT + (((k << 1) + ((d & 0x08) ? 1 : 0)) << 2));
+            {   u8 pat = (u8)(DB_PAT + ((((k * DEB_POSE) + (((d >> 3) & 1) | ((d >> 5) & 2))) << 2)));
                 vdp_sprite_pos((u8)(DB_SLOT + i * 2),     dbx[i], dby[i], pat);
                 vdp_sprite_pos((u8)(DB_SLOT + i * 2 + 1), dbx[i], dby[i], (u8)(DEB_PATB + pat));
             }
