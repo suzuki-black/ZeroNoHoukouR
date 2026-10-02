@@ -7,6 +7,8 @@
 #include "hotcode.h"
 #include "ramexec.h"
 #include "raster.h"
+#include "bank.h"
+#include "sprites.h"     /* COLDSETUP_BANK */
 #ifdef DEBUG_PROF
 #include "prof.h"
 #endif
@@ -21,7 +23,8 @@ void main(void) {
 #ifdef DEBUG_PROF
     prof_selftest();      /* 実機µs自己診断(CPUモード比/VDP I/O単価/HMMM所要)→トリガで抜ける */
 #endif
-    opll_init();          /* ★FM(MSX-MUSIC)の検出。turboR は必ず内蔵。無ければ以降 FM は鳴らさない */
+    g_cold_mode = COLD_OPLL; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
+                          /* ★FM(MSX-MUSIC)の検出(bank30)。turboR は必ず内蔵。無ければ以降 FM は鳴らさない */
     sound_init();         /* PSG初期化 + H.TIMI 60Hz ISR 設置 */
     raster_init();        /* ★ラスタ分割の土台: H.KEYI へフック設置(音ISRの H.TIMI とは別フック) */
     scene_run(SC_TITLE);  /* タイトル(SCREEN12/YJK)から。以降ここから戻らない */

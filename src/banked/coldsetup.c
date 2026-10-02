@@ -12,6 +12,7 @@
 #include "aa_hot.h"      /* aa_fire / aa_hp / aa_dead */
 #include "assets_data.h" /* STAGE_COUNT */
 #include "final.h"       /* STAGE_FINAL */
+#include "opll.h"        /* ★FM の検出(起動時1回。g_cold_mode=COLD_OPLL で呼ばれる) */
 
 /* ★常駐(scene_stage.c)が持っているもの。面の準備で先に埋まっている */
 extern u8  cur_gun_x[4];   /* 主砲4基の艦内x */
@@ -52,8 +53,89 @@ static void spawn_parked(u8 shipX, u16 shipY) {
     }
 }
 
+
+/* ───────── FM(MSX-MUSIC)の検出。起動時に1回だけ(g_cold_mode=COLD_OPLL) ─────────
+   ★手順と「やってはいけないこと」は opll.h に書いた。要点だけ再掲:
+     ・**内蔵(APRLOPLL)を先に**探す。見つかったら 0x7FF6 には**触らない**
+       (触ると Panasonic の MSX2+ で壊れる。外付けだけを見るのが R-TYPE 型の事故)。
+     ・スロットは BIOS の RDSLT で読む(自分のページを差し替えないので安全)。 */
+static u8  sl_slot;
+static u16 sl_addr;
+static u8  sl_val;
+
+static void sl_read(void) __naked {
+    __asm
+        ld   a, (_sl_slot)
+        ld   hl, (_sl_addr)
+        push ix
+        push iy
+        call 0x000C            ; RDSLT (A=slotID, HL=番地 → A=値)
+        pop  iy
+        pop  ix
+        ld   (_sl_val), a
+        ret
+    __endasm;
+}
+static void sl_write(void) __naked {
+    __asm
+        ld   a, (_sl_val)
+        ld   e, a
+        ld   a, (_sl_slot)
+        ld   hl, (_sl_addr)
+        push ix
+        push iy
+        call 0x0014            ; WRSLT (A=slotID, HL=番地, E=値)
+        pop  iy
+        pop  ix
+        ret
+    __endasm;
+}
+static u8 rd(u8 slot, u16 addr) { sl_slot = slot; sl_addr = addr; sl_read(); return sl_val; }
+
+/* ページ1(0x4018)に 8 バイトの印があるスロットを探す。無ければ 0xFF。 */
+static u8 find_sig(const u8 *sig) {
+    u8 ps, ss, nss, slot, i;
+    for (ps = 0; ps < 4; ps++) {
+        nss = (u8)((*(volatile u8 *)(0xFCC1 + ps) & 0x80) ? 4 : 1);   /* EXPTBL: bit7=拡張スロット */
+        for (ss = 0; ss < nss; ss++) {
+            slot = (u8)((nss > 1) ? (0x80 | (ss << 2) | ps) : ps);
+            for (i = 0; i < 8; i++)
+                if (rd(slot, (u16)(0x4018 + i)) != sig[i]) break;
+            if (i == 8) return slot;
+        }
+    }
+    return 0xFF;
+}
+
+static void opll_detect(void) {
+    static const u8 sig_int[8] = { 'A','P','R','L','O','P','L','L' };   /* 内蔵 MSX-MUSIC */
+    static const u8 sig_pac[8] = { 'P','A','C','2','O','P','L','L' };   /* 外付け FM-PAC  */
+    u8 slot, i;
+
+    g_opll = OPLL_NONE;
+    slot = find_sig(sig_int);                      /* ★内蔵を先に */
+    if (slot != 0xFF) { g_opll = OPLL_INT; }
+    else {
+        slot = find_sig(sig_pac);
+        if (slot == 0xFF) return;                  /* FM は無い。以降 opll_w は何もしない */
+        g_opll = OPLL_PAC;
+        sl_slot = slot; sl_addr = 0x7FF6; sl_read();   /* FM-PAC だけ I/O を有効にする */
+        sl_val = (u8)(sl_val | 1); sl_write();
+    }
+    for (i = 0; i <= 0x38; i++) opll_w(i, 0);      /* 全レジスタ 0 ＝ 黙らせる */
+#ifdef OPLLTEST
+    /* ★検証用(make clean && make OPLLTEST=1): 起動直後に和音を鳴らしっぱなしにする。
+       録音して 440/660/880Hz が出ていれば「検出 → I/O 書込み → 発音」の経路が通っている
+       (2026-10-02 に openMSX＋実機BIOS機で確認: 440=875 / 660=910 / 880=923、他は無し)。 */
+    opll_w(0x30, 0x50); opll_w(0x10, 0x22); opll_w(0x20, 0x19);   /* 根音 */
+    opll_w(0x31, 0x50); opll_w(0x11, 0xB3); opll_w(0x21, 0x19);   /* 5度  */
+    opll_w(0x32, 0x50); opll_w(0x12, 0x22); opll_w(0x22, 0x1B);   /* 8度上 */
+#endif
+}
+
 void banked_entry(void) {
     u8 i;
+    if (g_cold_mode == COLD_OPLL) { opll_detect(); return; }
     for (i = 0; i < SHIP_NAAG; i++) {          /* 対空砲の発射タイマと耐久 */
         u16 t = (u16)60 + (u16)i * 11;         /* ★u16で計算し255クランプ(u8のままだと高iで桁溢れ) */
         aa_fire[i] = (t > 255) ? 255 : (u8)t;

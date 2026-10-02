@@ -53,3 +53,4 @@ u8 diff_interval(u8 base) {
     if (v < 1) v = 1;
     return (v > 255) ? 255 : (u8)v;
 }
+u8  g_cold_mode = 0;   /* coldsetup(bank30)への用件: 0=面の配置 / 1=FMの検出(起動時1回) */

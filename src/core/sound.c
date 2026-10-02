@@ -5,6 +5,7 @@
 #include "bank.h"       /* data_read(曲データをバンク→RAM) */
 #include "vdp.h"        /* vdp_wait_frame(ファンファーレの前景同期) */
 #define ASSETS_BGM          /* ★BGM の表だけを取り込む(艦などの表の複製を作らない) */
+#include "opll.h"          /* ★FM(MSX-MUSIC)を添えて音を厚くする */
 #include "assets_data.h"   /* 自動生成: bgm_notetp[48] / bgm_off[] / bgm_len[] / BGM_BANK / BGM_RAM_MAX */
 
 /* ---- PSG ポートI/O(規約非依存にファイルスコープ変数経由) ----
@@ -140,9 +141,45 @@ static u8  drmIdx, drmT, drmType, drmVol;
 static u8  bgmOn;
 static u8  bgmLoaded;   /* 1=bgm_ram に曲が載っている(bgm_resume の安全弁) */
 
+/* ───────── FM(OPLL)のリズム音源を PSG のドラムに重ねる ─────────
+   ★PSG のノイズでやっている打楽器と**同じ拍で**、OPLL のリズム音源も叩く。曲データは一切
+     増えない(いまの拍をそのまま使う)のに、音は目に見えて厚くなる。
+   ★OPLL のリズムは ch6,7,8 を占有する。音程の無い打楽器なので、残り 6ch は後で
+     ベース/パッド/主旋律の重ねに使える。
+   ★キーオンは「落としてから立てる」(0x0E を同じフレームで 2 回書く)。立てっぱなしだと鳴らない。
+   ★音量は 0 が最大・15 が無音。PSG を食わないよう控えめから始める。 */
+#define OPLL_RHY_REG  0x0E          /* bit5=リズムモード / bit4=BD / bit3=SD / bit2=TOM / bit1=TC / bit0=HH */
+#define OPLL_RHY_ON   0x20          /* リズムモードだけ立てた状態(全部 off) */
+static const u8 opll_rhy[4] = { 0, 0x10, 0x08, 0x01 };   /* 0=無 / 1=キック→BD / 2=スネア→SD / 3=ハット→HH */
+static u8 fmDrum;                   /* 1=この曲は FM ドラムを重ねる */
+
+/* ★まずは**1面の曲(track 1)だけ**に付けて実機で感触を見る(ユーザー指定)。
+   良ければこの判定を広げるだけで全曲へ回る。 */
+#define FM_DRUM_TRACK(t) ((t) == 1)
+
+static void opll_rhythm_init(void) {
+    if (!g_opll) return;
+    /* リズム音源が使う ch6/7/8 の音程は固定値(YM2413 の作法どおり) */
+    opll_w(0x16, 0x20); opll_w(0x26, 0x05);   /* BD    */
+    opll_w(0x17, 0x50); opll_w(0x27, 0x05);   /* HH/SD */
+    opll_w(0x18, 0xC0); opll_w(0x28, 0x01);   /* TOM/TC */
+    opll_w(0x36, 0x02);                        /* BD の音量(0=最大) */
+    opll_w(0x37, 0x43);                        /* 上位=HH(4) / 下位=SD(3) */
+    opll_w(0x38, 0xFF);                        /* TOM/TC は使わない=無音 */
+    opll_w(OPLL_RHY_REG, OPLL_RHY_ON);         /* リズムモード on、全部 off */
+}
+static void opll_rhythm_off(void) {
+    if (!g_opll) return;
+    opll_w(OPLL_RHY_REG, 0);                   /* リズムモードごと落とす */
+}
+
 void bgm_play(u8 track) {
     u8 *p;
     bgmOn = 0;                  /* 再構築中は ISR に BGM を無視させる(単バイト) */
+    /* ★FM(OPLL)のリズムは曲ごとに仕込み直す。鳴らさない曲では必ず落とす
+       (落とし忘れると前の曲のリズムが鳴り続ける) */
+    fmDrum = (u8)(g_opll && FM_DRUM_TRACK(track));
+    if (fmDrum) opll_rhythm_init(); else opll_rhythm_off();
     if (track >= BGM_TRACK_COUNT) return;
     data_read(BGM_BANK, bgm_off[track], bgm_ram, bgm_len[track]);
     p = bgm_ram;
@@ -177,6 +214,7 @@ void bgm_resume(void) {
 
 void bgm_stop(void) {
     bgmOn = 0;
+    opll_rhythm_off();          /* ★FM のリズムも止める(鳴らしっぱなしにしない) */
     psg(8, 0); psg(9, 0);       /* melody(A)/bass(B) 消音 */
     psg(10, 0);                 /* ★drum/noise(C) も消音。放置すると直前のドラム音量が残り
                                    「さーーー」とノイズが鳴り続ける(ステージ開始カードで顕在化)。
@@ -220,6 +258,11 @@ static void bgm_drum(u8 busy) {
         drmT    = drm_blk[20];              /* テンポ(style: 標準/重い=8, 激しい=6) */
         drmType = drm_blk[drmIdx];          /* パターン(style別) */
         drmVol  = drm_blk[16 + drmType];    /* 初期音量 v0[type](style別) */
+        /* ★FM も同じ拍で叩く。SFX に譲る PSG と違い、FM は専用の ch なので常に鳴らしてよい */
+        if (fmDrum && drmType) {
+            opll_w(OPLL_RHY_REG, OPLL_RHY_ON);
+            opll_w(OPLL_RHY_REG, (u8)(OPLL_RHY_ON | opll_rhy[drmType]));
+        }
     }
     drmT--;
     if (busy) return;

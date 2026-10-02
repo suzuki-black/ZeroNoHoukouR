@@ -29,7 +29,12 @@
 
 extern u8 g_opll;     /* 検出結果(OPLL_NONE/INT/PAC)。0 なら以降 FM は一切触らない */
 
-void opll_init(void); /* 起動時に1回: 検出＋全レジスタ消音。見つからなければ g_opll=0 */
+/* ★検出は**冷たいバンク**(banked/coldsetup.c)にある。起動時に main が
+   g_cold_mode=COLD_OPLL にして bcall_to(COLDSETUP_BANK) で1回だけ呼ぶ。
+   起動時しか使わないものを常駐へ置くと、曲へ繋ぐぶんの枠が無くなるため。 */
+#define COLD_STAGE 0   /* coldsetup の用件: 面の配置(既定) */
+#define COLD_OPLL  1   /* 同: FM の検出＋消音(起動時1回) */
+extern u8 g_cold_mode;
 void opll_w(u8 reg, u8 val);   /* レジスタ書込み(規定のウェイト込み)。g_opll=0 なら何もしない */
 
 #endif /* OPLL_H */
