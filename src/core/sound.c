@@ -253,11 +253,18 @@ static void opll_rhythm_init(void) {
     opll_w(OPLL_RHY_REG, OPLL_RHY_ON);         /* リズムモード on、全部 off */
     opll_pad_init();                           /* 和音(ch0-2)の音色と音量も仕込む */
 }
-static void opll_rhythm_off(void) {
+/* ★FM を**完全に**止める。鳴らすのをやめる所からは必ずこれを通すこと。
+   ★保留中の予約(fmPadNote/fmMelNote)も捨てる。捨てないと、止めた後に本体のループの
+     fm_flush() が流し込んで**また鳴り出す**(「FM が鳴りっぱなし」の正体。実機で指摘)。
+   ★bgmOn=0 にするだけの経路(ファンファーレ・沈没音・初期化)は PSG しか止めていなかったので、
+     そこからも呼ぶ。 */
+void fm_silence(void) {
     if (!g_opll) return;
     opll_w(OPLL_RHY_REG, 0);                   /* リズムモードごと落とす */
-    opll_chord_off();                          /* 和音も切る(鳴らしっぱなしにしない) */
+    opll_chord_off();                          /* 和音も切る */
     opll_mel_off();                            /* 主旋律の重ねも切る */
+    fmPadNote = 0xFF; fmMelNote = 0xFF;        /* ★予約を捨てる(止めた後に流れ込ませない) */
+    fmPadIdx  = 0xFF; fmMelIdx  = 0xFF;        /* 次に鳴らすときは必ず置き直す */
 }
 
 void bgm_play(u8 track) {
@@ -266,7 +273,7 @@ void bgm_play(u8 track) {
     /* ★FM(OPLL)のリズムは曲ごとに仕込み直す。鳴らさない曲では必ず落とす
        (落とし忘れると前の曲のリズムが鳴り続ける) */
     fmDrum = (u8)(g_opll && FM_DRUM_TRACK(track));
-    if (fmDrum) opll_rhythm_init(); else opll_rhythm_off();
+    if (fmDrum) opll_rhythm_init(); else fm_silence();
     if (track >= BGM_TRACK_COUNT) return;
     data_read(BGM_BANK, bgm_off[track], bgm_ram, bgm_len[track]);
     p = bgm_ram;
@@ -296,12 +303,16 @@ void bgm_play(u8 track) {
    bgm_play() で再開すると毎回イントロから鳴り直してしまう(実機で指摘された)。
    ★一度も bgm_play していない場合は mel_n 等が未設定なので何もしない。 */
 void bgm_resume(void) {
-    if (bgmLoaded) bgmOn = 1;
+    if (!bgmLoaded) return;
+    /* ★FM は bgm_stop で完全に止めてあるので、仕込み直さないと**戻ってこない**
+       (メガクラッシュ明けに FM だけ鳴らなくなる) */
+    if (fmDrum) opll_rhythm_init();
+    bgmOn = 1;
 }
 
 void bgm_stop(void) {
     bgmOn = 0;
-    opll_rhythm_off();          /* ★FM のリズムも止める(鳴らしっぱなしにしない) */
+    fm_silence();               /* ★FM も完全に止める(リズム・和音・主旋律・保留中の予約まで) */
     psg(8, 0); psg(9, 0);       /* melody(A)/bass(B) 消音 */
     psg(10, 0);                 /* ★drum/noise(C) も消音。放置すると直前のドラム音量が残り
                                    「さーーー」とノイズが鳴り続ける(ステージ開始カードで顕在化)。
@@ -377,7 +388,7 @@ void bgm_update(void) {
    vdp_wait_frame で尺を取る(ISRのbgm_updateは bgmOn=0 で沈黙)。終了まで戻らない。 */
 static void fanfare_seq(const u8 *mel, const u8 *har, const u8 *len, u8 n) {
     u8 i, f;
-    bgmOn = 0;
+    bgm_stop();     /* ★FM ごと止める。ここは前景同期で数秒戻らないので、放っておくと鳴り続ける */
     for (i = 0; i < n; i++) {
         u16 tp = bgm_notetp[mel[i]]; psg(0, (u8)(tp & 0xFF)); psg(1, (u8)((tp >> 8) & 0x0F)); psg(8, 14);
         tp = bgm_notetp[har[i]];     psg(2, (u8)(tp & 0xFF)); psg(3, (u8)((tp >> 8) & 0x0F)); psg(9, 11);
@@ -390,7 +401,7 @@ static void fanfare_seq(const u8 *mel, const u8 *har, const u8 *len, u8 n) {
 /* 沈没音(自機撃墜/ゲームオーバー): 44フレームの下降音(周期上昇=音程降下)。旧版移植。前景同期。 */
 void play_sink(void) {
     u8 t;
-    bgmOn = 0;
+    bgm_stop();     /* ★同上(撃墜/ゲームオーバーで FM が伸びたまま残っていた) */
     for (t = 0; t < 44; t++) {
         u16 p = (u16)(240 + (u16)t * 14);
         psg(0, (u8)(p & 0xFF)); psg(1, (u8)((p >> 8) & 0x0F));
@@ -445,13 +456,12 @@ void snd_isr(void) __naked {
 static void psg_init(void) {
     psg(7, 0x9C);                  /* mixer: tone A,B on / noise C on / tone C off */
     psg(6, 16);                    /* noise period 既定 */
-    psg(8, 0); psg(9, 0); psg(10, 0);
     sfxType[0] = sfxType[1] = sfxType[2] = 0;
     sfxTimer[0] = sfxTimer[1] = sfxTimer[2] = 0;
     snd_ticks = 0;
     snd_active = 0;
     sfx_busy_b = 0;
-    bgmOn = 0;
+    bgm_stop();     /* bgmOn=0 ＋ A/B/C 消音 ＋ FM も落とす(起動/初期化でも念のため) */
 }
 
 /* H.TIMI(0xFD9F, 5バイトフック)へ JP snd_isr を仕込む。BIOSの垂直割込みが毎回CALLしてくる。 */
