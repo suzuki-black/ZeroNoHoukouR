@@ -254,6 +254,8 @@ Entity *ent_spawn(u8 type) {
    ★中身は面の準備で bank16(ship_render.c)が流し込む。常駐は64Bの表を持たない(デバッグROMが入らなくなる)。
    ★オーバレイ(5面の中ボスは背景にHUDを描く)からも引くので static にしない。 */
 u8 pwr_col[PWR_MAX + 1][16];
+/* ★増槽の行別色(理由は gamestate.h)。中身は bank16(ship_render.c)が面の準備で写す。 */
+u8 tank_col[16];
 
 static void spr_col1(u8 slot, u8 color) {
     if (slot_col[slot] != color) { slot_col[slot] = color; slot_ctab[slot] = 0; cdirty[slot] = 1; }

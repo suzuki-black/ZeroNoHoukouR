@@ -413,6 +413,8 @@ static const u8 pwrcol_src[4][16] = {
     {  0, 0, 0,0, 15,15,15,0, 15,15,15,0, 11,11,11,0 },
     { 15,15,15,0, 15,15,15,0, 15,15,15,0, 15,15,15,0 },
 };
+/* 増槽の行ごとの色: 上端=明るい銀 / 胴=銀 / 赤帯 / 尾翼=暗い灰(元は ovl_power.c に居た)。 */
+static const u8 tankcol_src[16] = { 14,15,15,14, 14,11,11,14, 14,14,14,14, 14,4,4,4 };
 static const u8 pat_bullet[32] = {
     0x00,0x00,0x00,0x00,0x00,0x07,0x07,0x07,0x07,0x07,0x07,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x00,0xE0,0xE0,0xE0,0xE0,0xE0,0xE0,0x00,0x00,0x00,0x00,0x00
@@ -541,7 +543,9 @@ static void load_sprites_impl(void) {
     vdp_sprite_pattern(SPR_PWRLV,   pat_pwrlv);
     {   /* ★色表は常駐の RAM へ写す(バンクのポインタは窓が戻ると無効。値だけ渡す) */
         const u8 *sp = (const u8 *)pwrcol_src; u8 *dp = (u8 *)pwr_col; u8 i;
-        for (i = 0; i < (PWR_MAX + 1) * 16; i++) *dp++ = *sp++; }
+        for (i = 0; i < (PWR_MAX + 1) * 16; i++) *dp++ = *sp++;
+        sp = tankcol_src; dp = tank_col;
+        for (i = 0; i < 16; i++) *dp++ = *sp++; }
     vdp_sprite_pattern(SPR_BULLET,  pat_bullet);
     vdp_sprite_pattern(SPR_HELLCAT,  pat_hellcat);
     vdp_sprite_pattern(SPR_PWV,      pat_pwv);

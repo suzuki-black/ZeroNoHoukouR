@@ -11,11 +11,11 @@
 #include "sprites.h"
 #include "scroll.h"     /* g_cam */
 
-/* 増槽の行ごとの色: 上端=明るい銀 / 胴=銀 / 赤帯 / 尾翼=暗い灰 */
 /* 最高段階で取ったときの点数(主砲1基=60、対空砲=20〜30、戦闘機=10 と比べて大きく) */
 #define PWR_BONUS 1000u
 
-static const u8 tank_col[16] = { 14,15,15,14, 14,11,11,14, 14,14,14,14, 14,4,4,4 };
+/* ★行別色(tank_col)は**常駐の RAM**にある(gamestate.h)。ここ(オーバレイ)に const で置くと
+   VBLANK の ent_col_flush() が読むときに page2 が cart へ戻っていて、ゴミを色表へ書く。 */
 
 /* 増槽を取った: 段階を上げる。最高段階なら高得点 */
 static void take(Entity *e) {
