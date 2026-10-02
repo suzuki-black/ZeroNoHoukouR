@@ -41,6 +41,10 @@ void play_fanfare(void);      /* 勝ちどきファンファーレ(前景同期�
 void play_sink(void);         /* 沈没音(下降。自機撃墜/ゲームオーバー)。前景同期。終了まで戻らない */
 void play_fanfare_open(void); /* 開始ファンファーレ(前景同期・BGM停止)。ステージ開始カード用。終了まで戻らない */
 
+/* ★FM(OPLL)の和音を実際に書く。ISR は予約するだけで、ここが VBLANK の仕事の**後**に流す
+   (和音の書込みは 9 レジスタ＝約 1ms あり、ISR でやると SAT/色表の転送を押し出す)。 */
+void fm_flush(void);
+
 /* ISR 稼働の観測点(検証・HUD用) */
 extern volatile u16 snd_ticks;
 extern u16 g_bgm_t0;           /* 最後に bgm_play した瞬間の snd_ticks(演出を曲に合わせる) */   /* ISRが毎フレーム ++(H.TIMI稼働の証跡) */

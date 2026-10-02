@@ -209,5 +209,6 @@ void scene_run(u8 cur) {
                枠の色が次の持ち主の色へ変わる(自機の影が白く点滅した。entity.c の cdirty 参照)。
                位置(SAT)の方を先に出すのは、遅れたときに目立つのが位置だから。 */
             ent_col_flush(); }
+        fm_flush();   /* ★FM の和音は VBLANK の仕事を**終えてから**(ISR でやると転送を押し出す) */
     }
 }

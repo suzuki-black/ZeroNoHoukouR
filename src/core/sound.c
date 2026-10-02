@@ -151,7 +151,60 @@ static u8  bgmLoaded;   /* 1=bgm_ram に曲が載っている(bgm_resume の安�
 #define OPLL_RHY_REG  0x0E          /* bit5=リズムモード / bit4=BD / bit3=SD / bit2=TOM / bit1=TC / bit0=HH */
 #define OPLL_RHY_ON   0x20          /* リズムモードだけ立てた状態(全部 off) */
 static const u8 opll_rhy[4] = { 0, 0x10, 0x08, 0x01 };   /* 0=無 / 1=キック→BD / 2=スネア→SD / 3=ハット→HH */
-static u8 fmDrum;                   /* 1=この曲は FM ドラムを重ねる */
+static u8 fmDrum;                   /* 1=この曲は FM を重ねる(ドラム＋和音) */
+
+/* ───────── FM の和音(ベースの下支え) ─────────
+   ★既存の**ベース譜**が音を変えた瞬間に、OPLL の ch0/1/2 へ
+     「根音・5度・オクターブ上」を置く。**曲データは増えない**(ベース譜から作るだけ)。
+   ★3度を入れないので長調/短調のどちらにも当たらない＝どの曲へ回しても和声が壊れない。
+   ★リズムは ch6,7,8 を使うので、和音は ch0〜2 に置く(主旋律の重ねは ch3〜5 が空く)。
+   ★音色はオルガン(8)。伸びるので「パッド」になり、PSG の輪郭を消さない。 */
+#define OPLL_PAD_INST 8             /* 8=オルガン */
+#define OPLL_PAD_VOL  6             /* 0=最大 / 15=無音。PSG を食わない程度から */
+static const u16 opll_fnum[12] = { 172,183,194,205,217,230,244,258,274,290,307,326 };
+                                    /* C..B。block=2 で C2(=音符 0)。誤差は最大 0.25% */
+static const u8 fm_chord[3] = { 0, 7, 12 };   /* 根音 / 5度 / オクターブ上 */
+static u8 fmPadIdx;                 /* 直前に鳴らしたベース音符の添字(変化を見るだけ) */
+/* ★和音の書き込みは**ISR でやらない**。9 レジスタ＝実測で約 1ms かかり、VBLANK に寄せた
+   SAT/色表の転送を押し出す(走査線 88 → 105 行目まで伸びた)。ISR は「次の和音」を置くだけにして、
+   本体のループが VBLANK の仕事を**終えてから** fm_flush() で流す。
+   ★伸ばす和音なので 1 フレーム遅れても聞こえない(ドラムは拍が命なので ISR のまま)。 */
+static u8 fmPadNote = 0xFF;         /* 次に置く和音の根音(0xFF=用事なし) */
+
+static void opll_chord_off(void) {
+    u8 i;
+    for (i = 0; i < 3; i++) opll_w((u8)(0x20 + i), 0);
+}
+
+static void opll_chord(u8 note) {
+    u8 i;
+    if (note >= 48) { opll_chord_off(); return; }      /* 休符(BGM_REST=255)は切る */
+    for (i = 0; i < 3; i++) {
+        u8  nn = (u8)(note + fm_chord[i]);
+        u16 f;
+        u8  blk;
+        if (nn >= 48) nn = (u8)(nn - 12);              /* 上がり過ぎたら 1 オクターブ下げる */
+        blk = (u8)(2 + nn / 12);
+        f   = opll_fnum[nn % 12];
+        opll_w((u8)(0x20 + i), 0);                     /* いったんキーオフ(打ち直し) */
+        opll_w((u8)(0x10 + i), (u8)(f & 0xFF));
+        opll_w((u8)(0x20 + i), (u8)(0x30 | (blk << 1) | (u8)(f >> 8)));   /* サステイン+キーオン */
+    }
+}
+
+/* ★本体のループが VBLANK の仕事を終えてから呼ぶ(scene.c)。予約された和音を実際に書く。 */
+void fm_flush(void) {
+    u8 n = fmPadNote;
+    if (n == 0xFF) return;
+    fmPadNote = 0xFF;
+    opll_chord(n);
+}
+
+static void opll_pad_init(void) {
+    u8 i;
+    for (i = 0; i < 3; i++) opll_w((u8)(0x30 + i), (u8)((OPLL_PAD_INST << 4) | OPLL_PAD_VOL));
+    fmPadIdx = 0xFF; fmPadNote = 0xFF;
+}
 
 /* ★まずは**1面の曲(track 1)だけ**に付けて実機で感触を見る(ユーザー指定)。
    良ければこの判定を広げるだけで全曲へ回る。 */
@@ -167,10 +220,12 @@ static void opll_rhythm_init(void) {
     opll_w(0x37, 0x43);                        /* 上位=HH(4) / 下位=SD(3) */
     opll_w(0x38, 0xFF);                        /* TOM/TC は使わない=無音 */
     opll_w(OPLL_RHY_REG, OPLL_RHY_ON);         /* リズムモード on、全部 off */
+    opll_pad_init();                           /* 和音(ch0-2)の音色と音量も仕込む */
 }
 static void opll_rhythm_off(void) {
     if (!g_opll) return;
     opll_w(OPLL_RHY_REG, 0);                   /* リズムモードごと落とす */
+    opll_chord_off();                          /* 和音も切る(鳴らしっぱなしにしない) */
 }
 
 void bgm_play(u8 track) {
@@ -277,6 +332,8 @@ void bgm_update(void) {
     if (!bgmOn) return;
     bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, melLoop, 0,       0, melPeak, melSus, melVib, 0,         0);           /* ★メロディ(chA)は死守=SFXに絶対譲らない */
     bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basLoop, basStep, 1, basPeak, basSus, 0, bassSweep, sfx_busy_b);  /* ★ベース(chB)がSFX(SHOT/PHIT)に譲る */
+    /* ★FM の和音: ベースの音符が変わった瞬間だけ**予約**する(書くのは本体のループ=fm_flush) */
+    if (fmDrum && bIdx != fmPadIdx) { fmPadIdx = bIdx; fmPadNote = bas_n[bIdx]; }
     if (!drmGate && bIdx == basLoop && bTrem == (u8)(basStep - 1)) { drmGate = 1; drmIdx = 15; drmT = 0; }   /* ★本編の頭(ベースがループ位置に来た瞬間)でドラムを小節頭から入れる */
     if (drumOn && drmGate) bgm_drum(sfx_busy_c);
 }
