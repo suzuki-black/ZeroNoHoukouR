@@ -15,7 +15,10 @@ OPT_DEBUG   = --max-allocs-per-node 3000
 #   ★player.c と ramexec.c だけは逆に太る(+76/+9)ので 3000 のまま(Makefile で個別指定)。
 #   ★オーバレイ(8KB 窓に詰める)には効かせない: 1バイトも余っていないものがあり、
 #     太った瞬間にビルドが止まる。$(OPT) のままにしておく。
-OPT_RES     = --max-allocs-per-node 9000
+# ★常駐だけ割付の探索を深くする。3000→9000 で 800B、**9000→20000 でさらに 79B** 小さくなった
+#   (どちらも実測。コードは一切変えていない)。常駐が詰まったら、コードを削る前にまずここを上げる。
+#   ★上げるとコンパイルは遅くなる。player/ramexec/entity は逆に太る/落ちるので Makefile で除外してある。
+OPT_RES     = --max-allocs-per-node 20000
 OPT_RELEASE = --opt-code-size --max-allocs-per-node 9000
 
 # ── MegaROM(ASCII8, 512KB=64bank×8KB)レイアウト(rompack が強制) ──
