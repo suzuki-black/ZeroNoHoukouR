@@ -33,7 +33,17 @@ static const u8 scene_bgm[SC_COUNT] = {
 };
 static void scene_bgm_enter(u8 cur) {
     u8 t = scene_bgm[cur];
-    if (t == BGM_KEEP) return;
+    /* ★曲を続ける場合(BGM_KEEP)でも **FM は一度切る**。
+       FM の和音と主旋律の重ねは ISR が「次に鳴らす音」を予約するだけで、OPLL へ書くのは
+       **本体のループ**(fm_flush)。ところがシーンの切替は画面モードの変更と画面の描き直しで
+       **実測 1.5 秒**ブロックするので、その間ループが回らず、PSG だけが進んで**和音が古い音を
+       伸ばしたまま取り残される**＝「コナミコマンドで設定画面へ行くと FM と PSG がずれる」
+       (実機で指摘。苦労と教訓 §16-46 と同じ型)。
+       ★切っておけば、切替が終わった次のフレームに**今の音で鳴り直す**(fm_silence は添字も
+         捨てるので、次の ISR が必ず予約し直す)。ブロック中は PSG だけになる。
+       ★BGM_OFF/曲の差替えの経路は bgm_stop/bgm_play が中で fm_silence を通るので、ここは
+         BGM_KEEP の穴だけを塞いでいる。 */
+    if (t == BGM_KEEP) { fm_silence(); return; }
     if (t == BGM_OFF)  bgm_stop();
     else               bgm_play(t);
 }
