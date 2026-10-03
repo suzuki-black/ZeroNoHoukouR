@@ -58,7 +58,7 @@ static void spawn_parked(u8 shipX, u16 shipY) {
 /* ───────── FM(MSX-MUSIC)の検出。起動時に1回だけ(g_cold_mode=COLD_OPLL) ─────────
    ★手順と「やってはいけないこと」は opll.h に書いた。要点だけ再掲:
      ・**内蔵(APRLOPLL)を先に**探す。見つかったら 0x7FF6 には**触らない**
-       (触ると Panasonic の MSX2+ で壊れる。外付けだけを見るのが R-TYPE 型の事故)。
+       (触ると一部の MSX2+ で壊れる。外付けだけを見ると内蔵機で鳴らない)。
      ・スロットは BIOS の RDSLT で読む(自分のページを差し替えないので安全)。 */
 static u8  sl_slot;
 static u16 sl_addr;
