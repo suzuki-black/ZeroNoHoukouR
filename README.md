@@ -90,6 +90,11 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
   day and weather (day / sunset / storm with lightning / morning fog / night).
 - **H.TIMI 60 Hz PSG driver** with **original music** for every stage, the mid-bosses and the final
   boss, plus sound effects.
+- **MSX-MUSIC (FM) layer.** All eleven tracks are thickened with the YM2413 without adding a single
+  byte of music data: the FM rhythm section is struck on the same beats as the PSG drums, a chord
+  (root / fifth / octave) is built from the bass part, and the melody is doubled an octave down.
+  It is detected at boot (internal MSX-MUSIC first, then an external FM-PAC) and can be switched off
+  in the settings menu.
 - **High score** (kept while the machine is on) on the title screen, the stage card, the results
   screen, game over and the ending.
 
@@ -100,12 +105,17 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
 | Space / keyboard **A** / trigger A | Fire · confirm |
 | Keyboard **B** or **M** / trigger B (alone) | Mega crash (bomb) |
 | Fire + B (A+B) | Loop manoeuvre |
+| ↑↑↓↓←→←→ B A on the title screen | Hidden settings menu (difficulty, lives, durability, starting stage, continue, invincibility, **FM sound**, screen viewer) |
 
 ### Requirements
-- **Target hardware:** MSX turboR (e.g. Panasonic FS-A1GT).
-- The turboR system ROM is copyrighted and is **not** included. Correctness is developed and verified
-  in [openMSX](https://openmsx.org/) with C-BIOS; play-testing and turboR performance are checked on
-  the turboR machine of [WebMSX](https://webmsx.org/). **It has not yet been tested on real hardware.**
+- **Target hardware: MSX turboR only** (FS-A1ST / FS-A1GT). The cartridge checks the machine at boot
+  and refuses to run on anything older, printing `*** MSX turboR REQUIRED ***`. MSX2+ compatibility
+  was given up on purpose — the engine assumes the R800 and turboR timing throughout.
+- The turboR system ROM is copyrighted and is **not** included. Correctness is developed in
+  [openMSX](https://openmsx.org/) (use a machine built from a dumped turboR BIOS — on a C-BIOS
+  machine the raster interrupts never fire). Play-testing is done on the turboR machine of
+  [WebMSX](https://webmsx.org/) **and on real hardware** (since 2026-09-30, over an ESERAMair
+  cartridge: `make send` to upload, `make verify` to read it back and compare).
 
 ### Building
 Requires [SDCC](https://sdcc.sourceforge.net/), Node.js and Python 3 (with Pillow).
@@ -293,6 +303,10 @@ silhouettes may differ from the real thing.)
 - **走査線とパレットの技**: フレームの途中でスプライト表を切り替えて32枚の上限を越える、R#23 による衝撃波の
   ゆがみ、帯ごとの横スクロール、時間帯と天候（昼／夕焼け／稲光の荒天／朝霧／夜戦）を作るパレットエンジン。
 - **H.TIMI 60Hz 割込みの PSG 音ドライバ**。各面・中ボス・最終面の曲はすべて本作のためのオリジナルで、効果音付き。
+- **MSX-MUSIC（FM音源）で厚みを足す**。曲データは **1 バイトも増やさず**、同じ譜面から FM を鳴らします。
+  PSG のドラムと同じ拍でリズム音源を叩き、ベース譜から和音（根音・5度・オクターブ上）を敷き、
+  主旋律を 1 オクターブ下に重ねる——を全 11 曲に。起動時に検出（内蔵 MSX-MUSIC を先に、次に外付け FM-PAC）し、
+  設定メニューで OFF にもできます。
 - **ハイスコア**（電源が入っている間だけ）をタイトル・ステージ開始カード・結果画面・ゲームオーバー・
   エンディングに表示。
 
@@ -303,12 +317,16 @@ silhouettes may differ from the real thing.)
 | スペース／キーボード **A**／トリガーA | 発射・決定 |
 | キーボード **B** または **M**／トリガーB（単押し） | メガクラッシュ（ボム） |
 | 撃ちながら B（A＋B） | 宙返り |
+| タイトルで ↑↑↓↓←→←→ B A | 隠しの設定メニュー（難易度・残機・耐久・開始面・継続・無敵・**FM音源**・画面ビューア） |
 
 ### 動作環境
-- **対象実機:** MSX turboR（例: Panasonic FS-A1GT）。
-- turboR 本体 ROM は著作物のため**同梱していません**。正しさは [openMSX](https://openmsx.org/)（C-BIOS）で
-  開発・検証し、テストプレイと turboR での速さは [WebMSX](https://webmsx.org/) の turboR で確認しています。
-  **実機での動作はまだ確認していません。**
+- **MSX turboR 専用**（FS-A1ST / FS-A1GT）。起動時に機種を見て、turboR 未満なら
+  `*** MSX turboR REQUIRED ***` と出して止まります。MSX2+ 互換は意図的に捨てています
+  （R800 と turboR のタイミングを前提に組んであるため）。
+- turboR 本体 ROM は著作物のため**同梱していません**。正しさは [openMSX](https://openmsx.org/) で
+  開発・検証します（**実機 BIOS を吸い出した機種定義**を使ってください。C-BIOS の機械では走査線割込みが
+  発火せず、検証が嘘になります）。テストプレイは [WebMSX](https://webmsx.org/) の turboR と、
+  **実機の turboR**（2026-09-30 以降。ESERAMair 経由で `make send` → `make verify`）で行っています。
 
 ### ビルド
 [SDCC](https://sdcc.sourceforge.net/)、Node.js、Python 3（Pillow）が必要です。
@@ -397,8 +415,8 @@ docs/          設計・開発ノート
 
 - **主題は turboR の見せ場で、バランスは二の次**です。どの機能も「R800 と V9958 がゲームループで何を
   できるか」を見せるために選びました。難しさや間合いは遊びながら調整していますが、優先順位は下です。
-- **まだ試作品**です。作りながら WebMSX の turboR で確かめ（実機ではまだ未確認）、そこで見つかった不具合と直し方は
-  [ROADMAP](docs/ROADMAP.md) に記録しています。
+- **まだ試作品**です。作りながら WebMSX の turboR と**実機の turboR**で確かめ、そこで見つかった不具合と
+  直し方は [ROADMAP](docs/ROADMAP.md) と [苦労と教訓](docs/苦労と教訓.md) に記録しています。
 - **カプコンの『1943』に並ぶつもりはありません。** そういう手応えを想定していない家庭用の機械で、
   あのアーケードの感触に少しでも近づけたら——という試みです。
 
