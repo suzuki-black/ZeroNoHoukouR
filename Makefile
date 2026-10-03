@@ -74,6 +74,7 @@ HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)
 
 RESIDENT_RELS = \
   $(BUILD)/ramexec.rel \
+  $(BUILD)/pcm.rel \
   $(BUILD)/raster.rel \
   $(BUILD)/curtain.rel \
   $(BUILD)/overlay.rel \
@@ -150,6 +151,10 @@ $(BUILD)/ramexec.rel: $(SRC)/core/ramexec.c $(HDRS) | $(BUILD)
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $< -o $@
 $(BUILD)/entity.rel: $(SRC)/core/entity.c $(HDRS) | $(BUILD)
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $< -o $@
+
+# ★常駐の asm(PCM の送出)。C を介さず 1 サンプルずつ出す所なので asm で書いてある。
+$(BUILD)/pcm.rel: $(SRC)/core/pcm.s | $(BUILD)
+	sdasz80 -o $@ $<
 
 $(BUILD)/crt0rom.rel: $(SRC)/crt0rom.s | $(BUILD)
 	sdasz80 -o $@ $<

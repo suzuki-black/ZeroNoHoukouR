@@ -10,6 +10,9 @@ u8  g_stage_sel  = 0;   /* 1面     */
 u8  g_continue   = 1;   /* 継続ON  */
 u8  g_invinc     = 0;   /* 無敵OFF */
 u8  g_fm         = 1;   /* ★FM音源ON(既定)。OFF にすると PSG だけで鳴る(設定メニュー) */
+u8  g_pcm        = 1;   /* ★PCM ON(既定)。起動時の検出で落ちることがある。設定メニューでも切れる。
+                           ★ここ(初期値つき)に置くこと。pcm.s の _DATA に置くと crt0 のゼロ化で既定 OFF になる */
+u8  g_pcm_hw;           /* ★PCM が使えるか(起動時の検出)。g_pcm を設定メニューで戻すための控え */
 u16 g_score;
 u16 g_hiscore;
 u8  g_lives;

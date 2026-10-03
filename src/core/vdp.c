@@ -2,6 +2,7 @@
    前作 BattleshipProto(実機確定)の MSXgl 流イディオムを踏襲:
      0x99 への2バイト書込は割込みで壊れるので各自 di/ei で原子化する。 */
 #include "vdp.h"
+#include "pcm.h"   /* ★PCM の送出口。待ちループは元から時間を捨てているので、ここで出すのが一番安い */
 #include "msx.h"
 #include "bank.h"    /* vdp_blit_bank_vram が窓めくりに使う(bank_data/bank_restore) */
 #ifdef DEBUG_PROF
@@ -30,12 +31,16 @@ void vdp_set_pal(u8 idx, u8 r, u8 g, u8 b) {
 }
 
 /* R#14(アドレス上位)〜アドレス下位/上位ラッチ確立までを1つの di/ei に閉じて原子化。 */
-void vdp_write_addr(u16 a) {
+/* ★書き込み用と読み出し用は**最後の 1 バイトしか違わない**(bit6 を立てると書き込み)。
+   2 本に分けて書くと中身が丸ごと重複するので 1 本にまとめる(常駐の回収)。
+   呼び出しが 1 段増えるが、どちらも VDP のポートアクセスが主体で、増える数十サイクルは誤差。 */
+static void vdp_addr(u16 a, u8 wr) {
     __asm di __endasm;
     VDP_CTRL = (a >> 14) & 7;   VDP_CTRL = 0x80 | 14;
-    VDP_CTRL = a & 0xFF;        VDP_CTRL = ((a >> 8) & 0x3F) | 0x40;
+    VDP_CTRL = a & 0xFF;        VDP_CTRL = ((a >> 8) & 0x3F) | wr;
     __asm ei __endasm;
 }
+void vdp_write_addr(u16 a) { vdp_addr(a, 0x40); }
 
 void vdp_data(u8 v) {
     VDP_DAT = v;
@@ -47,12 +52,7 @@ u8 vdp_read_data(void) { return VDP_DAT; }   /* vdp_read_addr の後の連続読
    以降 VDP_DAT を読むと自動インクリメントで連続読みできる。
    ★用途: 既に VRAM にあるスプライトパターンを RAM へ取り出す(アフィン回転の元絵)。
      bank16 の const 配列を直接読むより、VRAM が正本なので確実(面別に差し替わる絵にも追随する)。 */
-void vdp_read_addr(u16 a) {
-    __asm di __endasm;
-    VDP_CTRL = (a >> 14) & 7;   VDP_CTRL = 0x80 | 14;
-    VDP_CTRL = a & 0xFF;        VDP_CTRL = ((a >> 8) & 0x3F);
-    __asm ei __endasm;
-}
+void vdp_read_addr(u16 a) { vdp_addr(a, 0x00); }
 
 
 /* SCREEN5(GRAPHIC4)へ。BIOS ワーク(SCRMOD)を 5 にして CHGMOD。
@@ -164,6 +164,12 @@ void vdp_cmd_wait(void) {
         ld   a, #0x8F          ; R#15 = 0 (S#0 へ戻す)
         out  (0x99), a
         ei
+        ;; ★PCM の送出。ここは VDP の完了待ちで**元から捨てている時間**なので、
+        ;;   1 サンプル出すコストは実質ただ。鳴っていなければ 3 命令で戻る。
+        ;;   ★CE の結果はキャリーに載っているので AF を守ること(call はフラグを壊す)。
+        push af
+        call _pcm_service
+        pop  af
         jp   c, 00001$
     __endasm;
 #ifdef DEBUG_PROF
@@ -258,13 +264,17 @@ void vdp_copy_t(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
     vdp_lmmm(sx, sy, dx, dy, nx, ny, 0x98);
 }
 
+/* ★VBLANK 待ち。JIFFY(0xFC9E、BIOS が毎 VBLANK に進める 16bit)が変わるまで待つ。
+   ★中で PCM の送出口を叩く。ここは**元から捨てている時間**なので 1 サンプル出すコストは実質ただ。
+     pcm_service は HL/DE を守り、壊すのは A とフラグだけ。
+   ★一度 asm で書き直してみたが **4B 太った**(SDCC の方が上手かった)。C のままにしておく。 */
 void vdp_wait_frame(void) {
     volatile u16 *j = (volatile u16 *)0xFC9E;   /* JIFFY */
     u16 t = *j;
 #ifdef DEBUG_PROF
-    { PROF_T0(_pw); while (*j == t) { } PROF_ADD(PF_WAIT, _pw); }
+    { PROF_T0(_pw); while (*j == t) { pcm_service(); } PROF_ADD(PF_WAIT, _pw); }
 #else
-    while (*j == t) { }
+    while (*j == t) { pcm_service(); }
 #endif
 }
 

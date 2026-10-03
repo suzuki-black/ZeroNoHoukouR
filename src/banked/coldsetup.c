@@ -14,6 +14,7 @@
 #include "final.h"       /* STAGE_FINAL */
 #include "opll.h"        /* ★FM の検出(起動時1回。g_cold_mode=COLD_OPLL で呼ばれる) */
 #include "msx.h"         /* MSX_VER(0x002D: 0=MSX1 / 1=MSX2 / 2=MSX2+ / 3=turboR) */
+#include "pcm.h"         /* ★PCM が使えるかの検出(起動時1回) */
 
 /* ★常駐(scene_stage.c)が持っているもの。面の準備で先に埋まっている */
 extern u8  cur_gun_x[4];   /* 主砲4基の艦内x */
@@ -163,6 +164,28 @@ static void require_turbor(void) {
     for (;;) { __asm halt __endasm; }          /* 戻らない */
 }
 
+/* ───────── PCM が使えるかを見る(起動時に1回) ─────────
+   ★PCM の送出はシステムタイマ(E6h/E7h、1 カウント 3.911us)で「次に出す時刻」を測る。
+     タイマが進まない環境だと**その時刻が永遠に来ない**。鳴り終わりを待つ所があると戻らなくなる。
+     そこで起動時に**本当に進むか**を確かめ、進まなければ PCM を丸ごと無効にする。
+     無効なら送出口は「鳴っていない」で素通りするので、挙動は PCM を入れる前と変わらない。
+   ★2 VBLANK(約 33ms)で 8500 カウント進むはず。しきい値は余裕を持って 1000。
+   ★ここも**冷たいバンク**。起動時に1回しか使わないものを常駐へ置かない。 */
+__sfr __at(0xE6) PCM_TMR_LO;
+__sfr __at(0xE7) PCM_TMR_HI;
+static u16 stmr(void) { u8 lo = PCM_TMR_LO; return (u16)(((u16)PCM_TMR_HI << 8) | lo); }
+
+static void pcm_detect(void) {
+    volatile u16 *j = (volatile u16 *)0xFC9E;   /* JIFFY(BIOS の VBLANK が進める) */
+    u16 a, b, t;
+    u8  i;
+    a = stmr();
+    for (i = 0; i < 2; i++) { t = *j; while (*j == t) { } }
+    b = stmr();
+    g_pcm_hw = ((u16)(b - a) > 1000) ? 1 : 0;
+    g_pcm = (u8)(g_pcm_hw && g_pcm);            /* ★設定が OFF のまま再起動した場合も OFF のまま */
+}
+
 static void opll_detect(void) {
     static const u8 sig_int[8] = { 'A','P','R','L','O','P','L','L' };   /* 内蔵 MSX-MUSIC */
     static const u8 sig_pac[8] = { 'P','A','C','2','O','P','L','L' };   /* 外付け FM-PAC  */
@@ -193,7 +216,7 @@ static void opll_detect(void) {
 
 void banked_entry(void) {
     u8 i;
-    if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); return; }   /* ★turboR 未満はここで止まる */
+    if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); pcm_detect(); return; }   /* ★turboR 未満はここで止まる */
     for (i = 0; i < SHIP_NAAG; i++) {          /* 対空砲の発射タイマと耐久 */
         u16 t = (u16)60 + (u16)i * 11;         /* ★u16で計算し255クランプ(u8のままだと高iで桁溢れ) */
         aa_fire[i] = (t > 255) ? 255 : (u8)t;
