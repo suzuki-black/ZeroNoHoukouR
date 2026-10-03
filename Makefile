@@ -28,6 +28,11 @@ endif
 ifdef RAMPROBE
   DEFS += -DRAMPROBE
 endif
+# ── ROM を 1MB にする: make clean && make ROM1M=1
+#    ★既定は 512KB。PCM(音声)を入れると 512KB では足りないので用意した。転送先の ESERAMair は 1MB まで。
+ifdef ROM1M
+  ROMSIZE_ARG = --size 1M
+endif
 ifdef NO_RAMX2
   DEFS += -DNO_RAMX2
 endif
@@ -622,7 +627,7 @@ GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk asse
 	   grep -H "Undefined Global" $(BUILD)/*.map; \
 	   rm -f $@; exit 2; \
 	 fi
-	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)
+	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS) $(ROMSIZE_ARG)
 
 # openMSX で起動 → 数秒後にスクショ → 終了(headless 検証)
 run: GAME.ROM

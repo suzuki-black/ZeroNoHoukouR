@@ -15,7 +15,17 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
-const ROM_SIZE    = 0x80000;   // 512KB(64バンク)。title.yjk が bank9-15、最終面ボスのコマが bank32〜。
+// ROM の総容量。既定は 512KB(64バンク)。--size 1M で 1MB(128バンク)。
+//   ★ASCII8 のバンク番号は 8bit なので規格上は 2MB まで行けるが、転送先の ESERAMair が 1MB までなので
+//     本作はそこを上限とする。音(PCM)を入れるときに 512KB では足りないため用意した。
+const ROM_SIZE    = (() => {
+  const i = process.argv.indexOf('--size');
+  if (i < 0) return 0x80000;
+  const v = String(process.argv[i + 1] || '').toUpperCase();
+  if (v === '1M') return 0x100000;
+  if (v === '512K') return 0x80000;
+  console.error(`ERROR: --size は 512K か 1M: ${v}`); process.exit(2);
+})();
 const BANK_SIZE   = 0x2000;    // 8KB
 const CODE_BASE   = 0x4000;    // 常駐コードのリンク基準アドレス
 const CODE_LIMIT  = 0x6000;    // 常駐コード ROM オフセット上限(=24KB=bank0-2)。bank3 はスワップ窓に温存
@@ -32,6 +42,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--out') outRom = args[++i];
   else if (a === '--bank') { const n = parseInt(args[++i], 10); banks.push({ n, file: args[++i] }); }
   else if (a === '--asset') { const n = parseInt(args[++i], 10); assets.push({ n, file: args[++i] }); }
+  else if (a === '--size') { i++; }   /* ROM_SIZE で先に読んである(ここでは読み飛ばすだけ) */
   else { console.error(`ERROR: 不明な引数: ${a}`); process.exit(2); }
 }
 if (!inIhx || !outRom) {
@@ -123,7 +134,7 @@ writeFileSync(outRom, rom);
 
 // ---- 空き容量レポート ----
 const KB = (b) => (b / 1024).toFixed(1);
-console.log(`ROM: ${outRom}  (MegaROM ASCII8, 512KB / 64 banks)`);
+console.log(`ROM: ${outRom}  (MegaROM ASCII8, ${ROM_SIZE / 1024}KB / ${ROM_SIZE / BANK_SIZE} banks)`);
 console.log(`  常駐コード(bank0-2): ${codeLen}B / 24576B  残り ${CODE_LIMIT - codeLen}B (${KB(CODE_LIMIT - codeLen)}KB)`);
 console.log(`  bank3(スワップ窓)  : 予約(既定 0xFF)`);
 for (let n = ASSET_FIRST; n < used.length; n++) {
