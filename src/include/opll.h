@@ -27,7 +27,10 @@
 #define OPLL_INT  1   /* 内蔵 MSX-MUSIC */
 #define OPLL_PAC  2   /* 外付け FM-PAC(0x7FF6 で I/O を有効にした) */
 
-extern u8 g_opll;     /* 検出結果(OPLL_NONE/INT/PAC)。0 なら以降 FM は一切触らない */
+extern u8 g_opll;     /* 「いま FM を使ってよいか」(OPLL_NONE/INT/PAC)。0 なら以降 FM は一切触らない。
+                         ★検出結果に加えて**設定メニュー(FM SOUND)**でも 0 になる。 */
+extern u8 g_opll_hw;  /* 検出した**ハード**の方(設定で g_opll を戻すための控え)。設定は書き替えない */
+extern u8 g_fm;       /* 設定メニュー: 1=FM を鳴らす(既定) / 0=PSG だけ。実体は gamestate.c */
 
 /* ★検出は**冷たいバンク**(banked/coldsetup.c)にある。起動時に main が
    g_cold_mode=COLD_OPLL にして bcall_to(COLDSETUP_BANK) で1回だけ呼ぶ。

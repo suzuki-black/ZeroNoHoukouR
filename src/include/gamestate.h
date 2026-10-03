@@ -11,6 +11,10 @@ extern u8  g_hud_on;       /* 1=HUD を描いてよい。scene.c のループが
 extern u8  g_stage_sel;    /* 開始ステージ(0基点。0..5=1面..最終面。設定メニューの「開始面」で選べる) */
 extern u8  g_continue;     /* 1=ゲームオーバーでコンティニュー可(既定1)。設定メニュー(継続) */
 extern u8  g_invinc;       /* 1=無敵(被弾しても残機/耐久を減らさない)。設定メニュー(無敵) */
+/* ★FM音源(MSX-MUSIC)を鳴らすか。既定1。設定メニュー(FM SOUND)が切り替え、同時に g_opll を
+   0 ⇄ g_opll_hw する(FM を触る所は全部 g_opll を見るので、常駐に判定を足さずに済む)。
+   実体は gamestate.c、FM 側の宣言は opll.h。 */
+extern u8  g_fm;
 extern u16 g_score;        /* スコア(撃破で加算) */
 extern u16 g_hiscore;      /* ハイスコア(セッション内。将来SRAM保存) */
 extern u8  g_lives;        /* 現在の残機(面開始で g_lives_idx から設定) */

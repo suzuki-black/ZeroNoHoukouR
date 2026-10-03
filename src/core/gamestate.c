@@ -9,6 +9,7 @@ u8  g_hud_on;    /* 1=今フレーム HUD を描いてよい(scene.c が VBLANK 
 u8  g_stage_sel  = 0;   /* 1面     */
 u8  g_continue   = 1;   /* 継続ON  */
 u8  g_invinc     = 0;   /* 無敵OFF */
+u8  g_fm         = 1;   /* ★FM音源ON(既定)。OFF にすると PSG だけで鳴る(設定メニュー) */
 u16 g_score;
 u16 g_hiscore;
 u8  g_lives;

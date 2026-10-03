@@ -6,12 +6,14 @@
 #include "input.h"
 #include "scene.h"
 #include "gamestate.h"
+#include "opll.h"      /* g_opll / g_opll_hw(FM音源の有無と使用可否) */
+#include "sound.h"     /* fm_silence(切る瞬間に伸びている音を止める) */
 #include "version.h"   /* BUILD_VER(gitハッシュ)。どのコミットのROMか判別用 */
 
-#define CFG_START 7      /* 項目0..6 ＋ START(7) */
-#define ROWS 8
+#define CFG_START 8      /* 項目0..7 ＋ START(8) */
+#define ROWS 9
 
-static u8 cur;   /* 0=難易度/1=残機/2=耐久/3=ステージ/4=継続/5=無敵/6=VIEW/7=START。RAM(data-loc)。 */
+static u8 cur;   /* 0=難易度/1=残機/2=耐久/3=ステージ/4=継続/5=無敵/6=FM/7=VIEW/8=START。RAM(data-loc)。 */
 static u8 g_mode;/* VIEW: 0=GAME(通常)/1=CARD(説明のみ)/2=RESULT(撃破画面のみ)/3=ENDING。START時に g_view へ反映 */
 
 static const char *const diffs[3]  = { "EASY  ", "NORMAL", "HARD  " };
@@ -19,10 +21,13 @@ static const char *const livess[3] = { "2", "3", "5" };
 static const char *const onoff[2]  = { "OFF", "ON " };
 static const char *const num1_9[10]= { "0","1","2","3","4","5","6","7","8","9" };
 static const char *const modes[4]  = { "GAME  ", "CARD  ", "RESULT", "ENDING" };   /* 画面ビューア */
+/* ★FM は 3 状態を出す(ハードが無ければ切り替えさせない)。幅は 4 文字で揃える。 */
+static const char *const fmval[3]  = { "OFF ", "ON  ", "NONE" };
 static const char *const labels[ROWS] = {
-    "DIFFICULTY", "LIVES", "DURABILITY", "STAGE", "CONTINUE", "INVINCIBLE", "VIEW", "START GAME"
+    "DIFFICULTY", "LIVES", "DURABILITY", "STAGE", "CONTINUE", "INVINCIBLE", "FM SOUND", "VIEW", "START GAME"
 };
-static const u8 rowy[ROWS] = { 36, 54, 72, 90, 108, 126, 144, 168 };
+/* ★1 行増えたので間隔を 18 → 16 へ詰めた(版表示 180 / 操作説明 194 とぶつからないように)。 */
+static const u8 rowy[ROWS] = { 32, 48, 64, 80, 96, 112, 128, 144, 168 };
 
 /* 行 idx の値文字列(START行は値なし=NULL)。 */
 static const char *val_of(u8 idx) {
@@ -32,7 +37,8 @@ static const char *val_of(u8 idx) {
     if (idx == 3) return num1_9[g_stage_sel + 1];
     if (idx == 4) return onoff[g_continue ? 1 : 0];
     if (idx == 5) return onoff[g_invinc ? 1 : 0];
-    if (idx == 6) return modes[g_mode];
+    if (idx == 6) return g_opll_hw ? fmval[g_fm ? 1 : 0] : fmval[2];
+    if (idx == 7) return modes[g_mode];
     return (const char *)0;   /* START GAME */
 }
 
@@ -48,7 +54,7 @@ static void draw_row(u8 idx) {
 static void draw_all(void) {
     u8 i;
     vdp_fill(0, 0, 256, 212, 1);
-    vdp_text(88, 12, 15, 1, "- CONFIG -");
+    vdp_text(88, 10, 15, 1, "- CONFIG -");
     for (i = 0; i < ROWS; i++) draw_row(i);
     vdp_text(24, 194, 14, 1, "UP/DN:SEL  L/R:CHG  SPACE:OK");
     vdp_text(8, 180, 12, 1, "V" GAME_VERSION " " BUILD_VER);   /* ★版(semver)＋ビルドタグ(git短縮ハッシュ) */
@@ -62,7 +68,18 @@ static u8 change(u8 idx, s8 d) {
     else if (idx == 3) { s8 v = (s8)g_stage_sel + d; if (v >= 0 && v < 6) { g_stage_sel = (u8)v; return 1; } }  /* 開始面(0..5。5=最終面)。面数変更時ここも更新 */
     else if (idx == 4) { u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_continue); if (n != g_continue) { g_continue = n; return 1; } }
     else if (idx == 5) { u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_invinc);   if (n != g_invinc)   { g_invinc = n;   return 1; } }
-    else if (idx == 6) { s8 v = (s8)g_mode + d; if (v >= 0 && v <= 3) { g_mode = (u8)v; return 1; } }   /* VIEW: GAME/CARD/RESULT/ENDING */
+    else if (idx == 6) {   /* FM SOUND。ハードが無ければ触らせない(表示は NONE のまま) */
+        u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_fm);
+        if (g_opll_hw && n != g_fm) {
+            /* ★先に消す。g_opll を 0 にしてからでは fm_silence が何もしない(opll_w が素通り)ので、
+               タイトル曲の和音が伸びたまま残る。 */
+            if (!n) fm_silence();
+            g_fm   = n;
+            g_opll = n ? g_opll_hw : OPLL_NONE;   /* ★FM を触る所は全部 g_opll を見る */
+            return 1;
+        }
+    }
+    else if (idx == 7) { s8 v = (s8)g_mode + d; if (v >= 0 && v <= 3) { g_mode = (u8)v; return 1; } }   /* VIEW: GAME/CARD/RESULT/ENDING */
     return 0;
 }
 
