@@ -13,6 +13,7 @@
 #include "assets_data.h" /* STAGE_COUNT */
 #include "final.h"       /* STAGE_FINAL */
 #include "opll.h"        /* ★FM の検出(起動時1回。g_cold_mode=COLD_OPLL で呼ばれる) */
+#include "msx.h"         /* MSX_VER(0x002D: 0=MSX1 / 1=MSX2 / 2=MSX2+ / 3=turboR) */
 
 /* ★常駐(scene_stage.c)が持っているもの。面の準備で先に埋まっている */
 extern u8  cur_gun_x[4];   /* 主砲4基の艦内x */
@@ -107,6 +108,61 @@ static u8 find_sig(const u8 *sig) {
     return 0xFF;
 }
 
+/* ───────── turboR 未満お断り(起動時に1回) ─────────
+   ★本作は**turboR 専用**。R800 を前提に組んであり、MSX2+ 以下では「動くには動くが
+     まともに遊べない」状態になる(フレーム落ち・ホットコードの RAM 実行が効かない 等)。
+     openMSX が turboR を実機 BIOS ごと動かせるようになった今、中途半端に起動させるより
+     **はっきり断る**方が親切なので、起動時に機種を見て止める(2026-10-03 ユーザー指定)。
+   ★機種は**主 BIOS ROM の 0x002D**(0=MSX1 / 1=MSX2 / 2=MSX2+ / 3=turboR)。page0 は起動時から
+     主 BIOS なので、そのまま読んでよい(sys.c の R800 ブーストも同じ値を見ている)。
+   ★ここは**冷たいバンク**に置く。常駐は残り 100B 程度しか無く、起動時に1回しか使わない
+     ものを常駐へ置く余裕が無い。FM の検出(COLD_OPLL)と同じ経路に相乗りするので、
+     **常駐のコードは 1 バイトも増えない**。
+   ★表示は BIOS の SCREEN0(CHGMOD=0x005F)＋CHPUT(0x00A2)。VDP を自前で初期化する前の段階でも
+     確実に文字が出せる。戻らない(HALT ループ)。 */
+#define BIOS_CHGMOD 0x005F
+#define BIOS_CHPUT  0x00A2
+static u8 putc_ch;
+static void bios_putc(void) __naked {
+    __asm
+        push ix
+        push iy
+        ld   a, (_putc_ch)
+        call BIOS_CHPUT
+        pop  iy
+        pop  ix
+        ret
+    __endasm;
+}
+static void bios_screen0(void) __naked {
+    __asm
+        push ix
+        push iy
+        xor  a
+        call BIOS_CHGMOD
+        pop  iy
+        pop  ix
+        ret
+    __endasm;
+}
+static void bios_puts(const char *s) {
+    while (*s) { putc_ch = (u8)*s++; bios_putc(); }
+}
+/* ★2 行目は半角カナ(MSX の ANK フォント)。日本語機以外では別の字が出るので、
+   意味は 1〜3 行目の英語だけで通るようにしてある。 */
+static const char msg_l1[] = "\r\n\r\n  *** MSX turboR REQUIRED ***\r\n\r\n";
+static const char msg_l2[] = "  THIS CARTRIDGE RUNS ONLY ON\r\n  AN MSX turboR (FS-A1ST/A1GT).\r\n\r\n";
+static const char msg_l3[] = "  \xC0\xB0\xCE\xDER \xB2\xBC\xDE\xAE\xB3\xC3\xDE \xB7\xC4\xDE\xB3\xBC\xC3 \xB8\xC0\xDE\xBB\xB2\r\n";
+
+static void require_turbor(void) {
+    if (MSX_VER >= 3) return;                  /* turboR なら何もしない */
+    bios_screen0();
+    bios_puts(msg_l1);
+    bios_puts(msg_l2);
+    bios_puts(msg_l3);
+    for (;;) { __asm halt __endasm; }          /* 戻らない */
+}
+
 static void opll_detect(void) {
     static const u8 sig_int[8] = { 'A','P','R','L','O','P','L','L' };   /* 内蔵 MSX-MUSIC */
     static const u8 sig_pac[8] = { 'P','A','C','2','O','P','L','L' };   /* 外付け FM-PAC  */
@@ -117,12 +173,14 @@ static void opll_detect(void) {
     if (slot != 0xFF) { g_opll = OPLL_INT; }
     else {
         slot = find_sig(sig_pac);
-        if (slot == 0xFF) return;                  /* FM は無い。以降 opll_w は何もしない */
+        if (slot == 0xFF) { g_opll_hw = OPLL_NONE; return; }   /* FM は無い。以降 opll_w は何もしない */
         g_opll = OPLL_PAC;
         sl_slot = slot; sl_addr = 0x7FF6; sl_read();   /* FM-PAC だけ I/O を有効にする */
         sl_val = (u8)(sl_val | 1); sl_write();
     }
     for (i = 0; i <= 0x38; i++) opll_w(i, 0);      /* 全レジスタ 0 ＝ 黙らせる */
+    g_opll_hw = g_opll;                           /* ★ハードの検出結果を控える(設定で戻すため) */
+    if (!g_fm) g_opll = OPLL_NONE;                /* 設定が OFF のまま再起動した場合 */
 #ifdef OPLLTEST
     /* ★検証用(make clean && make OPLLTEST=1): 起動直後に和音を鳴らしっぱなしにする。
        録音して 440/660/880Hz が出ていれば「検出 → I/O 書込み → 発音」の経路が通っている
@@ -135,7 +193,7 @@ static void opll_detect(void) {
 
 void banked_entry(void) {
     u8 i;
-    if (g_cold_mode == COLD_OPLL) { opll_detect(); return; }
+    if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); return; }   /* ★turboR 未満はここで止まる */
     for (i = 0; i < SHIP_NAAG; i++) {          /* 対空砲の発射タイマと耐久 */
         u16 t = (u16)60 + (u16)i * 11;         /* ★u16で計算し255クランプ(u8のままだと高iで桁溢れ) */
         aa_fire[i] = (t > 255) ? 255 : (u8)t;
