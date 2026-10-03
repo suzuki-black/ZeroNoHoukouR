@@ -89,6 +89,9 @@ const TRACKS = [
     mln: [32,32,48,32,32,64, 48,32,48,32,64, 32,32,48,32,32,64, 48,32,48,64,64],
     bas: [5,17,5,17, 0,12,0,12, 2,14,2,14, 10,22,9,21],
     basStep:32, melPeak:11, melSus:9, melVib:1, basPeak:8, basSus:6, drum:0,   /* 意図的に絞った静かな讃歌(そのまま) */
+    /* ★FM: 讃歌なのでオルガンは残すが**最大では出さない**。主旋律はフルートで淡く。
+       和音は広いボイシング(根音・オクターブ・12度)にして、長い音でも重くならないように。 */
+    fmPad: (8 << 4) | 5, fmMel: (4 << 4) | 6, fmChord: [0, 12, 19],
   },
   { // 3: 2面 空母(行進曲, MEL37/BAS64)
     mel: [26,33,34,33,31,29,31,33,26, 33,38,36,34,33,31,29,28,26,25, 26,29,33,34,33,31,29,28, 29,33,38,36,34,33,31,29,26,255],
@@ -123,7 +126,9 @@ const TRACKS = [
     const bas = [...aBas, ...bBas];
     const ml = mln.reduce((x, y) => x + y, 0);
     if (ml !== bas.length * 16) throw new Error(`3面の曲: メロディ ${ml}f とベース ${bas.length * 16}f が合わない`);
-    return { mel, mln, bas, basStep:16, melPeak:14, melSus:12, melVib:1, basPeak:11, basSus:9, drum:3 };
+    /* ★FM: 哀歌なので主旋律の重ねはヴァイオリン。パッドは一段下げて旋律を前に出す。 */
+    return { mel, mln, bas, basStep:16, melPeak:14, melSus:12, melVib:1, basPeak:11, basSus:9, drum:3,
+             fmPad: (8 << 4) | 2, fmMel: (1 << 4) | 3 };
   })(),
   (() => {   // 5: 4面 双子(勇壮 fife&drum マーチ)。ベースは空母のマーチ低音を流用。
     //   ★ループが 496f(8.3秒)しかなく、他の面の戦艦曲(1面/2面 1024f・5面 1280f)に比べて
@@ -198,7 +203,9 @@ const TRACKS = [
     const mel = [...A.mel, ...B.mel, ...C.mel], mln = [...A.mln, ...B.mln, ...C.mln];
     const ml = mln.reduce((p, q) => p + q, 0);
     if (ml !== bas.length * 8) throw new Error(`5面の曲: メロディ ${ml}f とベース ${bas.length * 8}f が合わない`);
-    return { mel, mln, bas, basStep:8, melPeak:14, melSus:11, melVib:1, basPeak:11, basSus:8, drum:3 };
+    /* ★FM: クライマックスなので主旋律の重ねはトランペット。疾走に負けないよう前へ。 */
+    return { mel, mln, bas, basStep:8, melPeak:14, melSus:11, melVib:1, basPeak:11, basSus:8, drum:3,
+             fmMel: (7 << 4) | 3 };
   })(),
   { // 7: 海イントロ共通(インターバル/渋。ニ短調・スロー foreboding のメロディ＋ロックマン風シンセドラム)
     //     メロディ: 下降 D-C-Bb-A → 半音階 C#で戻し → 高A4(属音)で解決させず「激戦の予感」を宙吊り。
@@ -207,6 +214,8 @@ const TRACKS = [
     mln: [48,32,32,64,32, 48,32,32,48,32,64,32, 64,48,96,48],
     bas: [14,21,14,255, 14,26,21,255],   // D3 A3 D3 (休) / D3 D4 A3 (休)=間のある渋いシンセドラム(刻みすぎ回避)
     basStep:16, melPeak:14, melSus:11, melVib:1, basPeak:14, basSus:0, drum:0, bassSweep:1,
+    /* ★FM: ここは「間」なので薄く敷く。主旋律はクラリネット(虚ろで角が無い)、和音は広く低く。 */
+    fmPad: (8 << 4) | 6, fmMel: (5 << 4) | 6, fmChord: [0, 12, 19],
   },  { // 8: 最終面 XB-19(壮大。イントロ1回→本編だけループ。ニ短調, 四分=24f)
     //     イントロ(576f=9.6秒)= ボスの登場演出と同じ長さ。低音の8分連打(D→Bb→C→A)の上でホルンの呼びかけ。
     //     本編(1536f)= Dm|Bb|C|A|Dm|Bb|Gm|A を2周。ドラムは本編から(style4, 1小節=96f に合わせてテンポ6)。
@@ -215,6 +224,9 @@ const TRACKS = [
     bas: [2,2,14,2,2,2,14,2,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,10,10,22,10,10,10,22,10,12,12,24,12,12,12,24,12,9,9,9,9,9,9,21,21,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,12,12,24,12,12,12,24,12,9,9,21,9,9,9,21,9,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,7,7,19,7,7,7,19,7,9,9,21,9,9,9,21,9,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,12,12,24,12,12,12,24,12,9,9,21,9,9,9,21,9,2,2,14,2,2,2,14,2,10,10,22,10,10,10,22,10,7,7,19,7,7,7,19,7,9,9,21,9,9,9,21,9],
     melLoop:14, basLoop:48,
     basStep:12, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:4,
+    /* ★FM: 壮大に。主旋律の重ねはトランペットを強めに、キックに TOM を重ねて胴を足す
+       (TOM を鳴らすので R#38 の上位を 0xF=無音 から開ける)。 */
+    fmMel: (7 << 4) | 2, fmR38: 0x30, fmRhy: [0x14, 0x08, 0x03],
   },
   (() => {   // 9: 中ボス(元ネタ: ベートーヴェン 交響曲第9番 第4楽章 終盤の Prestissimo。**ニ短調で悲壮に**。2/2・四分=14f)
     //   1〜8   嘆き: 半音ずつ下がるベース(D→C#→C→B→B♭→A)の上で、上から一段下りる「溜め息」を重ねる
@@ -234,15 +246,46 @@ const TRACKS = [
                   F5:${H} D5:${H}  C#5:${H} E5:${H}  D5:${Q} A4:${Q} F4:${Q} D4:${Q}  A4:${Q} -:${Q} A4:${Q} -:${Q}`;
     const { mel, mln } = line([sec1, sec2, sec3, sec4].join(' '));
     const bas = pump('D C# C B A# A A# A  D D G G D# D# A A  A# A# G# A D C# A# A  D D D# D# G# A D A');
-    return { mel, mln, bas, basStep:Q, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:5 };
+    /* ★FM: 悲壮に。オルガンは最大のまま、主旋律の重ねを一段前へ出し、キックに TOM を重ねる。 */
+    return { mel, mln, bas, basStep:Q, melPeak:14, melSus:11, melVib:1, basPeak:12, basSus:8, drum:5,
+             fmMel: (9 << 4) | 2, fmR38: 0x30, fmRhy: [0x14, 0x08, 0x03] };
   })(),
   { // 10: 警報(敵艦発見 / 敵大将発見)。BGM を止めてこれだけを鳴らす。増4度(A-D#)の2音サイレンを
     //     メロディとベース(1オクターブ下)で重ねて繰り返す。ドラム無し。
     mel: [45, 39], mln: [12, 12],
     bas: [33, 27], basStep: 12,
+    /* ★FM: 警報は「抜ける」ことがすべて。主旋律の重ねをトランペットの最大にして PSG のサイレンに
+       芯を足し、和音は邪魔なので落とす(音量 15=無音)。 */
+    fmPad: (8 << 4) | 15, fmMel: (7 << 4) | 0,
     melPeak: 14, melSus: 13, melVib: 0, basPeak: 12, basSus: 10, drum: 0,
   },
 ];
+
+/* ───────── FM(MSX-MUSIC)の曲ごとの設定 ─────────
+   ★ここまで FM は全曲**同じ音色・同じ音量**だった(パッド=オルガン / 主旋律=ホルン)。
+     曲調に関係なく一律なので「とりあえず鳴っている」だけだった。曲ごとに持たせる。
+   ★値は**そのまま OPLL のレジスタへ書く**形にしてある(常駐で組み立てない＝常駐が増えない)。
+
+   fmPad/fmMel : (音色<<4)|音量。音色は YM2413 の内蔵 1..15、音量は 0=最大 / 15=無音。
+                 1 ヴァイオリン 2 ギター 3 ピアノ 4 フルート 5 クラリネット 6 オーボエ
+                 7 トランペット 8 オルガン 9 ホルン 10 シンセ 11 ハープシコード
+                 12 ビブラフォン 13 シンセベース 14 アコベ 15 エレキギター
+   fmR36/37/38 : リズムの音量。R#36=BD / R#37=上位HH・下位SD / R#38=上位TOM・下位TC。
+   fmRhy       : PSG のドラム種別(1=キック / 2=スネア / 3=ハット)で立てる R#0E のビット。
+                 bit4=BD bit3=SD bit2=TOM bit1=TC bit0=HH。TOM を使うなら R#38 の上位も開ける。
+   fmChord     : ベース音からの和音の音程(半音)。
+                 ★**第3音(3 や 4)を入れてはいけない。** 和音はベース譜の音にこの音程を足すだけで、
+                   根音の移動に和声が付いていかない。ニ短調の曲でも B♭ や F や A(属和音)の上に
+                   短3度を重ねれば濁る。第3音を入れたいなら「曲ごとの和音進行」を曲データに
+                   持たせる必要がある(ROADMAP の FM 本格対応の続き)。
+                   ここで変えてよいのは**ボイシング(どの高さに置くか)**だけ。 */
+const FM_DEF = {
+  fmPad: (8 << 4) | 0,          /* オルガンを最大で。伸びるのでパッドになる */
+  fmMel: (9 << 4) | 3,          /* ホルンを一段下げて。主旋律の角と喧嘩しない */
+  fmR36: 0x01, fmR37: 0x01, fmR38: 0xF0,   /* BD / HH・SD / TOM無音・TC最大 */
+  fmRhy: [0x10, 0x08, 0x03],    /* キック→BD / スネア→SD / ハット→HH+TC */
+  fmChord: [0, 7, 12],          /* 根音・5度・オクターブ上(第3音なし) */
+};
 
 function packTrack(t) {
   if (t.mel.length !== t.mln.length) throw new Error('mel/mln length mismatch');
@@ -251,11 +294,17 @@ function packTrack(t) {
     if (fm !== fb) throw new Error(`中ボスの曲: メロディ ${fm}f とベース ${fb}f の尺が違う`);
   }
   for (const v of [...t.mel, ...t.bas]) if (v < 0 || v > 255) throw new Error(`note out of range: ${v}`);
+  const f = { ...FM_DEF, ...t };
+  for (const v of f.fmChord) if (v === 3 || v === 4) throw new Error('fmChord に第3音は入れない(和声が根音の移動に付いていかない)');
   return Buffer.from([
     t.mel.length, t.bas.length, t.basStep,
     t.melPeak, t.melSus, t.melVib, t.basPeak, t.basSus, t.drum,
     t.bassSweep ?? 0,   /* 1=chBをシンセドラム(ピッチ急降下＋打撃減衰) */
     t.melLoop ?? 0, t.basLoop ?? 0,   /* ★ループ開始位置(0=先頭から)。最終面の「イントロ→本編ループ」用 */
+    /* ---- ここから FM(曲ごと)。12..22 の 11B。常駐はこれを**そのまま**レジスタへ書く ---- */
+    f.fmPad, f.fmMel, f.fmR36, f.fmR37, f.fmR38,
+    f.fmRhy[0], f.fmRhy[1], f.fmRhy[2],
+    f.fmChord[0], f.fmChord[1], f.fmChord[2],
     ...t.mel, ...t.mln, ...t.bas,
   ]);
 }

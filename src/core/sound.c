@@ -131,6 +131,18 @@ static u8 drm_blk[DRUM_STYLE_BYTES];   /* [0..15]=pattern / [16..19]=v0 / [20]=t
    カードは描かれない。 */
 #define BGM_RAM_ADDR 0xE100
 static u8 __at(BGM_RAM_ADDR) bgm_ram[1536];
+/* ★曲ヘッダの長さ。12B の素データ ＋ FM の曲ごとの設定 11B。生成は tools/gen_assets.mjs。 */
+#define BGM_HDR 23
+/* ★FM の設定は**変数へ写さず bgm_ram から直に読む**。bgm_ram は固定番地(0xE100)なので
+   `bgm_ram[12]` は静的変数の読み出しと同じ 1 命令になり、**常駐が増えない**。
+   値はそのまま OPLL のレジスタへ書ける形で入っている(常駐で組み立てない)。 */
+#define FM_PAD     bgm_ram[12]      /* (音色<<4)|音量 → R#30,31,32(和音の3ch) */
+#define FM_MEL     bgm_ram[13]      /* 同 → R#33(主旋律の重ね) */
+#define FM_R36     bgm_ram[14]      /* BD の音量 */
+#define FM_R37     bgm_ram[15]      /* 上位=HH / 下位=SD */
+#define FM_R38     bgm_ram[16]      /* 上位=TOM / 下位=TC */
+#define FM_RHY(t)  bgm_ram[16 + (t)]   /* ドラム種別 1..3 で立てる R#0E のビット */
+#define FM_CHD(i)  bgm_ram[20 + (i)]   /* 和音の音程(ベース音からの半音)。i=0..2 */
 static u8 *mel_n, *mel_l, *bas_n;
 static u8  nMel, nBas, basStep, melPeak, melSus, melVib, basPeak, basSus, drumOn;
 static u8  melLoop, basLoop, drmGate;
@@ -150,10 +162,12 @@ static u8  bgmLoaded;   /* 1=bgm_ram に曲が載っている(bgm_resume の安�
    ★音量は 0 が最大・15 が無音。PSG を食わないよう控えめから始める。 */
 #define OPLL_RHY_REG  0x0E          /* bit5=リズムモード / bit4=BD / bit3=SD / bit2=TOM / bit1=TC / bit0=HH */
 #define OPLL_RHY_ON   0x20          /* リズムモードだけ立てた状態(全部 off) */
-/* 0=無 / 1=キック→BD / 2=スネア→SD / 3=ハット→**HH＋シンバル(TC)**。
+/* ★どの打楽器を鳴らすかは**曲ごと**(FM_RHY)。既定は 1=キック→BD / 2=スネア→SD /
+   3=ハット→HH＋シンバル(TC)。
    ★ハットだけだと最大音量にしても埋もれた(帯域比 1.03→1.54 倍止まり)。OPLL の HH は
-     短くて細いので、明るく伸びる TC を重ねて抜けを作る。 */
-static const u8 opll_rhy[4] = { 0, 0x10, 0x08, 0x03 };
+     短くて細いので、明るく伸びる TC を重ねて抜けを作っている。
+   ★重い曲は キック に TOM を重ねて胴を足せる(最終面・中ボス)。TOM を鳴らすなら
+     R#38 の上位(TOM の音量)を 0xF=無音 から開けること。 */
 static u8 fmDrum;                   /* 1=この曲は FM を重ねる(ドラム＋和音) */
 
 /* ───────── FM の和音(ベースの下支え) ─────────
@@ -161,12 +175,10 @@ static u8 fmDrum;                   /* 1=この曲は FM を重ねる(ドラム�
      「根音・5度・オクターブ上」を置く。**曲データは増えない**(ベース譜から作るだけ)。
    ★3度を入れないので長調/短調のどちらにも当たらない＝どの曲へ回しても和声が壊れない。
    ★リズムは ch6,7,8 を使うので、和音は ch0〜2 に置く(主旋律の重ねは ch3〜5 が空く)。
-   ★音色はオルガン(8)。伸びるので「パッド」になり、PSG の輪郭を消さない。 */
-#define OPLL_PAD_INST 8             /* 8=オルガン */
-#define OPLL_PAD_VOL  0             /* 0=最大 / 15=無音。★6→2→0。「ベースが聞こえない」(実機指摘) */
+   ★音色と音量は**曲ごと**(FM_PAD)。既定はオルガン(8)を最大で、伸びるので「パッド」になり
+     PSG の輪郭を消さない。静かな曲(エンディング・海イントロ)は落としてある。 */
 static const u16 opll_fnum[12] = { 172,183,194,205,217,230,244,258,274,290,307,326 };
                                     /* C..B。block=2 で C2(=音符 0)。誤差は最大 0.25% */
-static const u8 fm_chord[3] = { 0, 7, 12 };   /* 根音 / 5度 / オクターブ上 */
 static u8 fmPadIdx;                 /* 直前に鳴らしたベース音符の添字(変化を見るだけ) */
 /* ★和音の書き込みは**ISR でやらない**。9 レジスタ＝実測で約 1ms かかり、VBLANK に寄せた
    SAT/色表の転送を押し出す(走査線 88 → 105 行目まで伸びた)。ISR は「次の和音」を置くだけにして、
@@ -177,27 +189,31 @@ static u8 fmPadNote = 0xFF;         /* 次に置く和音の根音(0xFF=用事�
 /* ───────── 主旋律の重ね(ch3) ─────────
    ★PSG の主旋律が音を変えた瞬間に、**1 オクターブ下**で同じ音を ch3 へ置く。
      同じ高さに重ねると PSG の輪郭が消えるので、下に敷いて太さだけ足す。
-   ★音色はホルン(9)。立ち上がりが柔らかく伸びるので PSG の角と喧嘩しない
-     (トランペット(7)のような鋭い音だと主旋律が二重に聞こえて濁る)。
+   ★音色と音量は**曲ごと**(FM_MEL)。既定はホルン(9)で、立ち上がりが柔らかく伸びるので PSG の角と
+     喧嘩しない。トランペット(7)のような鋭い音は二重に聞こえて濁るが、押したい曲
+     (5面のクライマックス・最終面・警報)では逆にそれが要るので曲側で選ぶ。
    ★2 本重ねない。ch4/ch5 は空けておく(将来の余地)。 */
 #define OPLL_MEL_CH   3
-#define OPLL_MEL_INST 9             /* 9=ホルン */
-#define OPLL_MEL_VOL  3             /* 0=最大 / 15=無音。主旋律より一段低く敷く */
 static u8 fmMelIdx;                 /* 直前に鳴らした主旋律の音符の添字 */
 static u8 fmMelNote = 0xFF;         /* 次に置く音(0xFF=用事なし / 0xFE=切る) */
 
 static void opll_mel_off(void) { opll_w((u8)(0x20 + OPLL_MEL_CH), 0); }
 
+/* ch へ音符 nn(0..47)を打ち直す。キーオフ → fnum → サステイン＋キーオン。
+   ★和音(ch0-2)と主旋律の重ね(ch3)で中身が同じだったのを 1 本にした。12 での割り算・剰余は
+     SDCC だとランタイム呼び出しになるので、2 か所に書くと**そのぶん丸ごと重複**する。 */
+static void opll_key(u8 ch, u8 nn) {
+    u16 f   = opll_fnum[nn % 12];
+    u8  blk = (u8)(2 + nn / 12);
+    opll_w((u8)(0x20 + ch), 0);                       /* いったんキーオフ(打ち直し) */
+    opll_w((u8)(0x10 + ch), (u8)(f & 0xFF));
+    opll_w((u8)(0x20 + ch), (u8)(0x30 | (blk << 1) | (u8)(f >> 8)));
+}
+
 static void opll_mel(u8 note) {
-    u16 f;
-    u8  blk;
     if (note >= 48) { opll_mel_off(); return; }       /* 休符は切る */
     if (note >= 12) note = (u8)(note - 12);           /* ★1 オクターブ下へ(下げられる時だけ) */
-    blk = (u8)(2 + note / 12);
-    f   = opll_fnum[note % 12];
-    opll_w((u8)(0x20 + OPLL_MEL_CH), 0);              /* いったんキーオフ(打ち直し) */
-    opll_w((u8)(0x10 + OPLL_MEL_CH), (u8)(f & 0xFF));
-    opll_w((u8)(0x20 + OPLL_MEL_CH), (u8)(0x30 | (blk << 1) | (u8)(f >> 8)));
+    opll_key(OPLL_MEL_CH, note);
 }
 
 static void opll_chord_off(void) {
@@ -209,15 +225,9 @@ static void opll_chord(u8 note) {
     u8 i;
     if (note >= 48) { opll_chord_off(); return; }      /* 休符(BGM_REST=255)は切る */
     for (i = 0; i < 3; i++) {
-        u8  nn = (u8)(note + fm_chord[i]);
-        u16 f;
-        u8  blk;
+        u8 nn = (u8)(note + FM_CHD(i));
         if (nn >= 48) nn = (u8)(nn - 12);              /* 上がり過ぎたら 1 オクターブ下げる */
-        blk = (u8)(2 + nn / 12);
-        f   = opll_fnum[nn % 12];
-        opll_w((u8)(0x20 + i), 0);                     /* いったんキーオフ(打ち直し) */
-        opll_w((u8)(0x10 + i), (u8)(f & 0xFF));
-        opll_w((u8)(0x20 + i), (u8)(0x30 | (blk << 1) | (u8)(f >> 8)));   /* サステイン+キーオン */
+        opll_key(i, nn);
     }
 }
 
@@ -231,8 +241,8 @@ void fm_flush(void) {
 
 static void opll_pad_init(void) {
     u8 i;
-    for (i = 0; i < 3; i++) opll_w((u8)(0x30 + i), (u8)((OPLL_PAD_INST << 4) | OPLL_PAD_VOL));
-    opll_w((u8)(0x30 + OPLL_MEL_CH), (u8)((OPLL_MEL_INST << 4) | OPLL_MEL_VOL));
+    for (i = 0; i < 3; i++) opll_w((u8)(0x30 + i), FM_PAD);
+    opll_w((u8)(0x30 + OPLL_MEL_CH), FM_MEL);
     fmPadIdx = 0xFF; fmPadNote = 0xFF; fmMelIdx = 0xFF; fmMelNote = 0xFF;
 }
 
@@ -249,10 +259,10 @@ static void opll_rhythm_init(void) {
     opll_w(0x16, 0x20); opll_w(0x26, 0x05);   /* BD    */
     opll_w(0x17, 0x50); opll_w(0x27, 0x05);   /* HH/SD */
     opll_w(0x18, 0xC0); opll_w(0x28, 0x01);   /* TOM/TC */
-    opll_w(0x36, 0x01);                        /* BD の音量(0=最大) */
-    opll_w(0x37, 0x01);                        /* 上位=HH(0=最大) / 下位=SD(1)。★HH は 4 では
+    opll_w(0x36, FM_R36);                      /* BD の音量(0=最大) */
+    opll_w(0x37, FM_R37);                      /* 上位=HH(0=最大) / 下位=SD。★HH は 4 では
                                                   まったく聞こえなかった(帯域比 1.03 倍=実質ゼロ) */
-    opll_w(0x38, 0xF0);                        /* 上位=TOM(無音) / 下位=TC(0=最大。ハットに重ねる) */
+    opll_w(0x38, FM_R38);                      /* 上位=TOM / 下位=TC(0=最大。ハットに重ねる) */
     opll_w(OPLL_RHY_REG, OPLL_RHY_ON);         /* リズムモード on、全部 off */
     opll_pad_init();                           /* 和音(ch0-2)の音色と音量も仕込む */
 }
@@ -273,11 +283,9 @@ void fm_silence(void) {
 void bgm_play(u8 track) {
     u8 *p;
     bgmOn = 0;                  /* 再構築中は ISR に BGM を無視させる(単バイト) */
-    /* ★FM(OPLL)のリズムは曲ごとに仕込み直す。鳴らさない曲では必ず落とす
-       (落とし忘れると前の曲のリズムが鳴り続ける) */
+    fm_silence();               /* ★前の曲の FM を必ず落としてから(落とし忘れると鳴り続ける) */
     fmDrum = (u8)(g_opll && FM_DRUM_TRACK(track));
-    if (fmDrum) opll_rhythm_init(); else fm_silence();
-    if (track >= BGM_TRACK_COUNT) return;
+    if (track >= BGM_TRACK_COUNT) { fmDrum = 0; return; }
     data_read(BGM_BANK, bgm_off[track], bgm_ram, bgm_len[track]);
     p = bgm_ram;
     nMel = p[0]; nBas = p[1]; basStep = p[2];
@@ -287,9 +295,12 @@ void bgm_play(u8 track) {
     drmGate = (u8)(basLoop == 0);   /* ループ位置付きの曲はドラムを本編から */
     if (drumOn) { u16 doff = (u16)(drum_off + ((drumOn - 1) << 5));   /* style別21B(32Bストライド)をRAMへ */
                   data_read(BGM_BANK, doff, drm_blk, DRUM_STYLE_BYTES); }
-    mel_n = p + 12;
-    mel_l = p + 12 + nMel;
-    bas_n = p + 12 + nMel + nMel;
+    mel_n = p + BGM_HDR;
+    mel_l = p + BGM_HDR + nMel;
+    bas_n = p + BGM_HDR + nMel + nMel;
+    /* ★FM の仕込みは**曲を読んでから**。音色・音量・和音の音程は bgm_ram の中にあるので、
+       data_read より前に仕込むと**前の曲の設定**で鳴り出す。 */
+    if (fmDrum) opll_rhythm_init();
     /* ★bgm_voice/bgm_drum は「trem/drmT==0 なら *先に* idx を進めてから鳴らす」実装。0 始まりだと
        1音目を飛ばす。**最初の前進で 0 になる値**から始めること(音符は 255、16手ドラムは 15)。 */
     mIdx = 255; mTrem = mCl = 0;   /* ★最初の前進で (u8)(255+1)=0 → 1音目。n-1 始まりだとループ位置付きの曲で */
@@ -362,7 +373,7 @@ static void bgm_drum(u8 busy) {
         /* ★FM も同じ拍で叩く。SFX に譲る PSG と違い、FM は専用の ch なので常に鳴らしてよい */
         if (fmDrum && drmType) {
             opll_w(OPLL_RHY_REG, OPLL_RHY_ON);
-            opll_w(OPLL_RHY_REG, (u8)(OPLL_RHY_ON | opll_rhy[drmType]));
+            opll_w(OPLL_RHY_REG, (u8)(OPLL_RHY_ON | FM_RHY(drmType)));
         }
     }
     drmT--;
