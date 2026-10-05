@@ -2,6 +2,7 @@
    前作 BattleshipProto(実機確定)の sfx エンジン/ISR イディオムを移植・整理し、BGMを追加。
    BGM: melody=tone A(SFX SHOTと共有・SFX優先), bass=tone B。曲データはバンク8→RAMコピー。 */
 #include "sound.h"
+#include "pcm.h"   /* スネアの拍に内蔵 PCM を重ねる */
 #include "bank.h"       /* data_read(曲データをバンク→RAM) */
 #include "vdp.h"        /* vdp_wait_frame(ファンファーレの前景同期) */
 #define ASSETS_BGM          /* ★BGM の表だけを取り込む(艦などの表の複製を作らない) */
@@ -370,6 +371,10 @@ static void bgm_drum(u8 busy) {
         drmT    = drm_blk[20];              /* テンポ(style: 標準/重い=8, 激しい=6) */
         drmType = drm_blk[drmIdx];          /* パターン(style別) */
         drmVol  = drm_blk[16 + drmType];    /* 初期音量 v0[type](style別) */
+        /* ★スネアの拍(drmType==2)だけ turboR 内蔵 PCM を重ねる。鳴らせない機械・設定では
+           pcm_snare の中で素通りするので、ここに条件は要らない(常駐を増やさないため)。
+           ★ここは ISR。pcm_snare は ei しない入口になっている(pcm.s 参照)。 */
+        if (drmType == 2) pcm_snare();
         /* ★FM も同じ拍で叩く。SFX に譲る PSG と違い、FM は専用の ch なので常に鳴らしてよい */
         if (fmDrum && drmType) {
             opll_w(OPLL_RHY_REG, OPLL_RHY_ON);

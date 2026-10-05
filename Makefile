@@ -63,7 +63,7 @@ GAMEVER := $(shell cat VERSION 2>/dev/null || echo 0.0.0)
 #    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
 #    「新旧で構造体レイアウトが食い違うオブジェクトが混在→メモリ破損」という
 #    stale-object バグを踏む(実際に踏んだ)。小規模なので全再コンパイルで十分。
-HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)/boss_frames.h $(BUILD)/stage_grade.h
+HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)/boss_frames.h $(BUILD)/stage_grade.h $(BUILD)/snare_data.h
 
 # ★ops.rel(run_ops)は現在どこからも呼ばれていない(艦OPSの解釈は bank16 の ship_render 内に独自実装が
 #   ある)。常駐24KBを197B無駄に食っていたのでリンクから外した。使うときはここへ戻すこと。
@@ -125,6 +125,11 @@ $(BUILD):
 
 # データアセット(BGM曲データ)を bin＋常駐用ヘッダへパック(gen_assets.mjs)。
 # assets_data.h を先に作れば assets.bin も同時に出る(1回の実行で両方生成)。
+# turboR 内蔵 PCM のスネア(256B/32ms)。冷たいバンク(coldsetup)に const で入り、起動時に 0xEB00 へ写る。
+# ★試聴用の wav も一緒に出る(8発並べたもの)。素材をいじったら必ず聴いてから焼くこと。
+$(BUILD)/snare_data.h: tools/gen_snare.py $(SRC)/core/pcm.s | $(BUILD)
+	python3 tools/gen_snare.py $@ $(BUILD)/snare_preview.wav
+
 $(BUILD)/assets_data.h: tools/gen_assets.mjs | $(BUILD)
 	node tools/gen_assets.mjs 8 $(BUILD)/assets.bin $(BUILD)/assets_data.h
 $(BUILD)/assets.bin: $(BUILD)/assets_data.h

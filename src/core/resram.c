@@ -12,6 +12,11 @@
    ★ここに足すときは必ずビルドして「0xE000 まで残り」を確認すること。 */
 #include "types.h"
 #include "raster.h"
+#include "pcm.h"
 
 /* ラスタ分割表。以前は 0xEF00 へ固定していたが、そこはスタックの領域だった(raster.h 参照)。 */
 RasSplit g_ras[RAS_MAX];
+
+/* スネアの素材を置く枠 256B。★__at の配列は番地を決めるだけで _DATA を食わない。
+   中身は起動時に coldsetup.c(冷たいバンク)が写す。 */
+u8 __at(PCM_SNARE_ADDR) pcm_snare_buf[PCM_SNARE_SLOT];

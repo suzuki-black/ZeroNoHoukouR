@@ -15,10 +15,17 @@ extern u16 g_pcm_src;    /* 鳴らす前に入れる: サンプルの先頭(RAM 
 extern u16 g_pcm_len;    /* 同: 長さ(バイト) */
 
 /* ★面中のスネア。番地と長さは pcm.s が持っている(ISR から呼ぶので呼ぶ側を小さくするため)。
-   ★素材の置き場所。常駐 RAM の高位フリー帯で、**ホット区間でも読める**必要がある
-     (ホット区間はページ1・2 とも RAM の複製で、カートの窓が 1 つも見えない)。 */
-#define PCM_SNARE_ADDR 0xF000u
-#define PCM_SNARE_LEN  640      /* 80ms @ 7993Hz */
+   ★素材は page3 の RAM に居なければならない。ホット区間はページ1・2 とも RAM の複製で、
+     カートの窓が 1 つも見えないので、バンクから直接は読めない。
+   ★番地 0xEB00 は **DEBUG_PROF の計測用 RAM と同じ場所**。通常ビルドでは誰も触らない。
+     ここしか空いていない: 0xC000-0xDF19 は常駐_DATA(うち hot_ram が 5696B)、0xE100 は曲データ、
+     0xE700 は中ボスの向きデータ、0xEC00 は弾幕、0xEF00 以降はスタック(実測で 0xEF59 まで下りる)。
+     RAM の実測地図は 苦労と教訓 §16-49。
+   ★**枠**は 256B。実際に使う長さと標本化は pcm.s(PCM_SNARE_LEN / PCM_PERIOD)が決め、
+     tools/gen_snare.py がそれを読んで波形を作る。C 側は枠の大きさしか知らなくてよい。 */
+#define PCM_SNARE_ADDR 0xEB00u
+#define PCM_SNARE_SLOT 256      /* 0xEB00 に取れる枠。実長はこれ以下(pcm.s が決める) */
+extern u8 __at(PCM_SNARE_ADDR) pcm_snare_buf[PCM_SNARE_SLOT];   /* 実体は resram.c。__at は番地を決めるだけで _DATA を食わない */
 void pcm_snare(void);
 
 void pcm_start(void);    /* g_pcm_src / g_pcm_len を入れてから呼ぶ。鳴っていても差し替える */

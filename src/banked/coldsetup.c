@@ -14,7 +14,10 @@
 #include "final.h"       /* STAGE_FINAL */
 #include "opll.h"        /* ★FM の検出(起動時1回。g_cold_mode=COLD_OPLL で呼ばれる) */
 #include "msx.h"         /* MSX_VER(0x002D: 0=MSX1 / 1=MSX2 / 2=MSX2+ / 3=turboR) */
-#include "pcm.h"         /* ★PCM が使えるかの検出(起動時1回) */
+#include "pcm.h"         /* ★PCM が使えるかの検出(起動時1回)＋スネアの素材を RAM へ写す */
+#ifndef DEBUG_PROF
+#include "snare_data.h"  /* 自動生成(tools/gen_snare.py)。256B の波形 */
+#endif
 
 /* ★常駐(scene_stage.c)が持っているもの。面の準備で先に埋まっている */
 extern u8  cur_gun_x[4];   /* 主砲4基の艦内x */
@@ -186,6 +189,18 @@ static void pcm_detect(void) {
     for (n = 0; n < PCM_DETECT_TRIES; n++) {
         if (PCM_TMR_LO != t) { g_pcm_hw = 1; break; }   /* 動いた=PCM が使える */
     }
+#ifdef DEBUG_PROF
+    /* ★計測用ビルドでは 0xEB00 が区間別 tick の蓄積(g_prof_acc)に使われている。素材を置く場所が
+       無いので PCM ごと切る。フレーム時間を測るためのビルドなので実害は無い。 */
+    g_pcm_hw = 0;
+#else
+    /* スネアの素材を RAM(0xEB00)へ写す。★**ここは冷たいバンクなので const はこのバンク自身に居る**
+       = 窓を差し替えずに読める。data_read を使ってはいけない(このコード自身の窓が消える)。 */
+    {
+        u16 i;
+        for (i = 0; i < SNARE_DATA_LEN; i++) pcm_snare_buf[i] = snare_data[i];
+    }
+#endif
     g_pcm = (u8)(g_pcm_hw && g_pcm);            /* ★設定が OFF のまま再起動した場合も OFF のまま */
 }
 
