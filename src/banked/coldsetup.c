@@ -169,20 +169,23 @@ static void require_turbor(void) {
      タイマが進まない環境だと**その時刻が永遠に来ない**。鳴り終わりを待つ所があると戻らなくなる。
      そこで起動時に**本当に進むか**を確かめ、進まなければ PCM を丸ごと無効にする。
      無効なら送出口は「鳴っていない」で素通りするので、挙動は PCM を入れる前と変わらない。
-   ★2 VBLANK(約 33ms)で 8500 カウント進むはず。しきい値は余裕を持って 1000。
+   ★★ここは**割込みが止まっている**。バンク呼び出しのトランポリン(_bcall)が di〜ei で囲っており、
+     冷たいバンクの中身は丸ごとその中で走る。したがって**割込みで進むもの(JIFFY 0xFC9E 等)を
+     待ってはいけない**。最初そう書いて、起動直後に戻らなくなった(BIOS が張った青い画面のまま停止)。
+     タイマ自身を見れば割込みは要らない。
+   ★**上限を必ず付ける**。タイマが死んでいる機械では「変わるまで待つ」は無限ループになる。
+     20000 回で諦める(最悪およそ 0.1 秒。PCM が無い機械で起動時に 1 回だけ)。
    ★ここも**冷たいバンク**。起動時に1回しか使わないものを常駐へ置かない。 */
+#define PCM_DETECT_TRIES 20000      /* タイマが動かない機械で諦めるまでの回数 */
 __sfr __at(0xE6) PCM_TMR_LO;
-__sfr __at(0xE7) PCM_TMR_HI;
-static u16 stmr(void) { u8 lo = PCM_TMR_LO; return (u16)(((u16)PCM_TMR_HI << 8) | lo); }
 
 static void pcm_detect(void) {
-    volatile u16 *j = (volatile u16 *)0xFC9E;   /* JIFFY(BIOS の VBLANK が進める) */
-    u16 a, b, t;
-    u8  i;
-    a = stmr();
-    for (i = 0; i < 2; i++) { t = *j; while (*j == t) { } }
-    b = stmr();
-    g_pcm_hw = ((u16)(b - a) > 1000) ? 1 : 0;
+    u8  t = PCM_TMR_LO;                         /* 下位バイトが一番速く動く */
+    u16 n;
+    g_pcm_hw = 0;
+    for (n = 0; n < PCM_DETECT_TRIES; n++) {
+        if (PCM_TMR_LO != t) { g_pcm_hw = 1; break; }   /* 動いた=PCM が使える */
+    }
     g_pcm = (u8)(g_pcm_hw && g_pcm);            /* ★設定が OFF のまま再起動した場合も OFF のまま */
 }
 
