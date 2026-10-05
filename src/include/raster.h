@@ -75,13 +75,20 @@ typedef struct {
     u8 pidx, pr, pg, pb;  /* 書換えるパレット(pidx=RAS_NOPAL で無し)。r/b は 0-7, g は 0-7 */
 } RasSplit;
 
-/* ★分割表は**高位フリー帯へ固定配置**する。常駐_DATA は 0xE000 が天井(それを越えるとバンクシーンの
-   static に踏み潰される=設定値が化ける。Makefile が機械検証している)で、RAS_MAX を増やすと
-   すぐ溢れた。既存の固定帯: g_card_ram 0xE100 / ship_ram 0xE700 / fb_ram 0xE900 /
-   prof 0xEB00 / g_cbul 0xEC00-0xEDFF / オーバレイの static 0xEE00-。その次の空きを使う。
-   ★オーバレイ(ovl_shock.c)からも書くので、固定番地であること自体が都合がよい。 */
-#define RAS_ADDR 0xEF00
-extern RasSplit __at(RAS_ADDR) g_ras[RAS_MAX];   /* 分割表。line の昇順に詰めること */
+/* ★分割表は**普通の常駐配列**にする(固定番地にしない)。
+   以前は高位フリー帯の 0xEF00 へ固定していたが、**そこはスタックの領域だった**。
+   openMSX(実機BIOS機)で SP を 4ms ごとに追ったところ、実測で
+
+     スタックの底(初期SP) = 0xF374   最も深い所 = 0xEF59
+
+   で、0xEF00+9*12 = 0xEF6B までの表の**後ろ2本分がスタックと重なっていた**。
+   ovl_shock.c は最大 RAS_MAX 本まで積むので、衝撃波で 11 本以上になると
+   表の書込みが戻り番地を壊す(暴走)か、スタックが表を壊す(画面の乱れ)。
+   ★オーバレイからも書くが、固定番地である必要は無い。gen_symdefs.mjs が
+     **常駐の global を番地つきでバンク側へ輸出している**ので、普通の配列で解決する。
+   ★常駐_DATA は 0xE000 が天井(越えるとバンクシーンの static に踏み潰される)。
+     Makefile がリンク後に機械検証している。 */
+extern RasSplit g_ras[RAS_MAX];   /* 分割表。line の昇順に詰めること */
 extern u8 g_ras_n;                /* 今フレームの有効分割数(0=分割なし) */
 extern u8 g_ras_i;                /* 次に処理する分割の添字(ISR が進める) */
 

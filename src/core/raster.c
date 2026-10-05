@@ -10,7 +10,7 @@ __sfr __at(0x9A) RAS_PAL;    /* パレットデータ */
    その分だけ手前で割り込ませる。★実測で決める値(openMSX と実機で確認すること)。 */
 #define RAS_LINE_BIAS 2
 
-RasSplit __at(RAS_ADDR) g_ras[RAS_MAX];
+/* ★g_ras の実体は resram.c にある(リンク順の最後でないと hot_ram の番地を押し下げる)。 */
 u8 g_ras_n;
 
 u8 g_ras_i;          /* 今フレームで次に処理する分割の添字。★asm から参照するので非static */

@@ -96,7 +96,8 @@ RESIDENT_RELS = \
   $(BUILD)/hud.rel \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_stage.rel \
-  $(BUILD)/main.rel
+  $(BUILD)/main.rel \
+  $(BUILD)/resram.rel
 
 # ── 追加バンク(冷たいコード/データ)。--bank N file の形で rompack へ渡す。
 #    冷たいコードは「単独コンパイル → --code-loc 0xA000 でリンク → rompack が当該バンクへ格納」。
