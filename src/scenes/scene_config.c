@@ -1,6 +1,6 @@
 /* scene_config.c — ★設定メニュー(冷たいシーン=bank6)。タイトルで隠しコマンド(コナミ)から開く。
    UP/DOWN でカーソル移動、L/R で値変更、SPACE で START→ゲーム開始(SC_STAGE)。
-   6項目(難易度/残機/耐久/ステージ/継続/無敵)を常駐 gamestate へ書き、gameplay が参照する。
+   各項目を常駐 gamestate へ書き、gameplay が参照する。
    ※描画は「入場時に全描画→以後は変化した行だけ再描画」。全画面再描画は遅く入力を取りこぼすため。 */
 #include "vdp.h"
 #include "input.h"
@@ -8,12 +8,13 @@
 #include "gamestate.h"
 #include "opll.h"      /* g_opll / g_opll_hw(FM音源の有無と使用可否) */
 #include "sound.h"     /* fm_silence(切る瞬間に伸びている音を止める) */
+#include "pcm.h"       /* g_pcm / g_pcm_hw / pcm_stop(切る瞬間に鳴っている音を止める) */
 #include "version.h"   /* BUILD_VER(gitハッシュ)。どのコミットのROMか判別用 */
 
-#define CFG_START 8      /* 項目0..7 ＋ START(8) */
-#define ROWS 9
+#define CFG_START 9      /* 項目0..8 ＋ START(9) */
+#define ROWS 10
 
-static u8 cur;   /* 0=難易度/1=残機/2=耐久/3=ステージ/4=継続/5=無敵/6=FM/7=VIEW/8=START。RAM(data-loc)。 */
+static u8 cur;   /* 0=難易度/1=残機/2=耐久/3=ステージ/4=継続/5=無敵/6=FM/7=PCM/8=VIEW/9=START。RAM(data-loc)。 */
 static u8 g_mode;/* VIEW: 0=GAME(通常)/1=CARD(説明のみ)/2=RESULT(撃破画面のみ)/3=ENDING。START時に g_view へ反映 */
 
 static const char *const diffs[3]  = { "EASY  ", "NORMAL", "HARD  " };
@@ -21,13 +22,17 @@ static const char *const livess[3] = { "2", "3", "5" };
 static const char *const onoff[2]  = { "OFF", "ON " };
 static const char *const num1_9[10]= { "0","1","2","3","4","5","6","7","8","9" };
 static const char *const modes[4]  = { "GAME  ", "CARD  ", "RESULT", "ENDING" };   /* 画面ビューア */
-/* ★FM は 3 状態を出す(ハードが無ければ切り替えさせない)。幅は 4 文字で揃える。 */
+/* ★FM と PCM は 3 状態を出す(ハードが無ければ切り替えさせない)。幅は 4 文字で揃える。
+   PCM は turboR 内蔵なので本来いつでもあるが、エミュレータによっては**システムタイマが動かず**
+   鳴らせない。起動時の検出(coldsetup.c の pcm_detect)が落ちた場合も NONE を出す。 */
 static const char *const fmval[3]  = { "OFF ", "ON  ", "NONE" };
 static const char *const labels[ROWS] = {
-    "DIFFICULTY", "LIVES", "DURABILITY", "STAGE", "CONTINUE", "INVINCIBLE", "FM SOUND", "VIEW", "START GAME"
+    "DIFFICULTY", "LIVES", "DURABILITY", "STAGE", "CONTINUE", "INVINCIBLE",
+    "FM SOUND", "PCM SOUND", "VIEW", "START GAME"
 };
-/* ★1 行増えたので間隔を 18 → 16 へ詰めた(版表示 180 / 操作説明 194 とぶつからないように)。 */
-static const u8 rowy[ROWS] = { 32, 48, 64, 80, 96, 112, 128, 144, 168 };
+/* ★行が増えるたびに上へ詰めている(版表示 180 / 操作説明 194 とぶつからないように)。
+   いまは 24 から 16 間隔で 9 項目、START だけ 1 行空けて 168。 */
+static const u8 rowy[ROWS] = { 24, 40, 56, 72, 88, 104, 120, 136, 152, 168 };
 
 /* 行 idx の値文字列(START行は値なし=NULL)。 */
 static const char *val_of(u8 idx) {
@@ -38,7 +43,8 @@ static const char *val_of(u8 idx) {
     if (idx == 4) return onoff[g_continue ? 1 : 0];
     if (idx == 5) return onoff[g_invinc ? 1 : 0];
     if (idx == 6) return g_opll_hw ? fmval[g_fm ? 1 : 0] : fmval[2];
-    if (idx == 7) return modes[g_mode];
+    if (idx == 7) return g_pcm_hw ? fmval[g_pcm ? 1 : 0] : fmval[2];
+    if (idx == 8) return modes[g_mode];
     return (const char *)0;   /* START GAME */
 }
 
@@ -79,7 +85,17 @@ static u8 change(u8 idx, s8 d) {
             return 1;
         }
     }
-    else if (idx == 7) { s8 v = (s8)g_mode + d; if (v >= 0 && v <= 3) { g_mode = (u8)v; return 1; } }   /* VIEW: GAME/CARD/RESULT/ENDING */
+    else if (idx == 7) {   /* PCM SOUND。検出で落ちていれば触らせない(表示は NONE のまま) */
+        u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_pcm);
+        if (g_pcm_hw && n != g_pcm) {
+            /* ★先に止める。g_pcm を 0 にしてからでは pcm_start が素通りするだけで、
+               いま出している途中の音は止まらない(FM の fm_silence と同じ順序)。 */
+            if (!n) pcm_stop();
+            g_pcm = n;
+            return 1;
+        }
+    }
+    else if (idx == 8) { s8 v = (s8)g_mode + d; if (v >= 0 && v <= 3) { g_mode = (u8)v; return 1; } }   /* VIEW: GAME/CARD/RESULT/ENDING */
     return 0;
 }
 
