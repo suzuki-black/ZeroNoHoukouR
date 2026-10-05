@@ -164,6 +164,21 @@ static void draw_card_ship(void) {
     draw_card_banked();
 }
 
+#ifdef S3TEST
+/* ★検証ROM(S3TEST)だけ: 1面の戦艦の絵(開始カード 64x48, bank4)を常駐側で RAM へ読んでおく。
+   バンクシーン(scene_s3test, bank31)からは data_read を呼べない(窓を差し替えると自分が消える)。
+   ★**この関数は scene.c ではなくここに置くこと。** scene.c へ置くと assets_data.h を
+     取り込むことになり、あのヘッダの表は static なので**実体がもう一組複製される**
+     (ship_ops_off 他 12 本 = 実測 112B)。このファイルは元から同じ表を持っているので
+     増えるのは関数の分だけで済む。呼ぶのは scene.c の scene_video_enter。 */
+void s3test_load_card(void) {
+    static u8 done;
+    if (done) return;
+    done = 1;
+    data_read(SHIP_CARD_BANK, ship_card_off[0], g_card_ram, SHIP_CARD_LEN);
+}
+#endif
+
 #define WMAX 40   /* 横揺れ(weaveX)の振幅 */
 
 u16 cam;   /* ★非static: hot.c(aa_update の画面Y算出)と共有 */
