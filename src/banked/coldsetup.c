@@ -8,7 +8,8 @@
 #include "gamestate.h"
 #include "scroll.h"      /* SC_SHIP_R0 */
 #include "ship.h"        /* SHIP_NAAG / g_shipargs */
-#include "sprites.h"     /* SPR_BARREL0 / SPR_HELLCAT / barrel_col */
+#include "sprites.h"     /* SPR_BARREL0 / SPR_HELLCAT / barrel_col / SPR_DIGIT0 */
+#include "vdp.h"         /* vdp_glyph / vdp_sprite_pattern(常駐。HUD の数字投入で使う) */
 #include "aa_hot.h"      /* aa_fire / aa_hp / aa_dead */
 #include "assets_data.h" /* STAGE_COUNT */
 #include "final.h"       /* STAGE_FINAL */
@@ -110,6 +111,23 @@ static u8 find_sig(const u8 *sig) {
         }
     }
     return 0xFF;
+}
+
+/* ───────── HUD の数字パターンを投入する(面の準備で1回) ─────────
+   ★自前フォントの '0'..'9' を 16x16 スプライトの左上 8x8 へ写す。やっているのは転送だけで、
+     面の準備でしか走らない。**常駐に置く価値が無いのでここへ出した**(実測で常駐 60B 超の節約)。
+   ★作業場はこのバンクの static。常駐の pat_buf はボム棒と共用なので触らない。
+   ★vdp_glyph / vdp_sprite_pattern は常駐の関数。バンクから呼べる(gen_symdefs が番地を輸出する)。 */
+static u8 dig_buf[32];
+
+static void hud_digits(void) {
+    u8 d, r;
+    for (d = 0; d < 10; d++) {
+        const u8 *g = vdp_glyph((u8)('0' + d));
+        for (r = 0; r < 8;  r++) dig_buf[r] = g[r];   /* 左列 rows0-7 = 8x8 グリフ */
+        for (r = 8; r < 32; r++) dig_buf[r] = 0;      /* 左列下半分＋右列は空 */
+        vdp_sprite_pattern((u8)(SPR_DIGIT0 + d * 4), dig_buf);
+    }
 }
 
 /* ───────── turboR 未満お断り(起動時に1回) ─────────
@@ -235,6 +253,7 @@ static void opll_detect(void) {
 void banked_entry(void) {
     u8 i;
     if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); pcm_detect(); return; }   /* ★turboR 未満はここで止まる */
+    if (g_cold_mode == COLD_HUDDIG) { hud_digits(); return; }
     for (i = 0; i < SHIP_NAAG; i++) {          /* 対空砲の発射タイマと耐久 */
         u16 t = (u16)60 + (u16)i * 11;         /* ★u16で計算し255クランプ(u8のままだと高iで桁溢れ) */
         aa_fire[i] = (t > 255) ? 255 : (u8)t;

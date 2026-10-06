@@ -11,6 +11,8 @@
 #include "sprites.h"
 #include "entity.h"   /* g_spr_base(エンティティ描画の開始スロット) */
 #include "gamestate.h" /* g_crush: メガクラッシュ残数 */
+#include "bank.h"      /* bcall_to: 数字パターンの投入を冷たいバンクへ出した */
+#include "opll.h"      /* g_cold_mode / COLD_HUDDIG */
 
 static void crush_pattern(u8 bars);
 
@@ -53,13 +55,9 @@ static void score_hi_pattern(u8 a, u8 b) {
 }
 
 void hud_init(void) {
-    u8 d, r;
-    for (d = 0; d < 10; d++) {
-        const u8 *g = vdp_glyph((u8)('0' + d));   /* 自前フォントの数字グリフ */
-        for (r = 0; r < 8;  r++) pat_buf[r] = g[r];   /* 左列 rows0-7 = 8x8 グリフ */
-        for (r = 8; r < 32; r++) pat_buf[r] = 0;      /* 左列下半分＋右列は空 */
-        vdp_sprite_pattern(SPR_DIGIT0 + d * 4, pat_buf);
-    }
+    /* ★数字パターンの投入(10桁ぶんの転送)は**冷たいバンク**(coldsetup)へ出してある。
+       面の準備で1回しか走らないのに常駐を 60B 超食っていたため(叫びの置き場所が要って見直した)。 */
+    g_cold_mode = COLD_HUDDIG; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
     score_hi_pattern(0, 0);
     hud_colors();
     g_spr_base = 0;   /* ★エンティティは slot0 から＝HUD より手前。HUD は最後尾(HUD_SL0..31) */

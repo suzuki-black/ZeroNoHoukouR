@@ -37,6 +37,7 @@ extern u8 g_fm;       /* 設定メニュー: 1=FM を鳴らす(既定) / 0=PSG �
    起動時しか使わないものを常駐へ置くと、曲へ繋ぐぶんの枠が無くなるため。 */
 #define COLD_STAGE 0   /* coldsetup の用件: 面の配置(既定) */
 #define COLD_OPLL  1   /* 同: FM の検出＋消音(起動時1回) */
+#define COLD_HUDDIG 2  /* 同: HUD の数字パターン投入(面の準備で1回。常駐節約のため冷たいバンクへ) */
 extern u8 g_cold_mode;
 void opll_w(u8 reg, u8 val);   /* レジスタ書込み(規定のウェイト込み)。g_opll=0 なら何もしない */
 
