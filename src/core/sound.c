@@ -405,7 +405,7 @@ void bgm_update(void) {
 
 /* ファンファーレ本体(前景・同期再生)。bgmを止め、mel=toneA/har=toneB を直接鳴らして
    vdp_wait_frame で尺を取る(ISRのbgm_updateは bgmOn=0 で沈黙)。終了まで戻らない。 */
-static void fanfare_seq(const u8 *mel, const u8 *har, const u8 *len, u8 n) {
+void fanfare_seq(const u8 *mel, const u8 *har, const u8 *len, u8 n) {
     u8 i, f;
     bgm_stop();     /* ★FM ごと止める。ここは前景同期で数秒戻らないので、放っておくと鳴り続ける */
     for (i = 0; i < n; i++) {
@@ -439,13 +439,8 @@ void play_fanfare(void) {
     fanfare_seq(fmel, fhar, flen, 13);
 }
 
-/* 開始ファンファーレ(ステージ開始カードで使用。旧版 fanOp を移植)。BGM無音でこれだけ鳴らす。 */
-void play_fanfare_open(void) {
-    static const u8 omel[8] = { 33,38,42,45,42,38,33,38 };
-    static const u8 ohar[8] = { 26,30,33,38,33,30,26,26 };
-    static const u8 olen[8] = {  8, 8,16,24, 8, 8, 8,36 };
-    fanfare_seq(omel, ohar, olen, 8);
-}
+/* ★開始ファンファーレ(play_fanfare_open)は表ごと bank16 へ移した(ship_render.c の fanfare_open_impl)。
+     勝ちどき(play_fanfare)は叫びと重ねるため窓を音声バンクへ向けて鳴らすので、表は常駐に残す。 */
 
 /* H.TIMI から呼ばれる ISR。割込み文脈なので使用レジスタを全退避(__naked で自前 ret)。
    snd_ticks を進め、sfx_update を回す(将来 bgm_update もここへ)。 */

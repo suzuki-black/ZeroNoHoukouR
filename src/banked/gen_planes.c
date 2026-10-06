@@ -9,6 +9,7 @@
 #include "ship.h"    /* g_shipargs */
 #include "vdp.h"     /* vdp_sprite_pattern / vdp_sprite_pattern_read / vdp_write_addr */
 #include "sound.h"   /* play_fanfare / bgm_stop */
+#include "pcm.h"     /* voice_fanfare: 結果画面の叫び＋ファンファーレ */
 #include "input.h"
 #include "raster.h"
 #include "gamestate.h"   /* g_score / g_hiscore */
@@ -316,7 +317,7 @@ static void results_impl(const char *m) {
     fmt_score(g_hiscore);
     vdp_text(72, 152, 15, 1, "HI");
     vdp_text(120, 152, 15, 1, scorebuf);
-    play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
+    voice_fanfare(g_shipargs.hull);     /* 勝ちどき(BGM停止・前景同期)に叫び(hull=語の番号)を重ねる */
     vdp_text(88, 176, 15, 1, "PUSH SPACE");
     { u8 armed = 0;                     /* ★連射ホールドで一瞬で飛ばされないよう「一度離してから押す」 */
       for (f = 0; f < 240; f++) {

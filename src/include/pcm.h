@@ -46,6 +46,9 @@ void pcm_stop(void);
 #define VOICE_SOUDAI 2   /* 総大将撃破！ そうだいしょうげきは(最終面の結果画面) */
 #define VOICE_N      3
 void voice_play(u8 id);
+/* ★叫び＋勝ちどきファンファーレを重ねて鳴らす(結果画面)。**バンク(results_impl)から呼ぶ。**
+   窓を音声バンクへ向けて鳴らし、戻る前に呼び元のバンク(g_bank)へ向け直す。 */
+void voice_fanfare(u8 id);
 /* ★送出口。ゲームの**待ちループ**から呼ぶ。鳴っていなければ 3 命令で戻る。
    壊すのは A とフラグだけ(HL/DE は中で退避する)。 */
 void pcm_service(void);

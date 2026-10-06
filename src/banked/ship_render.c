@@ -581,8 +581,22 @@ static void load_sprites_impl(void) {
     }
 }
 
+/* 開始ファンファーレ(ステージ開始カードで使用。旧版 fanOp を移植)。BGM無音でこれだけ鳴らす。
+   ★常駐から移した(空いた常駐を、叫びとファンファーレを重ねる分に充てた)。表はこのバンクに置き、
+     常駐の fanfare_seq が窓越しに読む(鳴らしている間、窓はこのバンクのまま)。
+   ★**先に ei する。** _bcall は di したまま呼ぶ。fanfare_seq は JIFFY(割込みで進む)を待つので、
+     割込みが止まったままだと永久に戻らない(2026-10-05 に同じ型で起動直後に固まった)。 */
+static void fanfare_open_impl(void) {
+    static const u8 omel[8] = { 33,38,42,45,42,38,33,38 };
+    static const u8 ohar[8] = { 26,30,33,38,33,30,26,26 };
+    static const u8 olen[8] = {  8, 8,16,24, 8, 8, 8,36 };
+    __asm ei __endasm;
+    fanfare_seq(omel, ohar, olen, 8);
+}
+
 void banked_entry(void) {
     switch (g_shipargs.mode) {
+        case 10: fanfare_open_impl(); return;  /* ★開始ファンファーレ(常駐から移設) */
         case 1: draw_card_impl(); return;
         case 2: death_impl(g_shipargs.cam); return;
         case 3: g_shipargs.ret = gameover_impl(); return;

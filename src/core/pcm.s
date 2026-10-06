@@ -27,7 +27,7 @@
 ;     叫んでいる最中にスネアの拍が来る。そのとき pcm_snare が位置と残数を上書きし、
 ;     **拍 1 回で叫びが死ぬ**(実測: A4 への書込みが 192 = 叫びの出だし 64 + スネアの全長 128)。
 ;   → 1 声しか無いなら**優先順位を決める**しかない。_pcm_lock を立てている間はスネアが譲る。
-;     錠は voice_play が掛け、鳴り終わり(または上限で打ち切り)に外す。
+;     錠は voice_play / voice_fanfare が掛け、_pcm_stop(鳴り終わり・打ち切り)が外す。
 
 	.module	pcm
 	.globl	_pcm_service, _pcm_start, _pcm_stop, _pcm_snare, _pcm_active, _pcm_lock, _g_pcm_src, _g_pcm_len, _g_pcm
@@ -126,9 +126,16 @@ _pcm_start::
 	jr	pcm_feed
 
 ; ---- void pcm_stop(void) ----
+; ★鳴っていなければ何もしない。鳴らせない機械(検出で落ちた)で A4h を叩かないため。
+; ★叫びの錠もここで外す。何も鳴っていないなら守るものも無い。鳴り終わり(pcm_last)でも、
+;   叫びを打ち切ったとき(voice_play の上限・voice_fanfare)でも、ここを通れば錠が外れる。
 _pcm_stop::
+	ld	a, (_pcm_active)
+	or	a, a
+	ret	z
 	xor	a, a
 	ld	(_pcm_active), a
+	ld	(_pcm_lock), a
 	ld	a, #0x80		; 無音(中心)へ戻す
 	out	(PCM_DATA), a
 	ret

@@ -39,7 +39,9 @@ void bgm_stop(void);          /* BGM停止＋melody/bass 消音(SFX/noiseは不�
 void bgm_resume(void);        /* bgm_stop で止めた曲を**続きから**再開(頭出ししない)。★常駐からのみ */
 void play_fanfare(void);      /* 勝ちどきファンファーレ(前景同期・BGM停止)。撃破演出用。終了まで戻らない */
 void play_sink(void);         /* 沈没音(下降。自機撃墜/ゲームオーバー)。前景同期。終了まで戻らない */
-void play_fanfare_open(void); /* 開始ファンファーレ(前景同期・BGM停止)。ステージ開始カード用。終了まで戻らない */
+/* ファンファーレの本体(前景同期・BGM停止)。mel=toneA/har=toneB/len=フレーム数 を n 音。終了まで戻らない。
+   ★開始ファンファーレは表ごと冷たいバンク(bank16 の fanfare_open_impl)に置き、窓越しにこれを呼ぶ。 */
+void fanfare_seq(const u8 *mel, const u8 *har, const u8 *len, u8 n);
 
 /* ★FM(OPLL)の和音を実際に書く。ISR は予約するだけで、ここが VBLANK の仕事の**後**に流す
    (和音の書込みは 9 レジスタ＝約 1ms あり、ISR でやると SAT/色表の転送を押し出す)。 */

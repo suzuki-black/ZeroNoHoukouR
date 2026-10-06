@@ -8,7 +8,7 @@
 #include "sprites.h"
 #include "scroll.h"
 #include "ship.h"          /* 旧版忠実の艦レンダラ */
-#include "pcm.h"           /* voice_play: 結果画面の叫び */
+#include "pcm.h"           /* VOICE_TEKI / VOICE_SOUDAI: 結果画面の叫びの番号 */
 #include "fire.h"
 #include "sound.h"
 #include "hud.h"
@@ -856,7 +856,7 @@ static void stage_intro(void) {
     u8 f;
     draw_stage_card();
     stage_build();                          /* ★カードの裏でゲーム本体の艦をバッファBへ生成(重い) */
-    play_fanfare_open();                    /* 開始ファンファーレ(BGM無音でこれだけ鳴る) */
+    g_shipargs.mode = 10; bcall_to(SHIP_RENDER_BANK);  /* 開始ファンファーレ(BGM無音でこれだけ鳴る。表は bank16) */
     for (f = 0; f < 40; f++) vdp_wait_frame();     /* 少し余韻(旧版と同じ40フレーム) */
     stage_music();                          /* まず海イントロ共通BGM(敵艦が見えたら面別へ切替)。最終面は無音(警報の後に専用曲) */
     stage_begin_display();                   /* 地形を表示=ゲーム開始 */
@@ -907,10 +907,9 @@ static void results_and_fanfare(void) {
        残っている。先に切り替えると、パネルを読む間それが見えた。実機で報告) */
     data_read(ASSET_BANK, panel_off, g_card_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
     /* ★叫び。最終面だけ「総大将撃破！」、他は「敵撃破！」。
-       ★パネルを出す**前**に鳴らす。ファンファーレはこの下の bcall の中(バンク側)で前景再生するので、
-         重ねられない(叫びも前景でブロックする)。「敵撃破！」→ パネル＋ファンファーレ の順になる。
-       ★ここは data_read を呼んだ直後＝カートの文脈。voice_play はカート前提(ramx を触らない)。 */
-    voice_play((u8)((curstage == STAGE_FINAL) ? VOICE_SOUDAI : VOICE_TEKI));
+       ★鳴らすのはバンク側(results_impl → voice_fanfare)。パネルを出してから、ファンファーレと
+         **重ねて**叫ぶ。ここでは語の番号だけを hull に載せて渡す(mode5 では hull を使っていない)。 */
+    g_shipargs.hull = (u8)((curstage == STAGE_FINAL) ? VOICE_SOUDAI : VOICE_TEKI);
     g_shipargs.mode = 5; g_shipargs.ops = (const u8 *)cur_sunk;
     bcall_to(GEN_PLANES_BANK);
 }
