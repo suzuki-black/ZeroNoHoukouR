@@ -940,6 +940,28 @@ static const u8 defeat_fx[5] = {
 };
 static u8 defeat_kind(void) { return (curstage < 5) ? defeat_fx[curstage] : DFX_SINK; }
 
+/* 撃沈の直後の「面ごとの演出」(2面=裂ける / 3面=きりもみ / 4面=火の粉 / 5面=倒れる)を回す。
+   ★**page2=cart の文脈で呼ぶこと。** 戻るときも page2=cart。
+   ★ここは本物の撃沈(defeat_update)と検証ROM(SPINTEST)の**両方から**呼ぶ。以前は同じ並びを
+     二箇所に書き写していて、SPINTEST の常駐だけが 95B 重く、PCM を足した時点でリンクできなくなった。
+   ★順序の意味:
+     ・OVL13 は「裂ける/きりもみ/倒れる」の置き場。PART(火の粉)だけ ovl7 に居るので載せ替えない。
+     ・オーバレイは page2=RAM の文脈でしか呼べない。載せるのは cart、呼ぶのは RAM。
+     ・演出は hot_ram を元絵と内側ループに借りるので、終わったら hot_load() で戻す。
+     ・SCREEN5 への復帰はここで行う(CHGMOD は VRAM を広く消すので結果画面の前に済ませる)。 */
+static void play_defeat_fx(u8 fx) {
+    if (fx != DFX_PART) overlay_load(OVL13_BANK);
+    ramx_use_ram();
+    if (fx == DFX_SPIN) spin_away();
+    else if (fx == DFX_CRACK) crack_open();
+    else if (fx == DFX_TILT) tilt_away();
+    else part_burst();
+    ramx_use_cart();
+    hot_load();
+    vdp_screen5();
+    vdp_palette_game();
+}
+
 static u8 defeat_update(void) {
     u8 done;
     u8 fx = defeat_kind();
@@ -963,21 +985,7 @@ static u8 defeat_update(void) {
         /* ★撃沈の直後: いまの画面を粗く(SCREEN3)して、きりもみしながら遠ざける(A-JAX の絵)。
            元絵と内側ループは hot_ram を借りるので、終わったら hot_load() で戻す。
            SCREEN5 への復帰は結果画面の前にここで行う(CHGMOD は VRAM を広く消す)。 */
-        if (g_ovl_ok && fx != DFX_SINK) {
-            /* ★面ごとの演出(2面の「裂けて開く」・3面の「きりもみ」)は別バンク(OVL13)。
-               撃沈オーバレイ(ovl7)が 8KB に収まらないため分けた。
-               overlay_load は page2=cart の文脈で呼ぶこと。 */
-            if (fx != DFX_PART) overlay_load(OVL13_BANK);   /* PART だけ ovl7 に居る */
-            ramx_use_ram();          /* ★オーバレイは page2=RAM の文脈でしか呼べない */
-            if (fx == DFX_SPIN) spin_away();
-            else if (fx == DFX_CRACK) crack_open();
-            else if (fx == DFX_TILT) tilt_away();
-            else part_burst();
-            ramx_use_cart();
-            hot_load();              /* 演出が hot_ram を借りたので戻す */
-            vdp_screen5();
-            vdp_palette_game();
-        }
+        if (g_ovl_ok && fx != DFX_SINK) play_defeat_fx(fx);   /* 面ごとの演出(中身と順序は play_defeat_fx) */
         results_and_fanfare();
         if (curstage + 1 < STAGE_TOTAL) {   /* 次の面へ(スコア/残機は持ち越し)。5面の次が最終面 */
             curstage++;
@@ -1004,21 +1012,12 @@ u8 stage_update(void) {
     if (g_spin_dbg) {
         g_spin_dbg = 0;
         ramx_use_cart();
-        overlay_load(OVL7_BANK);     /* overlay_load は page2=cart の文脈で呼ぶ */
-        ramx_use_ram();
-        {   u8 fx = defeat_kind();          /* 面の割り当てで試す(curstage を書き換えれば別の面の絵) */
-            if (fx != DFX_PART) { ramx_use_cart(); overlay_load(OVL13_BANK); ramx_use_ram(); }
-            if (fx == DFX_SPIN) spin_away();
-            else if (fx == DFX_CRACK) crack_open();
-            else if (fx == DFX_TILT) tilt_away();
-            else part_burst();
-        }
-        ramx_use_cart();
-        overlay_load(OVL_BANK);
-        hot_load();
-        vdp_screen5();
-        vdp_palette_game();
-        return SC_TITLE;              /* 演出を見たらタイトルへ(画面は描き直さない) */
+        overlay_load(OVL7_BANK);          /* overlay_load は page2=cart の文脈で呼ぶ */
+        play_defeat_fx(defeat_kind());    /* ★本物と同じ関数を通す(面の割り当てで試す。
+                                             curstage を書き換えれば別の面の絵。1面は SINK なので
+                                             この経路では意味のある絵にならない) */
+        overlay_load(OVL_BANK);           /* 既定のオーバレイへ戻す(page2 は cart のまま) */
+        return SC_TITLE;                  /* 演出を見たらタイトルへ(画面は描き直さない) */
     }
 #endif
     if (g_view) { g_view = 0; return SC_TITLE; }   /* ★ビューア表示(カード/結果)はstage_initで完結→タイトルへ戻る */
