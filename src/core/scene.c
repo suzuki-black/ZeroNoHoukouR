@@ -189,7 +189,7 @@ void scene_run(u8 cur) {
                ★ここに置くと**タイトル曲が鳴ったまま**叫べる(曲の差替えは下の scene_bgm_enter で、
                  まだ起きていない)。しかも既にある分岐なので常駐がほとんど増えない。
                ★ステージ間の面送り(stage_intro)はこの分岐を通らないので、面が変わるたびには鳴らない。 */
-            if (g_scene_ret == SC_STAGE) voice_play();
+            if (g_scene_ret == SC_STAGE) voice_play(VOICE_KENKON);
             cur = g_scene_ret;
             g_scene = cur;
             scene_video_enter(cur);

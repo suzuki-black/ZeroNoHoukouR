@@ -27,8 +27,8 @@ u8 __at(PCM_SNARE_ADDR) pcm_snare_buf[PCM_SNARE_SLOT];
    ★素材はバンクに置いたまま、窓(0xA000)から直接読んで鳴らす。RAM へ写さない。
      1 語 1 バンク(8KB)に収めてあるので、窓を向けるだけで先頭から終わりまで読める。
    ★**呼ぶのは常駐から。** 窓を差し替えるので、バンクシーン(タイトル等)からは呼べない。
-   ★いまは「けんこんいってき」1 語だけ(常駐が尽きているため。結果画面の 2 語は常駐を空けてから)。
-     語を選べるようにすると引数か表が要り、そのぶん常駐が増える。鳴る形を先に確かめる。
+   ★語は id で選ぶ(0=乾坤一擲 / 1=敵撃破 / 2=総大将撃破)。バンク番号と長さは自動生成の
+     voice_data.h から取る(Makefile がバンク番号を決め、生成器がヘッダへ出す。二重に持たない)。
    ★★**page2=cart の文脈で呼ぶこと。ここで ramx を触ってはいけない。**
      ramexec.h の規律: 「use_ram と use_cart の間では data_read/bcall を一切呼ばないこと」。
      最初ここで ramx_use_cart() 〜 ramx_use_ram() と囲ったら、**抜けたあとが RAM 側のまま**になり、
@@ -41,16 +41,21 @@ u8 __at(PCM_SNARE_ADDR) pcm_snare_buf[PCM_SNARE_SLOT];
      上限に当たったら音を切って抜ける。音が途中で切れるだけで、ゲームは必ず進む。 */
 #define VOICE_CAP_TICKS 150   /* 約2.5秒。いちばん長い「そうだいしょうげきは」で1.3秒 */
 
-void voice_play(void) {
+static const u8  voice_bank[VOICE_N] = {
+    VOICE_KENKON_ITTEKI_BANK, VOICE_TEKI_GEKIHA_BANK, VOICE_SOUDAISHOU_GEKIHA_BANK };
+static const u16 voice_len[VOICE_N]  = {
+    VOICE_KENKON_ITTEKI_LEN,  VOICE_TEKI_GEKIHA_LEN,  VOICE_SOUDAISHOU_GEKIHA_LEN  };
+
+void voice_play(u8 id) {
     volatile u16 *jf = (volatile u16 *)0xFC9E;
     u16 t0;
     if (!g_pcm) return;
     /* ★スネアに譲らせる。1 声しか無いので、叫んでいる間に拍が来ると上書きされて
        **拍 1 回で叫びが死ぬ**(pcm.s の経緯を参照)。 */
     pcm_lock = 1;
-    bank_data(VOICE_KENKON_ITTEKI_BANK);
+    bank_data(voice_bank[id]);
     g_pcm_src = (u16)BANK_SWAP_WIN;
-    g_pcm_len = VOICE_KENKON_ITTEKI_LEN;
+    g_pcm_len = voice_len[id];
     /* ★本体ループから鳴らすので di〜ei で囲う(ISR の pcm_snare に割り込まれると状態が壊れる)。
        専用の入口を作ると常駐を 6B 食うので、ここで直接囲む。 */
     __asm di __endasm;

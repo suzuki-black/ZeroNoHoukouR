@@ -8,6 +8,7 @@
 #include "sprites.h"
 #include "scroll.h"
 #include "ship.h"          /* 旧版忠実の艦レンダラ */
+#include "pcm.h"           /* voice_play: 結果画面の叫び */
 #include "fire.h"
 #include "sound.h"
 #include "hud.h"
@@ -905,6 +906,11 @@ static void results_and_fanfare(void) {
     /* ★表示を page0 へ切り替えるのは results_impl が page0 を塗り潰した後(page0 にはこの面の開始カードが
        残っている。先に切り替えると、パネルを読む間それが見えた。実機で報告) */
     data_read(ASSET_BANK, panel_off, g_card_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
+    /* ★叫び。最終面だけ「総大将撃破！」、他は「敵撃破！」。
+       ★パネルを出す**前**に鳴らす。ファンファーレはこの下の bcall の中(バンク側)で前景再生するので、
+         重ねられない(叫びも前景でブロックする)。「敵撃破！」→ パネル＋ファンファーレ の順になる。
+       ★ここは data_read を呼んだ直後＝カートの文脈。voice_play はカート前提(ramx を触らない)。 */
+    voice_play((u8)((curstage == STAGE_FINAL) ? VOICE_SOUDAI : VOICE_TEKI));
     g_shipargs.mode = 5; g_shipargs.ops = (const u8 *)cur_sunk;
     bcall_to(GEN_PLANES_BANK);
 }
