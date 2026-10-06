@@ -28,9 +28,13 @@ endif
 ifdef RAMPROBE
   DEFS += -DRAMPROBE
 endif
-# ── ROM を 1MB にする: make clean && make ROM1M=1
-#    ★既定は 512KB。PCM(音声)を入れると 512KB では足りないので用意した。転送先の ESERAMair は 1MB まで。
-ifdef ROM1M
+# ── ROM の容量。★**既定が 1MB** (2026-10-06〜)。
+#    叫び(PCM 音声 3 語 = 12.6KB)を入れた時点で 512KB の空きバンクが尽きた(残り 1 バンク = 8KB)。
+#    転送先の ESERAMair は 1MB まで。openMSX / 実機とも 1MB で確認済み。
+#    512KB に戻したいときだけ: make clean && make ROM512K=1
+ifdef ROM512K
+  ROMSIZE_ARG = --size 512K
+else
   ROMSIZE_ARG = --size 1M
 endif
 ifdef NO_RAMX2
@@ -63,7 +67,7 @@ GAMEVER := $(shell cat VERSION 2>/dev/null || echo 0.0.0)
 #    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
 #    「新旧で構造体レイアウトが食い違うオブジェクトが混在→メモリ破損」という
 #    stale-object バグを踏む(実際に踏んだ)。小規模なので全再コンパイルで十分。
-HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)/boss_frames.h $(BUILD)/stage_grade.h $(BUILD)/snare_data.h
+HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h $(BUILD)/boss_frames.h $(BUILD)/stage_grade.h $(BUILD)/snare_data.h $(BUILD)/voice_data.h
 
 # ★ops.rel(run_ops)は現在どこからも呼ばれていない(艦OPSの解釈は bank16 の ship_render 内に独自実装が
 #   ある)。常駐24KBを197B無駄に食っていたのでリンクから外した。使うときはここへ戻すこと。
@@ -129,6 +133,20 @@ $(BUILD):
 # ★試聴用の wav も一緒に出る(8発並べたもの)。素材をいじったら必ず聴いてから焼くこと。
 $(BUILD)/snare_data.h: tools/gen_snare.py $(SRC)/core/pcm.s | $(BUILD)
 	python3 tools/gen_snare.py $@ $(BUILD)/snare_preview.wav
+
+# ── 叫び(PCM 音声)。1 語 1 バンクに置き、**RAM へ写さず窓から直接鳴らす**。
+#    ★1MB にして空いた 64 番以降を使う(512KB では空きバンクが 1 つしか無かった)。
+#    ★試聴用の wav も出る。抑揚をいじったら必ず聴いてから焼くこと。
+VOICE_BANK_KENKON = 64
+VOICE_BANK_TEKI   = 65
+VOICE_BANK_SOUDAI = 66
+$(BUILD)/voice_data.h: tools/gen_voice.py $(SRC)/core/pcm.s | $(BUILD)
+	python3 tools/gen_voice.py $@ $(BUILD)/voice_preview.wav $(BUILD)/voice \
+	        $(VOICE_BANK_KENKON) $(VOICE_BANK_TEKI) $(VOICE_BANK_SOUDAI)
+$(BUILD)/voice_kenkon_itteki.bin $(BUILD)/voice_teki_gekiha.bin $(BUILD)/voice_soudaishou_gekiha.bin: $(BUILD)/voice_data.h
+ROMPACK_BANKS += --bank $(VOICE_BANK_KENKON) $(BUILD)/voice_kenkon_itteki.bin \
+                 --bank $(VOICE_BANK_TEKI)   $(BUILD)/voice_teki_gekiha.bin \
+                 --bank $(VOICE_BANK_SOUDAI) $(BUILD)/voice_soudaishou_gekiha.bin
 
 $(BUILD)/assets_data.h: tools/gen_assets.mjs | $(BUILD)
 	node tools/gen_assets.mjs 8 $(BUILD)/assets.bin $(BUILD)/assets_data.h
@@ -630,7 +648,7 @@ ifdef DEBUG_PROF
   ROMPACK_BANKS += --bank 31 $(BUILD)/prof_bank.ihx
 endif
 
-GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk assets/cards.bin
+GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin $(BUILD)/voice_kenkon_itteki.bin $(BUILD)/voice_teki_gekiha.bin $(BUILD)/voice_soudaishou_gekiha.bin assets/title.yjk assets/cards.bin
 # ★常駐・バンクシーン・オーバレイ・hot のすべてのリンク結果(.map)を一括で検査する。
 #   未定義シンボルは警告のまま通り、その呼び出しは call 0x0000 ＝実機では本体リセットになる。
 	@if grep -l "Undefined Global" $(BUILD)/*.map >/dev/null 2>&1; then \

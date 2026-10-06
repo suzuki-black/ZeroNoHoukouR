@@ -271,9 +271,12 @@ void vdp_wait_frame(void) {
     volatile u16 *j = (volatile u16 *)0xFC9E;   /* JIFFY */
     u16 t = *j;
 #ifdef DEBUG_PROF
-    { PROF_T0(_pw); while (*j == t) { pcm_service(); } PROF_ADD(PF_WAIT, _pw); }
+    { PROF_T0(_pw); while (*j == t) { } PROF_ADD(PF_WAIT, _pw); }
 #else
-    while (*j == t) { pcm_service(); }
+    /* ★ここには PCM の送出を置かない。毎フレームの待ちは scene.c の frame_sync で、
+       そちらが担当する。この関数は前景でブロックする演出(ファンファーレ・結果画面)の待ちだが、
+       そこでは BGM が止まっていてスネアも鳴らず、叫びは voice_play が自前のループで出す。 */
+    while (*j == t) { }
 #endif
 }
 

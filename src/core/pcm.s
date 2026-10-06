@@ -21,12 +21,16 @@
 ;   コードの書き換えは成立しない。状態は必ず _DATA(RAM) に置き、送出口は素直に call する。
 ;   ★送出口は元から時間を捨てている待ちループなので、call の数十サイクルは実質ただ。
 ;
-; ■ 1 声でよい理由
-;   面中はスネア、タイトルと結果画面は叫び。**同時に鳴る場面が無い**(クラッシュは BGM に入れない)。
-;   声を増やすと足し算と休符の処理が要るが、要らないので入れない。
+; ■ 1 声でよい理由と、その例外
+;   面中はスネア、タイトルと結果画面は叫び。声を増やすと足し算と休符の処理が要るので増やさない。
+;   ★ただし**同時に鳴る場面が無い、は誤りだった**。叫びは「タイトル曲を鳴らしたまま」出すので、
+;     叫んでいる最中にスネアの拍が来る。そのとき pcm_snare が位置と残数を上書きし、
+;     **拍 1 回で叫びが死ぬ**(実測: A4 への書込みが 192 = 叫びの出だし 64 + スネアの全長 128)。
+;   → 1 声しか無いなら**優先順位を決める**しかない。_pcm_lock を立てている間はスネアが譲る。
+;     錠は voice_play が掛け、鳴り終わり(または上限で打ち切り)に外す。
 
 	.module	pcm
-	.globl	_pcm_service, _pcm_start, _pcm_stop, _pcm_snare, _pcm_active, _g_pcm_src, _g_pcm_len, _g_pcm
+	.globl	_pcm_service, _pcm_start, _pcm_stop, _pcm_snare, _pcm_active, _pcm_lock, _g_pcm_src, _g_pcm_len, _g_pcm
 
 PCM_DATA   = 0xA4
 PCM_CTRL   = 0xA5
@@ -51,6 +55,7 @@ pcm_p:		.ds	2	; いま読んでいる位置
 pcm_n:		.ds	2	; 残りバイト数
 pcm_due:	.ds	2	; 次に出す予定の時刻(システムタイマ 16bit)
 _pcm_active::	.ds	1	; 0 以外 = 再生中。鳴り終わりを待つ側が見る
+_pcm_lock::	.ds	1	; 0 以外 = 叫びが鳴っている。スネアは譲る(優先順位。下の _pcm_snare 参照)
 _g_pcm_src::	.ds	2	; C が入れる: サンプルの先頭(RAM 番地)
 _g_pcm_len::	.ds	2	; 同: 長さ(バイト)
 ; ★_g_pcm(1=使ってよい)は **gamestate.c** にある。既定を 1 にしたいが、crt0 は _DATA を
@@ -84,6 +89,9 @@ PCM_SNARE_LEN  = 128		; 32ms @ 3996Hz (枠 256B のうち 128B を使う)
 ;   ・一度その前景用入口を先に作ったが、呼ぶ人が居ないのに常駐を 8B 食い、
 ;     SPINTEST(検証ROM)がその 8B で溢れたので、要るときに作ることにした。
 _pcm_snare::
+	ld	a, (_pcm_lock)		; ★叫びが鳴っている間は譲る
+	or	a, a
+	ret	nz
 	ld	hl, #PCM_SNARE_LEN
 	ld	(_g_pcm_len), hl
 	ld	hl, #PCM_SNARE_ADDR
