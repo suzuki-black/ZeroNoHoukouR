@@ -25,7 +25,7 @@ static const char *const modes[4]  = { "GAME  ", "CARD  ", "RESULT", "ENDING" };
 /* ★FM と PCM は 3 状態を出す(ハードが無ければ切り替えさせない)。幅は 4 文字で揃える。
    PCM は turboR 内蔵なので本来いつでもあるが、エミュレータによっては**システムタイマが動かず**
    鳴らせない。起動時の検出(coldsetup.c の pcm_detect)が落ちた場合も NONE を出す。 */
-static const char *const fmval[3]  = { "OFF ", "ON  ", "NONE" };
+static const char *const fmval[4]  = { "OFF ", "ON  ", "NONE", "ONLY" };   /* ONLY は PCM だけ(PCM_ONLY) */
 static const char *const labels[ROWS] = {
     "DIFFICULTY", "LIVES", "DURABILITY", "STAGE", "CONTINUE", "INVINCIBLE",
     "FM SOUND", "PCM SOUND", "VIEW", "START GAME"
@@ -43,7 +43,7 @@ static const char *val_of(u8 idx) {
     if (idx == 4) return onoff[g_continue ? 1 : 0];
     if (idx == 5) return onoff[g_invinc ? 1 : 0];
     if (idx == 6) return g_opll_hw ? fmval[g_fm ? 1 : 0] : fmval[2];
-    if (idx == 7) return g_pcm_hw ? fmval[g_pcm ? 1 : 0] : fmval[2];
+    if (idx == 7) return g_pcm_hw ? fmval[(g_pcm == PCM_ONLY) ? 3 : (g_pcm ? 1 : 0)] : fmval[2];
     if (idx == 8) return modes[g_mode];
     return (const char *)0;   /* START GAME */
 }
@@ -85,8 +85,9 @@ static u8 change(u8 idx, s8 d) {
             return 1;
         }
     }
-    else if (idx == 7) {   /* PCM SOUND。検出で落ちていれば触らせない(表示は NONE のまま) */
-        u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_pcm);
+    else if (idx == 7) {   /* PCM SOUND。OFF / ON / ONLY(ドラムは PCM だけ)。検出で落ちていれば触らせない(表示は NONE のまま) */
+        s8 v = (s8)g_pcm + d;
+        u8 n = (v < 0) ? 0 : (v > PCM_ONLY) ? PCM_ONLY : (u8)v;
         if (g_pcm_hw && n != g_pcm) {
             /* ★先に止める。g_pcm を 0 にしてからでは pcm_start が素通りするだけで、
                いま出している途中の音は止まらない(FM の fm_silence と同じ順序)。 */

@@ -376,14 +376,16 @@ static void bgm_drum(u8 busy) {
            ★ここは ISR。pcm_snare は ei しない入口になっている(pcm.s 参照)。 */
         if (drmType == 2) pcm_snare();
         /* ★FM も同じ拍で叩く。SFX に譲る PSG と違い、FM は専用の ch なので常に鳴らしてよい */
-        if (fmDrum && drmType) {
+        if (fmDrum && drmType && g_pcm != PCM_ONLY) {
             opll_w(OPLL_RHY_REG, OPLL_RHY_ON);
             opll_w(OPLL_RHY_REG, (u8)(OPLL_RHY_ON | FM_RHY(drmType)));
         }
     }
     drmT--;
     if (busy) return;
-    if (drmType == 0) { psg(10, 0); return; }
+    /* ★PCM ONLY(隠し設定): PSG のドラムも鳴らさない＝ドラムは PCM のスネアだけ(聞き比べ用)。
+       ch C は無音にしておく(drmType==0 と同じ扱い)。 */
+    if (drmType == 0 || g_pcm == PCM_ONLY) { psg(10, 0); return; }
     psg(6, bgm_drmNP[drmType]);
     psg(10, drmVol);
     drmVol = (drmVol > bgm_drmDec[drmType]) ? (u8)(drmVol - bgm_drmDec[drmType]) : 0;
