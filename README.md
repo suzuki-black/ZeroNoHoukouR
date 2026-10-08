@@ -174,6 +174,8 @@ docs/          design & development notes
 - **[Design memo / 次版設計メモ](docs/次版設計メモ_CPU重VDP軽の演出と1943ギミック.md)** — the plan for
   CPU-heavy / VDP-light effects and *1943*-style gimmicks this game grew from.
 - **[Game spec / 仕様書](docs/仕様書.md)** — the play spec and every stage: numbers, mid-bosses, scoring, the hardware limits.
+- **[PCM notes / PCM調査](docs/PCM調査_2026-10-07.md)** — how the turboR PCM is played during the game
+  (one sample per raster interrupt), with the measurements.
 - **[Algorithm notes / アルゴリズム解説](docs/アルゴリズム解説.md)** ·
   **[Performance / 性能と高速化](docs/性能と高速化.md)** · **[Development notes / 苦労と教訓](docs/苦労と教訓.md)**
   — carried over from *Zero no Houkou Kai* and extended.
@@ -387,6 +389,7 @@ docs/          設計・開発ノート
 - **[次版設計メモ](docs/次版設計メモ_CPU重VDP軽の演出と1943ギミック.md)** — 本作の出発点になった、CPU 重・VDP 軽の演出と
   『1943』的なギミックの計画。
 - **[仕様書](docs/仕様書.md)** — 遊びの仕様と全6面の中身（数値・中ボス・スコア・ハードの制約）。
+- **[PCM調査](docs/PCM調査_2026-10-07.md)** — ゲーム中に turboR の PCM を鳴らす方法（走査線割込みで 1 サンプルずつ）と、その実測。
 - **[アルゴリズム解説](docs/アルゴリズム解説.md)** ・ **[性能と高速化](docs/性能と高速化.md)** ・
   **[苦労と教訓](docs/苦労と教訓.md)** — 「零の咆哮 改」から引き継いで書き足したもの。
 

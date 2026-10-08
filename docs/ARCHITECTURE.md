@@ -3,19 +3,19 @@
 > 系譜: 零の咆哮（BattleshipProto, C＋Z80）→ 零の咆哮 改（BattleshipProtoR, turboR 専用エンジン）→ **本作**。
 > 改で作った「常駐を薄く保ち、熱いコードは RAM で実行する」土台の上に、**演出は RAM オーバレイと走査線割込み**で
 > 積み増している。この文書は「何がどこに置いてあるか」と「置き場所の規律」を書く。
-> 数値は 2026-09-23 のビルド実測。
+> 数値は 2026-09-23 のビルド実測。★§1 のバンク表・常駐の残量・RAM の番地は 2026-10-08 に取り直した（ROM 1MB・PCM 対応後）。
 
 ---
 
 ## 1. メモリ地図（Z80 64KB 空間 と ASCII8 MegaROM）
 
 ```
-Z80アドレス空間                          ASCII8 MegaROM(512KB = 64 bank × 8KB)
+Z80アドレス空間                          ASCII8 MegaROM(1MB = 128 bank × 8KB)
 ┌───────────────────────────┐          ┌──────────────────────────────────┐
 │ 0x0000-0x3FFF page0 = BIOS │          │ bank0  ROM 0x00000  ┐             │
 │ 0x4000-0x5FFF ← bank0      │◀────────▶│ bank1  ROM 0x02000  ├ 常駐コード   │
 │ 0x6000-0x7FFF ← bank1      │  ASCII8  │ bank2  ROM 0x04000  ┘ (<=24KB)    │
-│ 0x8000-0x9FFF ← bank2      │  4窓      │ bank3..63           = 冷コード     │
+│ 0x8000-0x9FFF ← bank2      │  4窓      │ bank3..127          = 冷コード     │
 │ 0xA000-0xBFFF ← 窓/オーバレイ│◀────────▶│                       ＋データ     │
 │ 0xC000-0xFFFF page3 = RAM  │          │                                  │
 └───────────────────────────┘          └──────────────────────────────────┘
@@ -24,42 +24,46 @@ Z80アドレス空間                          ASCII8 MegaROM(512KB = 64 bank ×
 
 - **bank0-2 = 常駐コード(0x4010-0x9FFF, 24KB 上限)**: 起動時から居続ける“熱い”コード。
   `rompack.mjs` が **24KB 超過をビルドエラー**にし、毎ビルドで残量を表示する（硬い天井を機械強制）。
-  現況 **24,127B / 24,576B（残り 449B）**。デバッグ版(`DEBUG_FPS=1`)は 24,529B（残り 47B）。
+  現況 **24,532B / 24,576B（残り 44B）**。検証ROMでいちばん厳しいのは `SPINTEST=1` の残り 11B。
 - **0xA000-0xBFFF は二重用途**。page2 が cart の間は **ASCII8 のスワップ窓**（`bcall`/`data_read` が使う）、
   page2 を RAM 化している区間は **RAM オーバレイ領域**（§3.12）。bank3 は「窓の既定ページ」という規律は
   残っているが、**ROM の bank3 自体は 5面の中ボス用オーバレイに使っている**（窓を差し替えたまま帰らなければよい）。
-- **ROM は 512KB**。128KB→256KB→512KB と 2 度拡張した。最終面のボスのコマ（80KB 超）と中ボス5種の絵で、
-  **空きバンクは実質ゼロ**（bank29 は面ごとの撃沈演出 `ovl13`、bank31 は検証ROM/DEBUG_PROF の共用枠）。
+- **ROM は 1MB**（2026-10-06〜）。128KB→256KB→512KB→1MB と 3 度拡張した。512KB の時点で、最終面のボスのコマ
+  （80KB 超）と中ボス5種の絵で空きバンクが尽き、叫び（PCM の音声 3 語）を入れるために 1MB にした。
+  bank64〜66 が音声で、**bank67〜127 は空き**（rompack の表示で 62 バンク＝496KB 未使用）。
+  bank31 は検証ROM/DEBUG_PROF の共用枠。転送先の ESERAMair も 1MB まで。
 
 ### バンク割り当て（現況・`Makefile` の `ROMPACK_BANKS` が真実）
 
 | bank | 用途 | 実測 |
 |---|---|---|
-| 0–2 | **常駐コード＋定数**（上限 24KB。超過は rompack がエラー） | 24,127B |
-| 3 | **5面の中ボス(P-61)用オーバレイ** `ovl12.bin`（≤7,168B。0xBC00〜は背景弾の表と海のひな形） | 7,091B |
+| 0–2 | **常駐コード＋定数**（上限 24KB。超過は rompack がエラー） | 24,532B |
+| 3 | **5面の中ボス(P-61)用オーバレイ** `ovl12.bin`（≤7,168B。0xBC00〜は背景弾の表と海のひな形） | 7,095B |
 | 4 | 開始カードの艦画像 `assets/cards.bin`（1,536B×5艦） | 7,680B |
-| 5–7 | 冷たいバンクシーン（title / config / ending） | 87 / 1,120 / 1,561B |
-| 8 | データバンク：BGM 11曲・艦体OPS・火球・撃破パネル・敵機カラー表・面名/撃沈文・主砲座標・ドラム表 | 6,353B |
+| 5–7 | 冷たいバンクシーン（title / config / ending） | 380 / 1,416 / 1,769B |
+| 8 | データバンク：BGM 11曲・艦体OPS・火球・撃破パネル・敵機カラー表・面名/撃沈文・主砲座標・ドラム表 | 6,756B |
 | 9–15 | タイトル YJK 画（SCREEN12, `assets/title.yjk` 54,272B） | 全埋め |
-| 16 | 冷たい艦レンダラ `ship_render.ihx`（bcall） | 7,614B |
-| 17 | **RAM 実行コード** `hot.bin`（hot.c＋hot_hb.c。起動時に `hot_ram[]` へ転写） | 5,670B |
-| 18 | **通常面の RAM オーバレイ** `ovl.bin`（palette/crush/shock/rot/power/curtain） | 7,510B |
-| 19 | `gen_planes.ihx`（戦闘機8方向の生成・警報パネル・宙返りのコマ焼き・電文/投棄） | 8,081B |
+| 16 | 冷たい艦レンダラ `ship_render.ihx`（bcall） | 7,917B |
+| 17 | **RAM 実行コード** `hot.bin`（hot.c＋hot_hb.c＋hot_pcm.s。起動時に `hot_ram[]` へ転写） | 5,900B |
+| 18 | **通常面の RAM オーバレイ** `ovl.bin`（palette/crush/shock/rot/power/curtain） | 7,425B |
+| 19 | `gen_planes.ihx`（戦闘機8方向の生成・警報パネル・宙返りのコマ焼き・電文/投棄・結果画面） | 8,167B |
 | 20–23 | He 111（4面の中ボス）の絵 32方向×1KB | 全埋め |
-| 24 | `ovl8.bin`（1面の中ボス Fw 200 用オーバレイ） | 7,939B |
-| 25 | `ovl9.bin`（2面の中ボス PBY 用） | 8,191B |
-| 26 | `ovl10.bin`（4面の中ボス He 111×2 用） | 8,127B |
-| 27 | `ovl6.bin`（**最終面**用。≤6,144B。0xB800〜は海の写し 2KB） | 6,047B |
-| 28 | `ovl7.bin`（**撃沈シーン**用。パレット／船尾から沈む／火の粉と破片） | 6,323B |
-| 29 | `ovl13.bin`（**面ごとの撃沈演出**。きりもみ／裂けて開く／視点が倒れる） | 7,760B |
-| 30 | `coldsetup.ihx`（面の準備の配置処理） | 680B |
+| 24 | `ovl8.bin`（1面の中ボス Fw 200 用オーバレイ） | 7,844B |
+| 25 | `ovl9.bin`（2面の中ボス PBY 用） | 8,096B |
+| 26 | `ovl10.bin`（4面の中ボス He 111×2 用） | 8,094B |
+| 27 | `ovl6.bin`（**最終面**用。≤6,144B。0xB800〜は海の写し 2KB） | 6,045B |
+| 28 | `ovl7.bin`（**撃沈シーン**用。パレット／船尾から沈む／火の粉と破片） | 6,591B |
+| 29 | `ovl13.bin`（**面ごとの撃沈演出**。きりもみ／裂けて開く／視点が倒れる） | 8,175B |
+| 30 | `coldsetup.ihx`（面の準備の配置処理・起動時の検出（turboR／FM／PCM）・PCM のスネアの素材） | 1,570B |
 | 31 | 検証ROM（HSTEST/MAGTEST/S3TEST/PARTTEST）と DEBUG_PROF の共用枠（排他） | — |
 | 32–42 | 最終面のボスのコマ（`boss_vram.bin` 60KB ＋ `boss_vram0.bin` 19KB） | 全埋め |
 | 43 | 最終面の開始カードの絵 `boss_misc.bin` | 1,536B |
 | 44–47 | Fw 200 の絵 32方向×1KB | 全埋め |
 | 48–59 | PBY の絵 6段階×16方向×1KB | 全埋め |
 | 60–62 | 各中ボスの影＋P-61 の絵（`bank60/61/62.bin`） | 各 8,192B |
-| 63 | `ovl11.bin`（3面の中ボス 駆逐艦2隻 用） | 7,555B |
+| 63 | `ovl11.bin`（3面の中ボス 駆逐艦2隻 用） | 7,493B |
+| 64–66 | **PCM の叫び**（乾坤一擲／敵撃破／総大将撃破。8bit・3996Hz） | 4,119 / 3,425 / 5,637B |
+| 67–127 | 空き | — |
 
 ### RAM（page3 = 0xC000-0xFFFF）の固定番地
 
@@ -68,13 +72,13 @@ Z80アドレス空間                          ASCII8 MegaROM(512KB = 64 bank ×
 
 | 番地 | 中身 |
 |---|---|
-| 0xC000〜 | 常駐 `_DATA`。この中に `hot_ram[HOT_CAP=5696]` を予約（現況の末尾 `s__HEAP=0xDE36`） |
+| 0xC000〜 | 常駐 `_DATA`。この中に `hot_ram[HOT_CAP=5900]` を予約（現況の末尾 `s__HEAP=0xDFFD`。天井まで 3B） |
 | 0xE000–0xE0FF | **バンクシーン/バンクコードの static**（同時にアクティブなのは1つ。256B を超えると 0xE100 を踏む） |
 | 0xE100–0xE6FF | 開始カードの作業 `g_card_ram[1536]` ＝ 現在の曲 `bgm_ram[1536]`（時期が重ならないので共用） |
 | 0xE500〜 | He 111 の機体色 448B（4面の中ボス中のみ） |
 | 0xE700〜 | 艦体OPS の展開 `ship_ram` ＝ **中ボスの向きデータ `MB_BUF`(1KB)** ＝ 警報の作業行（面の準備と中ボスは同時でない） |
 | 0xE900〜 | 火球の作業 `fb_ram[512]` |
-| 0xEB00〜 | DEBUG_PROF の計測 |
+| 0xEB00–0xEB7F | **PCM のスネア**（128B。起動時に bank30 から写す）。DEBUG_PROF の版では計測がここを使う |
 | 0xEB80〜 | 中ボスの影パターン `MB_SBUF`(128B) |
 | 0xEC00–0xEDFF | **CPU 弾幕 `g_cbul[64]`(512B)**。中ボス戦の間は弾幕が出ないので、**中ボスの背景弾の表(0xEC00)と海のひな形(0xED00)** が借りる。最終面も同じ帯を別用途で借りる |
 | 0xEE00–0xEEFF | **RAM オーバレイの static（256B 厳守）**。超えると 0xEF00 の分割表を壊す（実際に踏んだ） |
@@ -128,7 +132,7 @@ V9938 は **低 slot＝高優先**、かつ **1走査線に出せるのは低 sl
 
 ### 常駐（bank0-2, 24KB）に置くもの＝毎フレーム/割込みで必ず要る核だけ
 crt0＋`_bcall`（`crt0rom.s`）／VDP（`vdp.c`）／バンク切替（`bank.c`）／入力（`input.c`）／シーンFSM（`scene.c`）／
-起動初期化（`sys.c`）／H.TIMI 音ドライバ（`sound.c`）／**走査線割込み（`raster.c`）**／エンティティ（`entity.c`）／
+起動初期化（`sys.c`）／音ドライバ（`sound.c`）／**PCM（`pcm.s`）**／**走査線割込み（`raster.c`）**／エンティティ（`entity.c`）／
 自機（`player.c`）／発砲（`fire.c`）／スクロール（`scroll.c`）／HUD（`hud.c`）／CPU弾幕の器（`curtain.c`）／
 **オーバレイ読み込み（`overlay.c`）**／RAM実行（`ramexec.c` / `hotcode.c`）／面の進行（`scene_stage.c`）。
 
@@ -150,7 +154,8 @@ crt0＋`_bcall`（`crt0rom.s`）／VDP（`vdp.c`）／バンク切替（`bank.c`
 ### 割込み文脈のコードは 0x6000 未満に置く（オーバレイの副作用）
 `overlay_load` は 8KB を複製する。**di で囲むと 223ms 割込みが止まり、BGM ごと固まる**ので、複製中は割込みを通す。
 その代償として、**割込みから呼ばれるコードは複製で差し替わる窓(0x6000-0x7FFF)に居てはいけない**。
-`ras_apply` / `ras_rearm` / `ras_isr` / `sfx_update` / `bgm_update` / `snd_isr` / `sound_init` と、
+`ras_apply` / `ras_rearm` / `ras_isr` / `ras_next` / `ras_tick_wait` / `sfx_update` / `bgm_update` / `snd_isr` / `sound_init` /
+`pcm_snare` / `pcm_start` / `pcm_stop` / `pcm_now` / `pcm_feed` と、
 窓を自分で差し替える `ramexec_page2_to_ram` / `overlay_load` の**番地を Makefile がリンク後に検証**している。
 
 ---
@@ -223,7 +228,8 @@ crt0＋`_bcall`（`crt0rom.s`）／VDP（`vdp.c`）／バンク切替（`bank.c`
 **保留中の印も捨てる**。
 
 ### 3.7 サウンド（`sound.c` / `opll.c`）
-H.TIMI(60Hz) の ISR が `sfx_update` → `bgm_update`。PSG は melody=tone A（効果音に譲らない）、
+毎フレームの合図（212 行目の走査線割込み。§3.13）が `snd_isr` を呼び、`sfx_update` → `bgm_update`。
+（2026-10-08 までは BIOS の VBLANK 割込みから H.TIMI で呼んでいた。）PSG は melody=tone A（効果音に譲らない）、
 bass=tone B（自機弾・被弾・宙返りの効果音が一時占有）、noise C（命中・破壊・雷鳴・地鳴り）。
 曲は 11 本（タイトル0／面別1,3,4,5,6／ED2／海イントロ7／最終面8／中ボス9／警報10）。
 曲データは bank8 にあり、`bgm_play` が現曲だけ RAM(`bgm_ram`)へコピーする＝**ISR はバンク窓を触らない**。
@@ -279,9 +285,10 @@ FM の和音と主旋律は ISR が*予約*して**本体のループ**が `fm_f
 
 ### 3.9 ホットコードの RAM 実行（`hotcode.c` / `banked/hot.c`）★性能の要
 R800 は**カートリッジ ROM のコードフェッチが内蔵 RAM 実行の約3.8倍遅い**。毎フレームのホットパスを
-bank17 に置き、起動時に `hot_load()` が `hot_ram[HOT_CAP=5696]` へ転写して、そこから実行する。
+bank17 に置き、起動時に `hot_load()` が `hot_ram[HOT_CAP=5900]` へ転写して、そこから実行する。
 現在 RAM 実行しているのは `aa_update` / `aa_collide` / `ent_update_all`（behavior 群）と、
-**中ボスの背景弾エンジン**（`hot_hb.c` の `hb_init`/`hb_fan`/`hb_update`/`hb_clear`）。
+**中ボスの背景弾エンジン**（`hot_hb.c` の `hb_init`/`hb_fan`/`hb_update`/`hb_clear`）と、
+**PCM を割込みで出す `hot_pcm.s`**（§3.16。撃沈演出が借りる 0xC600-0xD9FF の外＝末尾に置く。Makefile が番地を検査）。
 当たり判定も RAM 化を試したが速度が変わらなかったので常駐へ戻した。
 **HOT_CAP は hot.bin の実サイズ以上**でなければならない（不足すると転写が末尾を落として常駐を壊す）。Makefile が検証する。
 
@@ -317,6 +324,21 @@ page2 を RAM 化している間、**0xA000-0xBFFF（seg5 の上位8KB）が丸�
 
 ### 3.13 走査線割込み（`raster.c` / `raster.h`）
 H.KEYI(0xFD9A) にフックし、R#19（走査線一致）と S#1 の FH で分割する。表 `g_ras[RAS_MAX=12]` は 0xEF00 固定。
+
+**毎フレームの合図も走査線割込み**（2026-10-08〜）。VBLANK 割込み（R#1 の IE0）は切り、**212 行目の
+走査線割込み**で JIFFY を進め、音（`snd_isr`）を進め、分割を先頭から張り直す。割込みは IM1 のまま、
+**R#15 は普段から 1**にしておく（BIOS の割込み処理が「S#0 のつもりで」読む 0x99 が S#1 になり、FH が
+落ちる。VBLANK のフラグは立たないので BIOS のキー読みなどは走らない）。R#15 を 2 にして S#2 を読む
+`vdp_cmd_wait` は、戻すときに 1 へ戻す。CHGMOD は R#0/R#1/R#19/R#23 を書き戻すので、`ras_pause` /
+`ras_resume` で挟む。張る行は `g_ras_tick`（0=分割 / 1=合図 / 2=PCM のサンプル）で区別する。
+
+- **過ぎた分割はその場で当てる**（合図からの経過時間で判定。5 行手前で「過ぎた」とみなす）。
+  捨てると最終面で拡大を戻す分割が飛び、画面の残りが拡大されたままになった。
+- **合図が遅れたら（1 フレーム以上）分割のついでに合図の仕事をする**。そのときの時刻は「前の合図
+  ＋1 フレーム」で控える（「今」で控えると、合図が分割の位置に居着いた。苦労と教訓 §16-55）。
+- **システムタイマは `pcm_now` で読む**（上位・下位・上位。1 バイトずつ読むと繰り上がりで 1ms 狂う。§16-56）。
+- 理由と検証は [PCM調査_2026-10-07](PCM調査_2026-10-07.md) §4〜§7。
+
 用途は3つ:
 
 - **スプライト表の切替**（R#5: A=0xEF / B=0xE7）＝ 32枚制限を上下の帯で使い回す。
@@ -355,6 +377,21 @@ HUD は全て x>=8 なので影響しない。中ボスが終わるときは 0 �
 どちらも**位置は画面座標で持ち、描く行だけリング(y+cam)へ**置く（スクロールに引きずられない＝敵弾の規約）。
 消すときは海のひな形で戻す。表とひな形は CPU 弾幕の固定帯を借りるので、**ボムで帯を潰されたら読み直す**。
 
+### 3.16 PCM（`pcm.s` / `hot_pcm.s` / `resram.c`）
+turboR 内蔵の 8bit PCM（A4h にサンプル、A5h=03h で BUFF。書いた値は次の 15.7kHz の刻みで出る）。
+1 声だけで、**面中のスネア**（128B・32ms・3996Hz、0xEB00）と**叫び**（bank64〜66。窓から直接読む）を鳴らす。
+叫んでいる間は錠（`pcm_lock`）でスネアが譲る。
+
+- **鳴っている間だけ、次のサンプルの時刻に当たる行にも走査線割込みを張る**（`hot_pcm.s`）。R#19 は 1 本なので、
+  `ras_next` が決めた「次の分割か合図の行」と「次のサンプルの行」を比べて近い方を張る。
+  割込みが出せない上端の 17 行（表示ライン・カウンタ 245〜261）に落ちるサンプルは、その場で時刻を待って出す。
+- サンプルを出す判断は**時刻**（`pcm_due`。前の予定＋64 カウント）。1ms 以上遅れたら予定を今へ合わせ直す。
+- 近すぎる行は張らない（割込みから戻る途中で BIOS が S#1 を読み、立ったばかりの FH を落とす）。
+  サンプルは最低 4 行先、保留の分割と合図は 5 行以内に迫っていたらその場で処理する。
+- 合図の処理（`snd_isr`）の約 1ms は出せない（スネア 1 発に 1〜2 回の小さな段差。以前からある）。
+- 鳴らせない機械（検出で落ちた／設定で OFF）では何もしない。WebMSX は A4h/A5h を実装していないので鳴らない。
+- 設定 `PCM SOUND`: OFF / ON / ONLY（ONLY は PSG と FM のドラムを外す）。
+
 ---
 
 ## 4. ビルド系（`Makefile` / `config.mk` / `tools/*`）
@@ -371,10 +408,11 @@ HUD は全て x>=8 なので影響しない。中ボスが終わるときは 0 �
 ### リンク後の機械検証（Makefile が全部やる）
 1. 常駐コード ≤ 24KB（rompack）
 2. `_ramexec_page2_to_ram` < 0x6000、`_overlay_load` < 0x6000
-3. 割込み文脈の6シンボル（`ras_apply`/`ras_rearm`/`ras_isr`/`sfx_update`/`bgm_update`/`snd_isr`/`sound_init`）< 0x6000
+3. 割込み文脈のシンボル（`ras_*`・`sfx_update`/`bgm_update`/`snd_isr`/`sound_init`・`pcm_*`）< 0x6000
 4. 常駐 `_DATA` の末尾 `s__HEAP` ≤ 0xE000
 5. `hot.bin` ≤ `HOT_CAP`
 6. 各 `ovl*.bin` のサイズ上限と、**オーバレイの static ≤ 256B**
+7. `hot_pcm.s` の番地 ≥ 0xDA00（撃沈演出が hot_ram の 0xC600-0xD9FF を借りても、割込みが壊れたコードへ飛ばない）
 
 ### ビルドの切替
 `DEBUG_FPS`（FPS表示）／`DEBUG_PROF`（µs 計測）／`NO_RAMX2`（page2 の RAM 実行だけ無効）／
@@ -401,7 +439,7 @@ HUD は全て x>=8 なので影響しない。中ボスが終わるときは 0 �
 
 ## 5. 実機/エミュ検証
 
-- ビルド: `make` → `GAME.ROM`（**512KB** ASCII8 MegaROM）。版は `VERSION` が単一の真実。
+- ビルド: `make` → `GAME.ROM`（**1MB** ASCII8 MegaROM）。版は `VERSION` が単一の真実。
 - openMSX は**機種で挙動が変わる**。C-BIOS の機械では走査線割込みが発火せず検証が嘘になるので、
   タイミングを見るときは**実機 BIOS を吸い出した機械**（`My_FS-A1ST_512K`）を使うこと。
 - **実機（turboR 本体）で動かせるようになった**（2026-09-30、ESERAMair 経由）。`make send` で
@@ -424,7 +462,8 @@ HUD は全て x>=8 なので影響しない。中ボスが終わるときは 0 �
 | 起動 | `src/crt0rom.s` | "AB"ヘッダ / page2有効化 / ASCII8窓初期化 / `_bcall` |
 | 常駐 | `src/core/main.c` / `sys.c` / `scene.c` | エントリ・起動初期化・シーンFSM（30fps固定） |
 | 常駐 | `src/core/vdp.c` | VDP レジスタ/パレット/VRAM/コマンド/文字/スプライト（表A・Bのミラー）/スクロール |
-| 常駐 | `src/core/raster.c` | ★走査線割込み（分割表の適用と次段の仕込み） |
+| 常駐 | `src/core/raster.c` | ★走査線割込み（分割表の適用と次段の仕込み・毎フレームの合図） |
+| 常駐 | `src/core/pcm.s` | turboR 内蔵 PCM（スネアと叫びの再生状態・1 サンプル送出・時刻の読み出し） |
 | 常駐 | `src/core/overlay.c` | ★RAM オーバレイの読み込みと入口ラッパ |
 | 常駐 | `src/core/ramexec.c` / `hotcode.c` | ★page1/page2 の動的 RAM 実行 ／ `hot_ram` の予約と転写 |
 | 常駐 | `src/core/entity.c` | エンティティプール＋描画（枠配分）＋当たり判定＋被弾処理 |
@@ -434,14 +473,15 @@ HUD は全て x>=8 なので影響しない。中ボスが終わるときは 0 �
 | 常駐 | `src/core/sound.c` / `gamestate.c` / `input.c` / `bank.c` | 音（SFX＋BGM＋ISR）／共有状態／入力／バンク切替と `data_read` |
 | シーン | `src/scenes/scene_stage.c` | ★全6面の進行（海・中ボス・艦・撃沈・最終面の橋渡し） |
 | シーン(bank) | `scene_title.c` / `scene_config.c` / `scene_ending.c` | タイトル(5) / 隠し設定(6) / エンディング(7) |
-| バンク | `src/banked/hot.c` / `hot_hb.c` | ★RAM 実行されるホットパス ／ 中ボスの背景弾（asm） |
+| バンク | `src/banked/hot.c` / `hot_hb.c` / `hot_pcm.s` | ★RAM 実行されるホットパス ／ 中ボスの背景弾（asm） ／ PCM の割込み送出（asm） |
 | バンク | `src/banked/ship_render.c` / `coldsetup.c` / `gen_planes.c` | 艦レンダラ(16) / 面の準備(30) / 戦闘機生成・警報・電文・投棄・宙返りのコマ焼き(19) |
 | オーバレイ | `ovl_palette.c` / `ovl_crush.c` / `ovl_shock.c` / `ovl_rot.c` / `ovl_power.c` / `ovl_curtain.c` | パレット / メガクラッシュ / 衝撃波 / 宙返り / 増槽 / CPU弾幕 |
 | オーバレイ | `ovl_final.c` / `ovl_sink.c` | 最終面 XB-19 / 撃沈シーン |
 | オーバレイ | `ovl_midboss.c` / `ovl_mb_pby.c` / `ovl_mb_dd.c` / `ovl_mb_he.c` / `ovl_mb_p61.c` / `ovl_bgbul.c` | 中ボス5種 ／ 5面の背景弾エンジン |
-| ツール | `tools/rompack.mjs` | .ihx＋バンク → **512KB** MegaROM。常駐24KB超過とバンク溢れをエラー、空きを表示 |
+| ツール | `tools/rompack.mjs` | .ihx＋バンク → **1MB** MegaROM。常駐24KB超過とバンク溢れをエラー、空きを表示 |
+| ツール | `tools/gen_snare.py` / `gen_voice.py` | PCM のスネアの合成 ／ 叫びの素材の変換（標本化は `pcm.s` の値を読む） |
 | ツール | `tools/gen_symdefs.mjs` / `ihx2bin.mjs` | 常駐シンボルの絶対番地（＋`hb_*` の入口）／ihx→生バイト列 |
 | ツール | `tools/gen_assets.mjs` | BGM11曲＋艦体OPS等 → `build/assets.bin`(bank8)＋`build/assets_data.h` |
 | ツール | `tools/gen_*.py` | 絵の生成（艦・中ボス5種・最終面のボス・警報パネル・津波・パレット・タイトル） |
-| ツール | `tools/openmsx/CBIOS_turboR.xml` | C-BIOS を turboR のハードで動かす openMSX の機種定義 |
+| ツール | `tools/openmsx/CBIOS_turboR.xml` | C-BIOS を turboR のハードで動かす openMSX の機種定義（実験用。ゲームは turboR の検査で止まる） |
 | ツール | `tools/test_*.tcl` | openMSX headless の検証スクリプト群 |
