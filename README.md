@@ -56,7 +56,7 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
 > will not return.
 
 ### Overview
-- **Platform:** MSX turboR software (512 KB ASCII8 mega-ROM). The engine assumes the R800.
+- **Platform:** MSX turboR software (1 MB ASCII8 mega-ROM). The engine assumes the R800.
 - **Genre:** Single-player vertical shoot-'em-up.
 - **Structure:** 6 stages. Stages 1–5 are one continuous scroll each: open sea (a dogfight) →
   a **mid-boss** → open sea again → an enemy capital ship that you must destroy completely. Stage 6
@@ -88,13 +88,20 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
 - **Raster and palette tricks:** mid-frame sprite-table switching to beat the 32-sprite limit,
   shock-wave distortion via R#23, per-band horizontal scrolling, and a palette engine for time of
   day and weather (day / sunset / storm with lightning / morning fog / night).
-- **H.TIMI 60 Hz PSG driver** with **original music** for every stage, the mid-bosses and the final
-  boss, plus sound effects.
+- **60 Hz PSG driver** with **original music** for every stage, the mid-bosses and the final
+  boss, plus sound effects. It is driven by a raster interrupt at the bottom of the picture rather
+  than the VBLANK interrupt, so the same interrupt chain can also serve the PCM below.
 - **MSX-MUSIC (FM) layer.** All eleven tracks are thickened with the YM2413 without adding a single
   byte of music data: the FM rhythm section is struck on the same beats as the PSG drums, a chord
   (root / fifth / octave) is built from the bass part, and the melody is doubled an octave down.
   It is detected at boot (internal MSX-MUSIC first, then an external FM-PAC) and can be switched off
   in the settings menu.
+- **turboR internal PCM.** A sampled snare is struck on the snare beats, layered over the PSG and FM
+  drums, and a voice shouts "*Kenkon itteki!*" as the game starts and "*Teki gekiha!*" /
+  "*Sōdaishō gekiha!*" on the results screen. The game never stops to play it: while a sample is
+  sounding, a raster interrupt is also armed on the line where the next sample is due, so each byte
+  goes out on time (3996 Hz) during play. The settings menu switches it `OFF` / `ON` / `ONLY`
+  (`ONLY` drops the PSG and FM drums so the PCM snare can be heard on its own).
 - **High score** (kept while the machine is on) on the title screen, the stage card, the results
   screen, game over and the ending.
 
@@ -105,7 +112,7 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
 | Space / keyboard **A** / trigger A | Fire · confirm |
 | Keyboard **B** or **M** / trigger B (alone) | Mega crash (bomb) |
 | Fire + B (A+B) | Loop manoeuvre |
-| ↑↑↓↓←→←→ B A on the title screen | Hidden settings menu (difficulty, lives, durability, starting stage, continue, invincibility, **FM sound**, screen viewer) |
+| ↑↑↓↓←→←→ B A on the title screen | Hidden settings menu (difficulty, lives, durability, starting stage, continue, invincibility, **FM sound**, **PCM sound**, screen viewer) |
 
 ### Requirements
 - **Target hardware: MSX turboR only** (FS-A1ST / FS-A1GT). The cartridge checks the machine at boot
@@ -116,6 +123,8 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
   machine the raster interrupts never fire). Play-testing is done on the turboR machine of
   [WebMSX](https://webmsx.org/) **and on real hardware** (since 2026-09-30, over an ESERAMair
   cartridge: `make send` to upload, `make verify` to read it back and compare).
+- **WebMSX does not emulate the turboR PCM**, so the snare and the voices are silent there (the PSG
+  and FM drums still play). Use openMSX or a real turboR to hear them.
 
 ### Building
 Requires [SDCC](https://sdcc.sourceforge.net/), Node.js and Python 3 (with Pillow).
@@ -124,23 +133,20 @@ Requires [SDCC](https://sdcc.sourceforge.net/), Node.js and Python 3 (with Pillo
 make
 ```
 
-This produces `GAME.ROM` (a 512 KB ASCII8 mega-ROM). `make DEBUG_FPS=1` builds a debug ROM with an
+This produces `GAME.ROM` (a 1 MB ASCII8 mega-ROM). `make DEBUG_FPS=1` builds a debug ROM with an
 FPS counter (run `make clean` when switching).
 
 ### Running
-Under openMSX, with a turboR machine (e.g. `Panasonic_FS-A1GT`, which needs its system ROMs):
+Under openMSX, with a turboR machine (e.g. `Panasonic_FS-A1GT` or `Panasonic_FS-A1ST`, which need
+their system ROMs):
 
 ```bash
 openmsx -machine Panasonic_FS-A1GT -carta GAME.ROM -romtype ASCII8
 ```
 
-Without turboR firmware, copy [tools/openmsx/CBIOS_turboR.xml](tools/openmsx/CBIOS_turboR.xml) into
-`~/.openMSX/share/machines/`. It is a machine definition that runs the free C-BIOS MSX2+ ROMs on turboR
-hardware (R800 + S1990), and it is what this project is developed on:
-
-```bash
-openmsx -machine CBIOS_turboR -carta GAME.ROM -romtype ASCII8
-```
+A machine without the turboR system ROMs will not do: on a C-BIOS machine (such as
+[tools/openmsx/CBIOS_turboR.xml](tools/openmsx/CBIOS_turboR.xml)) the cartridge stops at
+`*** MSX turboR REQUIRED ***`, and the raster interrupts the game runs on would not fire there anyway.
 
 `GAME.ROM` also runs in [WebMSX](https://webmsx.org/) (drag-and-drop, turboR machine).
 A pre-built ROM is attached to each [release](https://github.com/suzuki-black/ZeroNoHoukouR/releases).
@@ -154,7 +160,8 @@ src/banked/    banked scenes, RAM overlays (mid-bosses, final boss, sinking, meg
 src/include/   headers
 src/crt0rom.s  ROM boot / ASCII8 mapper init / BSS clear
 tools/         asset generators (gen_*.py / gen_assets.mjs), rompack.mjs (mega-ROM packer),
-               openmsx/ (C-BIOS turboR machine definition)
+               openmsx/ (a C-BIOS turboR machine definition, for experiments only — the game
+               itself refuses to run on it)
 docs/          design & development notes
 ```
 
@@ -176,7 +183,7 @@ docs/          design & development notes
 | 1 | *(untitled)* | — | A BASIC prototype written with [FunctionBASIC](https://github.com/suzuki-black/FunctionBASIC). Currently being remade; no longer in any repository. |
 | 2 | **零の咆哮** *Zero no Houkou* | [BattleshipProto](https://github.com/suzuki-black/BattleshipProto) (private) | Rewritten in C + Z80 (SDCC). 128 KB mega-ROM for MSX2+ / turboR, 5 stages. |
 | 3 | **零の咆哮 改** *Zero no Houkou Kai* | [BattleshipProtoR](https://github.com/suzuki-black/BattleshipProtoR) (public) | A ground-up turboR engine. 256 KB, v0.2.0. The clean, playable baseline. |
-| 4 | **真 零の咆哮** *Shin Zero no Houkou* | this repository | The turboR spectacle built on top of it. 512 KB, v0.3.0. |
+| 4 | **真 零の咆哮** *Shin Zero no Houkou* | this repository | The turboR spectacle built on top of it. 1 MB, v0.3.0. |
 
 1. **The BASIC prototype.** It started as a one-stage vertical shooter in MSX-BASIC (SCREEN 5),
    written in FunctionBASIC's structured dialect and transpiled to line-numbered BASIC. The
@@ -212,14 +219,15 @@ This is an **experimental / study project**, and it is worth being plain about w
 - **The point is the turboR spectacle, not balance.** Every feature here was chosen to show what the
   R800 and V9958 can do in a game loop; difficulty and pacing are tuned by play-testing but come
   second.
-- **It is still a prototype.** Everything is play-tested on WebMSX's turboR as it is built (not yet on
-  real hardware), and problems found there are recorded, with their fixes, in [ROADMAP](docs/ROADMAP.md).
+- **It is still a prototype.** Everything is play-tested as it is built on WebMSX's turboR and on a
+  **real turboR**, and problems found there are recorded, with their fixes, in [ROADMAP](docs/ROADMAP.md)
+  and the [development notes](docs/苦労と教訓.md).
 - **It does not pretend to rival Capcom's *1943*.** It is an attempt to get a little closer to that
   arcade feel on a home computer that was never meant to have it.
 
 ### Feedback & Contributing
-This is an experimental prototype released for feedback. Once the repository is public, please use
-GitHub Issues to report bugs or share impressions. Pull requests are welcome for clearly-scoped fixes.
+This is an experimental prototype released for feedback. Please use GitHub Issues to report bugs or
+share impressions. Pull requests are welcome for clearly-scoped fixes.
 
 ### Credits
 - **Original Concept / Direction:** suzuki-black
@@ -273,7 +281,7 @@ silhouettes may differ from the real thing.)
 > 父も、母も無い。女房も無い。ただ一振りの刀と、還らぬ戦友らへの誓ひばかりを抱いてゐる。
 
 ### 概要
-- **対応機種:** MSX turboR 用ソフト（512KB の ASCII8 メガROM）。R800 を前提に設計しています。
+- **対応機種:** MSX turboR 用ソフト（1MB の ASCII8 メガROM）。R800 を前提に設計しています。
 - **ジャンル:** 1人用・縦スクロールシューティング。
 - **構成:** 全6面。1〜5面は画面カットの無い地続きの縦スクロールで、海（空戦）→ **中ボス** → 再び海
   → 敵の大型艦との戦い、と進みます。艦を**完全に撃破**するとクリア。6面は巨大爆撃機との一騎打ちです。
@@ -302,11 +310,16 @@ silhouettes may differ from the real thing.)
 - **パワーアップ**: 銀色の敵機を落とすと増槽が出て、取るたびに 3方向弾 → 強化 → 貫通。段階は画面下の山形で表示。
 - **走査線とパレットの技**: フレームの途中でスプライト表を切り替えて32枚の上限を越える、R#23 による衝撃波の
   ゆがみ、帯ごとの横スクロール、時間帯と天候（昼／夕焼け／稲光の荒天／朝霧／夜戦）を作るパレットエンジン。
-- **H.TIMI 60Hz 割込みの PSG 音ドライバ**。各面・中ボス・最終面の曲はすべて本作のためのオリジナルで、効果音付き。
+- **60Hz の PSG 音ドライバ**。各面・中ボス・最終面の曲はすべて本作のためのオリジナルで、効果音付き。
+  VBLANK 割込みではなく画面下端の走査線割込みで動かしていて、同じ割込みの流れで下の PCM も出します。
 - **MSX-MUSIC（FM音源）で厚みを足す**。曲データは **1 バイトも増やさず**、同じ譜面から FM を鳴らします。
   PSG のドラムと同じ拍でリズム音源を叩き、ベース譜から和音（根音・5度・オクターブ上）を敷き、
   主旋律を 1 オクターブ下に重ねる——を全 11 曲に。起動時に検出（内蔵 MSX-MUSIC を先に、次に外付け FM-PAC）し、
   設定メニューで OFF にもできます。
+- **turboR 内蔵 PCM**。スネアの拍で PSG・FM のドラムに PCM のスネアを重ね、ゲームを始めるときに「乾坤一擲！」、
+  結果画面で「敵撃破！」「総大将撃破！」と叫びます。鳴らすためにゲームを止めることはありません。鳴っている間は
+  次のサンプルの時刻に当たる行にも走査線割込みを張り、1 バイトずつ時刻どおり（3996Hz）に出します。
+  設定メニューで `OFF` / `ON` / `ONLY` を選べます（`ONLY` は PSG と FM のドラムを外し、PCM のスネアだけを聞く設定）。
 - **ハイスコア**（電源が入っている間だけ）をタイトル・ステージ開始カード・結果画面・ゲームオーバー・
   エンディングに表示。
 
@@ -317,7 +330,7 @@ silhouettes may differ from the real thing.)
 | スペース／キーボード **A**／トリガーA | 発射・決定 |
 | キーボード **B** または **M**／トリガーB（単押し） | メガクラッシュ（ボム） |
 | 撃ちながら B（A＋B） | 宙返り |
-| タイトルで ↑↑↓↓←→←→ B A | 隠しの設定メニュー（難易度・残機・耐久・開始面・継続・無敵・**FM音源**・画面ビューア） |
+| タイトルで ↑↑↓↓←→←→ B A | 隠しの設定メニュー（難易度・残機・耐久・開始面・継続・無敵・**FM音源**・**PCM**・画面ビューア） |
 
 ### 動作環境
 - **MSX turboR 専用**（FS-A1ST / FS-A1GT）。起動時に機種を見て、turboR 未満なら
@@ -327,6 +340,8 @@ silhouettes may differ from the real thing.)
   開発・検証します（**実機 BIOS を吸い出した機種定義**を使ってください。C-BIOS の機械では走査線割込みが
   発火せず、検証が嘘になります）。テストプレイは [WebMSX](https://webmsx.org/) の turboR と、
   **実機の turboR**（2026-09-30 以降。ESERAMair 経由で `make send` → `make verify`）で行っています。
+- **WebMSX は turboR の PCM を鳴らしません**。スネアと叫びは無音になります（PSG と FM のドラムは鳴ります）。
+  PCM を聞くには openMSX か実機を使ってください。
 
 ### ビルド
 [SDCC](https://sdcc.sourceforge.net/)、Node.js、Python 3（Pillow）が必要です。
@@ -335,23 +350,18 @@ silhouettes may differ from the real thing.)
 make
 ```
 
-`GAME.ROM`（512KB の ASCII8 メガROM）が生成されます。`make DEBUG_FPS=1` で FPS 表示付きのデバッグ版になります
+`GAME.ROM`（1MB の ASCII8 メガROM）が生成されます。`make DEBUG_FPS=1` で FPS 表示付きのデバッグ版になります
 （切り替えるときは `make clean`）。
 
 ### 実行
-openMSX では turboR の機種（例: `Panasonic_FS-A1GT`。本体 ROM が必要）で:
+openMSX では turboR の機種（例: `Panasonic_FS-A1GT` や `Panasonic_FS-A1ST`。本体 ROM が必要）で:
 
 ```bash
 openmsx -machine Panasonic_FS-A1GT -carta GAME.ROM -romtype ASCII8
 ```
 
-turboR の本体 ROM が無い場合は、[tools/openmsx/CBIOS_turboR.xml](tools/openmsx/CBIOS_turboR.xml) を
-`~/.openMSX/share/machines/` へ置いてください。無償の C-BIOS（MSX2+）を turboR のハード（R800＋S1990）で
-動かす機種定義で、本作の開発もこれで行っています:
-
-```bash
-openmsx -machine CBIOS_turboR -carta GAME.ROM -romtype ASCII8
-```
+turboR の本体 ROM の無い機種では動きません。C-BIOS の機種（[tools/openmsx/CBIOS_turboR.xml](tools/openmsx/CBIOS_turboR.xml)
+など）では `*** MSX turboR REQUIRED ***` と出て止まり、そもそもゲームが頼っている走査線割込みも発火しません。
 
 `GAME.ROM` は [WebMSX](https://webmsx.org/)（ドラッグ&ドロップ・turboR 機種）でも動作します。
 ビルド済みの ROM は[リリースページ](https://github.com/suzuki-black/ZeroNoHoukouR/releases)にも添付しています。
@@ -365,7 +375,7 @@ src/banked/    バンクのシーン、RAM オーバレイ(中ボス・最終面
 src/include/   ヘッダ
 src/crt0rom.s  ROM起動 / ASCII8マッパー初期化 / BSSゼロ化
 tools/         アセット生成(gen_*.py / gen_assets.mjs), rompack.mjs(メガROM生成),
-               openmsx/(C-BIOS の turboR 機種定義)
+               openmsx/(C-BIOS の turboR 機種定義。実験用で、ゲーム本体はこの機種では起動しない)
 docs/          設計・開発ノート
 ```
 
@@ -384,7 +394,7 @@ docs/          設計・開発ノート
 | 1 | （タイトルなし） | — | [FunctionBASIC](https://github.com/suzuki-black/FunctionBASIC) で書いた BASIC のプロトタイプ。現在リメイク中で、リポジトリには残っていません。 |
 | 2 | **零の咆哮** | [BattleshipProto](https://github.com/suzuki-black/BattleshipProto)（非公開） | C＋Z80（SDCC）で書き直し。MSX2+／turboR 用 128KB メガROM・全5面。 |
 | 3 | **零の咆哮 改** | [BattleshipProtoR](https://github.com/suzuki-black/BattleshipProtoR)（公開） | turboR 専用に一から作ったエンジン。256KB・v0.2.0。遊べる素の土台。 |
-| 4 | **真 零の咆哮** | 本リポジトリ | その上に turboR の見せ場を積んだもの。512KB・v0.3.0。 |
+| 4 | **真 零の咆哮** | 本リポジトリ | その上に turboR の見せ場を積んだもの。1MB・v0.3.0。 |
 
 1. **BASIC のプロトタイプ。** 最初は MSX-BASIC（SCREEN 5）の1面だけの縦スクロールシューティングでした。
    FunctionBASIC の構造化 BASIC で書き、行番号付きの BASIC へ変換して動かしていました。「戦艦」は文字どおり
@@ -421,8 +431,8 @@ docs/          設計・開発ノート
   あのアーケードの感触に少しでも近づけたら——という試みです。
 
 ### フィードバック
-本作はフィードバックのために公開している実験的な試作品です。リポジトリ公開後は、不具合報告や
-感想は GitHub Issues でお願いします。範囲の明確な修正の Pull Request も歓迎します。
+本作はフィードバックのために公開している実験的な試作品です。不具合報告や感想は GitHub Issues で
+お願いします。範囲の明確な修正の Pull Request も歓迎します。
 
 ### クレジット
 - **原案・ディレクション:** suzuki-black
