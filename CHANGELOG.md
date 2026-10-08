@@ -4,6 +4,8 @@
 バージョンは [Semantic Versioning](https://semver.org/lang/ja/)（MAJOR.MINOR.PATCH）に準拠します。
 
 ## [Unreleased]
+
+## [0.4.0] - 2026-10-08
 **turboR 内蔵 PCM が鳴るようになった版**。面中のスネアと叫び 3 語を、ゲームを止めずに鳴らす。
 そのために毎フレームの合図を VBLANK 割込みから走査線割込みへ移した。
 
@@ -40,7 +42,7 @@
 - **WebMSX は turboR の PCM を鳴らさない**（turboR 機種を選んでも、スネアと叫びは無音）。
 - スネアは曲に対して小さめ（PCM の上限まで振っている）。
 - 毎フレームの合図で曲を進める間（約 1ms）は PCM を出せず、スネア 1 発に 1〜2 回小さな段差が入る。
-- **割込みの作り替えは openMSX と WebMSX で確認済み、実機は未確認**。
+- **実機の turboR では未確認**（割込みの作り替えは openMSX で 1・3・5・6 面とエンディング、WebMSX で 1 面を確認）。
 
 ## [0.3.0] - 2026-10-03
 **30fps で安定するようになり、MSX-MUSIC（FM）が鳴るようになった版**。蛇行スクロール中に左端へ
@@ -171,6 +173,7 @@
 - 3面・4面・5面の中ボス戦では衝撃波のゆがみが出ない（1面・2面では出る。どう揃えるかは未定）。
 - 5面の中ボス戦ではメガクラッシュを使えない（津波自体が拡大を使うため）。
 
+[0.4.0]: https://github.com/suzuki-black/ZeroNoHoukouR/releases/tag/v0.4.0
 [0.3.0]: https://github.com/suzuki-black/ZeroNoHoukouR/releases/tag/v0.3.0
 [0.2.0]: https://github.com/suzuki-black/ZeroNoHoukouR/releases/tag/v0.2.0
 [0.1.0]: https://github.com/suzuki-black/ZeroNoHoukouR/releases/tag/v0.1.0
