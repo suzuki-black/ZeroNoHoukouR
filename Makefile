@@ -216,7 +216,8 @@ $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
 	   exit 2; \
 	 fi; \
 	 echo "  overlay_load=$$A (<0x6000 OK)"
-	@for SYM in _ras_apply _ras_rearm _ras_isr _sfx_update _bgm_update _snd_isr _sound_init; do \
+	@for SYM in _ras_apply _ras_rearm _ras_isr _ras_next _ras_tick_wait _sfx_update _bgm_update _snd_isr _sound_init \
+	           _pcm_snare _pcm_start _pcm_stop _pcm_now _pcm_feed; do \
 	   A=$$(awk -v n=$$SYM '$$2==n{print $$3}' $(BUILD)/rom.noi); \
 	   if [ -z "$$A" ]; then echo "ERROR: rom.noi に $$SYM が無い"; exit 2; fi; \
 	   if [ $$(printf '%d' $$A) -ge $$(printf '%d' 0x6000) ]; then \

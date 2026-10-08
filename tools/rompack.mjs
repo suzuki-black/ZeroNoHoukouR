@@ -1,4 +1,4 @@
-// rompack.mjs — .ihx(常駐コード) + 任意のバンク(コード/データ) → MegaROM(ASCII8, 512KB)
+// rompack.mjs — .ihx(常駐コード) + 任意のバンク(コード/データ) → MegaROM(ASCII8, 512KB / 1MB)
 //
 //  ROM レイアウト(このプロジェクトの規律。ここで機械的に強制する):
 //    bank0-2  ROM 0x00000-0x05FFF  常駐コード(.ihx の 0x4010-0x9FFF)  ← 上限 24KB。超過=エラー
