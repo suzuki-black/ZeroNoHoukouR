@@ -148,7 +148,8 @@ A machine without the turboR system ROMs will not do: on a C-BIOS machine (such 
 [tools/openmsx/CBIOS_turboR.xml](tools/openmsx/CBIOS_turboR.xml)) the cartridge stops at
 `*** MSX turboR REQUIRED ***`, and the raster interrupts the game runs on would not fire there anyway.
 
-`GAME.ROM` also runs in [WebMSX](https://webmsx.org/) (drag-and-drop, turboR machine).
+`GAME.ROM` also runs in [WebMSX](https://webmsx.org/) (drag-and-drop, turboR machine). **The turboR PCM
+is not emulated there** — even with the turboR machine selected, the snare and the voices stay silent.
 A pre-built ROM is attached to each [release](https://github.com/suzuki-black/ZeroNoHoukouR/releases).
 
 ### Project structure
@@ -363,7 +364,8 @@ openmsx -machine Panasonic_FS-A1GT -carta GAME.ROM -romtype ASCII8
 turboR の本体 ROM の無い機種では動きません。C-BIOS の機種（[tools/openmsx/CBIOS_turboR.xml](tools/openmsx/CBIOS_turboR.xml)
 など）では `*** MSX turboR REQUIRED ***` と出て止まり、そもそもゲームが頼っている走査線割込みも発火しません。
 
-`GAME.ROM` は [WebMSX](https://webmsx.org/)（ドラッグ&ドロップ・turboR 機種）でも動作します。
+`GAME.ROM` は [WebMSX](https://webmsx.org/)（ドラッグ&ドロップ・turboR 機種）でも動作します。ただし **WebMSX は
+turboR の PCM を鳴らしません**。turboR 機種を選んでも、スネアと叫びは無音です。
 ビルド済みの ROM は[リリースページ](https://github.com/suzuki-black/ZeroNoHoukouR/releases)にも添付しています。
 
 ### ディレクトリ構成
