@@ -1,7 +1,8 @@
 ; pcm.s — turbo R 内蔵 PCM の非同期再生(1 声)。
 ;
-; ★狙いは「ゲームを止めずに鳴らす」。鳴り終わるまで待つのではなく、**ゲームが待っている合間に
-;   1 サンプルずつ出す**。止まるのは PCM の長さではなく、待ちループを 1 周するたびの数十サイクルだけ。
+; ★狙いは「ゲームを止めずに鳴らす」。鳴り終わるまで待つのではなく、**鳴っている間だけ走査線割込みを
+;   サンプルの行にも張り、1 サンプルずつ時刻どおりに出す**(hot_pcm.s。raster.c の ras_next が呼ぶ)。
+;   ★最初は「ゲームが待っている合間」に出していたが、面中は待ち時間が 6〜20% しか無く崩れた(2026-10-08 に変更)。
 ;
 ; ポート
 ;   A4h 書込: サンプル値(8bit unsigned、中心 0x80)
@@ -18,8 +19,7 @@
 ;   先行実装は送出口の命令を書き換えて「鳴っていないときは JR 1 命令」にしているが、あれは
 ;   **プログラム全体を RAM へ展開して動かしている**から成立する。本作の常駐は
 ;   「カート ROM」と「RAM 複製」の 2 つの姿を持ち、どちらが見えているかが場面で変わるので、
-;   コードの書き換えは成立しない。状態は必ず _DATA(RAM) に置き、送出口は素直に call する。
-;   ★送出口は元から時間を捨てている待ちループなので、call の数十サイクルは実質ただ。
+;   コードの書き換えは成立しない。状態は必ず _DATA(RAM) に置き、出す側(hot_pcm.s)は素直に call する。
 ;
 ; ■ 1 声でよい理由と、その例外
 ;   面中はスネア、タイトルと結果画面は叫び。声を増やすと足し算と休符の処理が要るので増やさない。
@@ -30,7 +30,7 @@
 ;     錠は voice_play / voice_fanfare が掛け、_pcm_stop(鳴り終わり・打ち切り)が外す。
 
 	.module	pcm
-	.globl	_pcm_service, _pcm_start, _pcm_stop, _pcm_snare, _pcm_active, _pcm_lock, _g_pcm_src, _g_pcm_len, _g_pcm
+	.globl	_pcm_start, _pcm_stop, _pcm_snare, _pcm_active, _pcm_lock, _g_pcm_src, _g_pcm_len, _g_pcm
 
 PCM_DATA   = 0xA4
 PCM_CTRL   = 0xA5
@@ -53,7 +53,7 @@ PCM_PERIOD = 64			; 64 x 3.911us = 250.3us = 3996Hz
 ; ★状態は必ず RAM(_DATA)。crt0 が 0 クリアするので初期値は持てない(持たせない作りにしてある)
 pcm_p:		.ds	2	; いま読んでいる位置
 pcm_n:		.ds	2	; 残りバイト数
-pcm_due:	.ds	2	; 次に出す予定の時刻(システムタイマ 16bit)
+_pcm_due::	.ds	2	; 次に出す予定の時刻(システムタイマ 16bit)。★大域: hot_pcm.s(割込みで出す)も読む
 _pcm_active::	.ds	1	; 0 以外 = 再生中。鳴り終わりを待つ側が見る
 _pcm_lock::	.ds	1	; 0 以外 = 叫びが鳴っている。スネアは譲る(優先順位。下の _pcm_snare 参照)
 _g_pcm_src::	.ds	2	; C が入れる: サンプルの先頭(RAM 番地)
@@ -120,7 +120,7 @@ _pcm_start::
 	ld	a, #0x03		; BUFF=1, MUTE 解除(bit1=1), D/A
 	out	(PCM_CTRL), a
 	call	pcm_now			; 最初の 1 つはすぐ出す
-	ld	(pcm_due), hl
+	ld	(_pcm_due), hl
 	ld	a, #1
 	ld	(_pcm_active), a
 	jr	pcm_feed
@@ -140,58 +140,28 @@ _pcm_stop::
 	out	(PCM_DATA), a
 	ret
 
-; 今の時刻(16bit)を HL へ。下位(E6h)から読むこと
+; 今の時刻(16bit)を HL へ。壊すのは A とフラグ。★時刻はすべてここで読む(raster.c / hot_pcm.s も)
+; ★上位・下位・上位と読み、上位が揃うまで読み直す。下位→上位と 1 回ずつ読むと、その間に下位が FFh→00h へ
+;   繰り上がったとき 256 カウント(1ms)大きく読める。openMSX で実際に起き、合図の時刻を待つループ
+;   (raster.c の ras_tick_wait)がまだなのに抜けて、合図が 1 フレーム落ちた(2026-10-08)。
+;   ★下位を読むと上位が固定される作りの機械でも、この読み方なら揃った値になる。
+_pcm_now::			; ★大域: raster.c と hot_pcm.s も呼ぶ
 pcm_now:
+	in	a, (PCM_TIMER + 1)
+	ld	h, a
 	in	a, (PCM_TIMER)
 	ld	l, a
 	in	a, (PCM_TIMER + 1)
-	ld	h, a
+	cp	a, h
+	jr	nz, pcm_now
 	ret
 
-; ---------------------------------------------------------------------------
-; void pcm_service(void) — 送出口。ゲームの待ちループから呼ぶ。
-;   予定の時刻を過ぎていたら次の 1 バイトを出す。
-;   ★壊すのは A とフラグだけ(HL/DE は中で退避する)。鳴っていなければ 3 命令で戻る。
-; ---------------------------------------------------------------------------
-; ★★ここは **di で囲う**。本体ループから呼ばれるので、中で割込みが入ると
-;   ISR(bgm_drum → pcm_snare)が新しい音を仕込み、戻ってきたこちらが**古い値**を書き戻す。
-;   とくに pcm_feed の「残数を読む → 1 引く → 書き戻す」の途中で割り込まれると、
-;   新しい音の残数が 0 になって**次の 1 サンプルで止まる**。
-;   実測(openMSX、戦艦の区間で 60 秒): 発火 101 回のうち **約 3 割が 1 サンプルで死んでいた**。
-;   潰れ方が拍の間隔と無関係(117ms でも満額、234ms でも 1 発)だったのが手掛かり。
-;   ★設計の初期に「競合はあるが影響は限定的」と判断して放置したもの。限定的ではなかった。
-;   ★囲う区間は数十サイクル。割込みの遅れは無視できる。
-_pcm_service::
-	ld	a, (_pcm_active)
-	or	a, a
-	ret	z
-	di
-	push	hl
-	push	de
-	call	pcm_now			; HL = 今
-	ld	de, (pcm_due)
-	or	a, a
-	sbc	hl, de			; HL = 今 - 予定
-	jr	z, pcm_svc_go
-	jp	m, pcm_svc_no		; まだ予定より前
-	ld	a, h			; 1ms(256 カウント)以上の遅れ: 予定を今に合わせ直す
-	or	a, a
-	jr	z, pcm_svc_go
-	call	pcm_now
-	ld	(pcm_due), hl
-pcm_svc_go:
-	pop	de
-	pop	hl
-	call	pcm_feed
-	ei
-	ret
-pcm_svc_no:
-	pop	de
-	pop	hl
-	ei
-	ret
+; ★待ちループから 1 サンプルずつ出す送出口(pcm_service)は 2026-10-08 に外した。
+;   面中は待ち時間が全体の 6〜20% しか無く、スネアが「ぶっ」と崩れた(docs/PCM調査_2026-10-07.md)。
+;   いまは鳴っている間、走査線割込みが時刻どおりに出す(hot_pcm.s。raster.c の ras_next が呼ぶ)。
 
 ; ---- 次の 1 バイトを出す(時刻の判定は呼ぶ側が済ませている)。壊すのは A とフラグだけ ----
+_pcm_feed::			; ★大域: hot_pcm.s(割込みで出す)も呼ぶ
 pcm_feed:
 	push	hl
 	ld	hl, (pcm_p)
@@ -199,14 +169,14 @@ pcm_feed:
 	out	(PCM_DATA), a		; BUFF=1 なので次の 15.7kHz の刻みで D/A へ
 	inc	hl
 	ld	(pcm_p), hl
-	ld	hl, (pcm_due)		; 次の予定は「今」ではなく「前の予定 + 間隔」
+	ld	hl, (_pcm_due)		; 次の予定は「今」ではなく「前の予定 + 間隔」
 	ld	a, l			; (遅れた分を次で詰めるので再生速度が伸びない)
 	add	a, #PCM_PERIOD
 	ld	l, a
 	jr	nc, pcm_due_ok
 	inc	h
 pcm_due_ok:
-	ld	(pcm_due), hl
+	ld	(_pcm_due), hl
 	ld	hl, (pcm_n)
 	dec	hl
 	ld	(pcm_n), hl

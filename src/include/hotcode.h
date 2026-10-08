@@ -15,7 +15,7 @@
 #include "types.h"
 
 #define HOT_BANK 17     /* rompack --bank 17 build/hot.bin(冷たいバンク帯 bank4+ の空き) */
-#define HOT_CAP  5696   /* hot_ram 予約バイト数。★中ボスの背景弾(hot_hb.c, asm で約0.6KB)で 5312→5696。hot.bin(実測=aa_update+aa_collide+ent_update_all+behavior群+表)以上、
+#define HOT_CAP  5900   /* hot_ram 予約バイト数。★中ボスの背景弾(hot_hb.c, asm で約0.6KB)で 5312→5696。面中の PCM(hot_pcm.s。末尾に置く)で 5696→5900(★常駐 RAM の天井 0xE000 まで残り 3B)。hot.bin(実測=aa_update+aa_collide+ent_update_all+behavior群+表)以上、
                            かつ常駐DATA末尾が 0xE000(バンクデータ)未満に収まること。★page3のRAM実行枠は 0xE000 が天井。
                            冷データ g_card_ram(0xE100)/ship_ram(0xE700)/fb_ram(0xE900) を高位固定へ退避して枠を確保済み。
                            ★hot.c 肥大時はここを必ず更新すること(不足すると hot_load のコピーが末尾を落とし、
@@ -31,6 +31,7 @@
 #define HOT_SLOT_HB_FAN    4  /* 自機狙いの n-way(元の弾のスプライトの左上 ox,oy) */
 #define HOT_SLOT_HB_UPDATE 5  /* 動かす・描く・自機との当たり(ボムの後は読み直す) */
 #define HOT_SLOT_HB_CLEAR  6  /* 全部を海へ戻し、借りた帯を CPU 弾幕へ返す */
+#define HOT_SLOT_PCM_ARM   7  /* 面中の PCM: 次の行(サンプルか分割・合図)を張る(hot_pcm.s。raster.c が呼ぶ) */
 /* ★中ボスのオーバレイから呼ぶ入口。番地は tools/gen_symdefs.mjs が hot_ram+3*slot で resident_syms に足す(常駐にラッパは置かない)。 */
 void hb_init(void);
 void hb_fan(s16 ox, s16 oy, u8 n);

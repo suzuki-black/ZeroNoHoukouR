@@ -10,6 +10,7 @@
         .globl  _hot_hb_fan
         .globl  _hot_hb_update
         .globl  _hot_hb_clear
+        .globl  _hot_pcm_arm
         .area   _CODE
         jp      _hot_aa_update            ; slot0 (HOT_SLOT_AA_UPD)
         jp      _hot_aa_collide           ; slot1 (HOT_SLOT_AA_COL)
@@ -18,3 +19,4 @@
         jp      _hot_hb_fan               ; slot4 (HOT_SLOT_HB_ADD)
         jp      _hot_hb_update            ; slot5 (HOT_SLOT_HB_UPDATE)
         jp      _hot_hb_clear             ; slot6 (HOT_SLOT_HB_CLEAR)
+        jp      _hot_pcm_arm              ; slot7 (HOT_SLOT_PCM_ARM) 面中の PCM を走査線割込みで(hot_pcm.s)

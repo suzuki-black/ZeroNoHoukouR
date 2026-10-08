@@ -97,6 +97,7 @@ extern u8 g_ras_i;                /* 次に処理する分割の添字(ISR が�
 void raster_init(void);   /* 起動時1回: H.KEYI へフックを設置(sound_init の後に呼ぶ) */
 void raster_arm(u8 n);    /* 今フレームの分割数を確定(表の更新だけ。R#19 の仕込みは VBLANK 割込みが行う) */
 void raster_off(void);    /* 分割を止める(シーン遷移/バンキング前)。走査線割込み自体は止めない(毎フレームの合図に使う) */
+void ras_next(void);      /* 次の割込みの行を張り直す(割込みの中か di の中で。PCM が鳴っていれば hot_pcm.s に任せる) */
 void ras_pause(void);     /* CHGMOD の前: 走査線割込みを止める(di のまま戻る) */
 void ras_resume(void);    /* CHGMOD の後・起動時: R#15=1 / IE0 を切る / IE1 を立てる / 次の合図を張る */
 

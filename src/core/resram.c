@@ -61,6 +61,7 @@ static void voice_start(u8 id) {
        専用の入口を作ると常駐を 6B 食うので、ここで直接囲む。 */
     __asm di __endasm;
     pcm_start();
+    ras_next();     /* ★最初のサンプルの割込みをすぐ張る(呼ばないと次の合図まで最大 16ms 待つ。raster.c) */
     __asm ei __endasm;
 }
 
@@ -68,14 +69,14 @@ void voice_play(u8 id) {
     volatile u16 *jf = (volatile u16 *)0xFC9E;
     u16 t0 = *jf;
     voice_start(id);
-    while (pcm_active && (u16)(*jf - t0) < VOICE_CAP_TICKS) pcm_service();
+    while (pcm_active && (u16)(*jf - t0) < VOICE_CAP_TICKS) { }   /* ★出すのは走査線割込み(hot_pcm.s) */
     pcm_stop();         /* ★錠も外れる。鳴っていなければ何もしない(pcm.s) */
     bank_restore();
 }
 
 /* ★叫びとファンファーレを**重ねて**鳴らす(結果画面)。**バンク(results_impl)から呼ぶ。**
    ・ファンファーレは前景で尺を取る(fanfare_seq → vdp_wait_frame)。その待ちの中で
-     pcm_service が回るので、PSG を鳴らしながら叫べる。
+     走査線割込みが叫びのサンプルを出すので、PSG を鳴らしながら叫べる。
    ・呼び元のバンクコードは窓(0xA000)の中で動いている。叫びの素材も同じ窓から読むので、
      鳴らしている間は窓を音声バンクへ向け、**戻る前に呼び元のバンク(g_bank)へ向け直す**。
      ここで bank_restore()(既定 bank3)を使うと、呼び元のコードが消えて戻り先を失う。

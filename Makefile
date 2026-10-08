@@ -301,14 +301,20 @@ $(BUILD)/prof_bank.ihx: $(SRC)/banked/prof_bank.c $(HDRS) $(BUILD)/bankhead.rel 
 # ── RAM実行モジュール(hot.c) ──
 # 常駐が予約した hot_ram[] の実番地(rom.noi の _hot_ram)へ --code-loc してリンク→ ihx→bin へ変換。
 # rompack は .bin を bank17 先頭から配置し、起動時 hot_load() が hot_ram[] へ転写する。
-$(BUILD)/hot.ihx: $(SRC)/banked/hot.c $(SRC)/banked/hot_hb.c $(HDRS) $(BUILD)/hothead.rel $(BUILD)/resident_syms.rel
+$(BUILD)/hot.ihx: $(SRC)/banked/hot.c $(SRC)/banked/hot_hb.c $(SRC)/banked/hot_pcm.s $(HDRS) $(BUILD)/hothead.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/hot.c -o $(BUILD)/hot.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(INC) $(SRC)/banked/hot_hb.c -o $(BUILD)/hot_hb.rel   # ★中ボスの背景弾はサイズ優先
+	sdasz80 -o $(BUILD)/hot_pcm.rel $(SRC)/banked/hot_pcm.s   # ★面中の PCM(割込みから呼ぶ)。必ずリンクの最後=hot_ram の末尾
 	@HA=$$(awk '/^DEF _hot_ram /{print $$3}' $(BUILD)/rom.noi); \
 	 if [ -z "$$HA" ]; then echo "ERROR: rom.noi に _hot_ram が無い(hotcode.c を常駐にリンクせよ)"; exit 2; fi; \
 	 echo "  hot.c を hot_ram=$$HA へリンク"; \
 	 sdcc -m$(TARGET) --no-std-crt0 --code-loc $$HA --data-loc 0xE000 \
-	     $(BUILD)/hothead.rel $(BUILD)/hot.rel $(BUILD)/hot_hb.rel $(BUILD)/resident_syms.rel -o $@
+	     $(BUILD)/hothead.rel $(BUILD)/hot.rel $(BUILD)/hot_hb.rel $(BUILD)/hot_pcm.rel $(BUILD)/resident_syms.rel -o $@
+	@P=$$(awk '/_hot_pcm_arm/{print $$1; exit}' $(BUILD)/hot.map); \
+	 if [ -z "$$P" ] || [ $$((16#$$P)) -lt $$((0xDA00)) ]; then \
+	   echo "ERROR: hot_pcm(割込みから呼ぶ)が 0x$$P。撃沈演出が借りる hot_ram の 0xC600-0xD9FF と重なり、演出中に割込みが壊れたコードへ飛ぶ。hot.bin の末尾(0xDA00 以降)に置くこと"; rm -f $@; exit 3; \
+	 fi; \
+	 echo "  hot_pcm=0x$$P (>=0xDA00 OK。撃沈演出が借りる範囲の外)"
 $(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs $(SRC)/include/hotcode.h
 	@HA=$$(awk '/^DEF _hot_ram /{print $$3}' $(BUILD)/rom.noi); \
 	 node tools/ihx2bin.mjs $(BUILD)/hot.ihx $$HA $@; \

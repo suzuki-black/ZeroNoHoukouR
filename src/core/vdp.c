@@ -170,19 +170,6 @@ void vdp_cmd_wait(void) {
         ld   a, #0x8F          ; R#15 = 1 (普段の値へ戻す。raster.c: BIOS が読む 0x99 を S#1 にして FH を落とさせる)
         out  (0x99), a
         ei
-        ;; ★PCM の送出。ここは VDP の完了待ちで**元から捨てている時間**。
-        ;;   ★一度「途切れ時間の 0.8% しか占めていない」として外したが、**その測定は
-        ;;     frame_sync に送出口が無かった頃のもので、いまの状況には当てはまらなかった**。
-        ;;     frame_sync の待ちは「既に n ティック過ぎていたら即出る」ので、**フレームが重くて
-        ;;     予算を使い切ると 1 周も回らず送出がゼロになる**。実測 27fps で重いフレームは常態。
-        ;;     そのときスネアは pcm_start が出す 1 サンプルだけで終わっていた
-        ;;     (発火 101 回中 40 回が「1 サンプルで死ぬ」。拍の間隔とは無関係だったのが手掛かり)。
-        ;;     重いフレームほど VDP の完了待ちが伸びるので、ここは frame_sync が空振りする場面を
-        ;;     埋める位置にある。**条件が変わったら測り直すこと。**
-        ;;   ★CE の結果はキャリーに載っているので AF を守ること(call はフラグを壊す)。
-        push af
-        call _pcm_service
-        pop  af
         jp   c, 00001$
     __endasm;
 #ifdef DEBUG_PROF
@@ -277,9 +264,7 @@ void vdp_copy_t(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
     vdp_lmmm(sx, sy, dx, dy, nx, ny, 0x98);
 }
 
-/* ★VBLANK 待ち。JIFFY(0xFC9E、BIOS が毎 VBLANK に進める 16bit)が変わるまで待つ。
-   ★中で PCM の送出口を叩く。ここは**元から捨てている時間**なので 1 サンプル出すコストは実質ただ。
-     pcm_service は HL/DE を守り、壊すのは A とフラグだけ。
+/* ★フレーム待ち。JIFFY(0xFC9E。raster.c の毎フレームの合図が進める 16bit)が変わるまで待つ。
    ★一度 asm で書き直してみたが **4B 太った**(SDCC の方が上手かった)。C のままにしておく。 */
 void vdp_wait_frame(void) {
     volatile u16 *j = (volatile u16 *)0xFC9E;   /* JIFFY */
@@ -287,11 +272,9 @@ void vdp_wait_frame(void) {
 #ifdef DEBUG_PROF
     { PROF_T0(_pw); while (*j == t) { } PROF_ADD(PF_WAIT, _pw); }
 #else
-    /* ★ここは前景でブロックする演出(ファンファーレ・結果画面)の待ち。
-       ★送出口を置くのは、**ファンファーレと叫びを重ねる**ため(voice_fanfare)。ファンファーレは
-         ここで尺を取るので、待っている間に叫びを 1 サンプルずつ出す。
-         以前は「BGM が止まっていてスネアも鳴らない」として置いていなかった。 */
-    while (*j == t) { pcm_service(); }
+    /* ★ここは前景でブロックする演出(ファンファーレ・結果画面)の待ち。叫びを重ねても、PCM は
+       走査線割込みが出す(hot_pcm.s)ので、ここで送り出す必要は無い。 */
+    while (*j == t) { }
 #endif
 }
 
