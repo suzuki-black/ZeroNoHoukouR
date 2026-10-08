@@ -99,6 +99,22 @@ static void end_putc(u8 px, u8 py, char c) {
     }
 }
 
+/* ★VDP のコマンド(行を消す vdp_fill = LMMV)がまだ動いているか。**待たずに**見るだけ。
+   行の最初の 1 文字は、その行を消す塗りがまだ動いていたら描かずに次のフレームへ回す。
+   LMMV は 1 ドットずつ塗るので 256×16 で 1 フレーム近くかかり、描いた文字の上から塗っていた
+   (先頭行「IN HIS LONE ZERO」の I が「'」になっていた。ユーザーが指摘。2026-10-08 に openMSX で確認、
+    割込みの作り替えの前の版でも同じ)。vdp_cmd_wait で待つとスクロールがカクつくので(冒頭の注記)待たない。 */
+__sfr __at(0x99) END_CTRL;
+static u8 end_cmd_busy(void) {
+    u8 s;
+    __asm di __endasm;
+    END_CTRL = 2; END_CTRL = 0x8F;   /* R#15 = 2(S#2 = CE を見る) */
+    s = END_CTRL;
+    END_CTRL = 1; END_CTRL = 0x8F;   /* R#15 = 1(普段の値。raster.c) */
+    __asm ei __endasm;
+    return s & 1;
+}
+
 /* エンディング本体(ブロッキング)。スクロール→THE END→タイトルへ。
    ★行を事前にバッファBへ描く方式(B=最大31行の固定上限)をやめ、スクロールで下端に入る行だけを
      その場で直接描画する(=クレジット行数の上限が消える=融通が利く)。描画位置は可視域(212px)の
@@ -142,7 +158,8 @@ static u8 run_ending(void) {
                   if (rrow < (s16)NROWS && credits[rrow][0]) { rx = center_x(credits[rrow]); rci = 0; }  /* 範囲内で文字あり→描画開始 */
                   /* 空行/終端後は rci=0xFF のまま=次フレームで次行へ(クリアのみ) */
               }
-          } else {                                  /* 行の途中: 1文字だけ描く(最小blit=cmd_wait無し) */
+          } else if (rci != 0 || !end_cmd_busy()) { /* 行の途中: 1文字だけ描く(最小blit=cmd_wait無し)。
+                                                       ★最初の文字は行を消す塗りが終わってから(end_cmd_busy) */
               end_putc((u8)(rx + rci * 8), (u8)(((u16)rrow * 16) & 0xFF), credits[rrow][rci]);
               rci++;
               if (credits[rrow][rci] == 0) rci = 0xFF;         /* 行末→完了 */
