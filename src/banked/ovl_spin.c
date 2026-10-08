@@ -396,11 +396,13 @@ static void frame(void) {
 void spinfx_enter_s3(void) {
     u8 y, x, i;
     raster_off();
+    ras_pause();               /* ★CHGMOD の前後は走査線割込みを止めて張り直す(raster.c。CHGMOD は R#0/R#1/R#19/R#23 を書き戻す) */
     __asm
         ld   a, #3
         ld   (0xFCAF), a       ; SCRMOD_W = 3 (MULTI COLOUR)
         call 0x005F            ; CHGMOD
     __endasm;
+    ras_resume();
     vdp_wreg(25, 0x00);        /* ★R#25 は BIOS が面倒を見ない */
     vdp_wreg(2, S3_NAME / 0x400);
     vdp_wreg(4, S3_PAT / 0x800);
@@ -414,9 +416,12 @@ void spinfx_enter_s3(void) {
     for (i = 0; i < 8; i++) vdp_data(0x00);
     vdp_write_addr(S3_SATR);
     vdp_data(208);             /* スプライトは出さない(モード1は1ライン4枚・単色) */
-    /* ★R#1 = 0x68: 画面ON / VBLANK割込みON / **bit3 = M2 = 1(MULTI COLOUR)** / スプライト8x8。
-       ここで M2 を落とすと GRAPHIC1 になり、パターン表が正しくても画面が一様になる(試作で踏んだ)。 */
-    vdp_wreg(1, 0x68);
+    /* ★R#1 = 0x48: 画面ON / **bit3 = M2 = 1(MULTI COLOUR)** / スプライト8x8。
+       ここで M2 を落とすと GRAPHIC1 になり、パターン表が正しくても画面が一様になる(試作で踏んだ)。
+       ★★VBLANK 割込み(bit5)は**立てない**。以前は 0x68 で立てていた。いまは R#15=1 のまま走査線割込みだけで
+         回しているので(raster.c 冒頭)、VBLANK 割込みが立つと BIOS が S#0 を読めずフラグが落ちず、
+         割込みが止まらなくなる(openMSX の 5 面で撃沈の直後にゲームが壊れた。2026-10-07)。 */
+    vdp_wreg(1, 0x48);
 }
 
 /* 撃沈の直後に常駐から呼ばれる(OVL_SLOT_SPIN)。戻るまで数秒ここに居る。 */

@@ -25,7 +25,8 @@ void main(void) {
 #endif
     g_cold_mode = COLD_OPLL; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
                           /* ★FM(MSX-MUSIC)の検出(bank30)。turboR は必ず内蔵。無ければ以降 FM は鳴らさない */
-    sound_init();         /* PSG初期化 + H.TIMI 60Hz ISR 設置 */
-    raster_init();        /* ★ラスタ分割の土台: H.KEYI へフック設置(音ISRの H.TIMI とは別フック) */
+    sound_init();         /* PSG初期化(音の割込み処理 snd_isr は raster.c が毎フレーム呼ぶ) */
+    raster_init();        /* ★H.KEYI へフック設置。以降は走査線割込みだけで回る(VBLANK 割込みは切る。
+                             JIFFY・音・分割の仕切り直しは 212 行目の割込みで行う。raster.c 冒頭) */
     scene_run(SC_TITLE);  /* タイトル(SCREEN12/YJK)から。以降ここから戻らない */
 }

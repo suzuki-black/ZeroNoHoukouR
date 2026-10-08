@@ -23,23 +23,27 @@ __sfr __at(0x9B) SH_IDAT;    /* R#17 間接オートインクリメント */
 
 static u8 g_hull;   /* hull_w プロファイル選択 */
 
-/* ---- 高速VDPコマンド完了待ち(S#2 タイトポール) ---- */
+/* ---- 高速VDPコマンド完了待ち(S#2 ポール) ----
+   ★1 回見るごとに di〜ei で囲み、**待っている間は割込みを開ける**。以前は di のまま完了まで回っていたので、
+     大きな塗りの間ずっと割込みが止まり、毎フレームの合図(走査線割込み)が数 ms〜遅れて抜けた
+     (openMSX の開始カード〜面の準備で 1 回 2〜5ms。2026-10-07)。面中の PCM もこの間は出せなくなる。 */
 static void swait(void) {
     __asm
+    00011$:
         di
         ld   a, #2
         out  (0x99), a
         ld   a, #0x8F
         out  (0x99), a
-    00011$:
         in   a, (0x99)
-        rra
-        jr   c, 00011$
-        ld   a, #0
+        ld   b, a
+        ld   a, #1             ; R#15 = 1(普段の値。raster.c の ras_resume 参照)
         out  (0x99), a
         ld   a, #0x8F
         out  (0x99), a
         ei
+        rr   b                 ; CE -> Carry
+        jr   c, 00011$
     __endasm;
 }
 

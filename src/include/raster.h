@@ -15,9 +15,11 @@
        次の分割行を R#19 へ仕込む。自分のでなければ何もせず BIOS へ戻す。
 
    ★守るべき作法(いずれも踏むと画面か BIOS が壊れる):
-     1. S#1 を読むため R#15=1 にしたら、**必ず R#15=0 へ戻す**。BIOS は VBLANK 判定に S#0 を読む。
-        既存コードは R#15 を di 区間の中でしか動かさない(vdp_cmd_wait が毎回 0 に戻す)ので、
-        ハンドラ突入時の R#15 は常に 0 と仮定してよい。
+     1. ★2026-10-07 から **R#15 は普段 1(S#1)** で、VBLANK 割込みは使わない(raster.c 冒頭)。
+        BIOS は H.KEYI のあと「S#0 のつもりで」読む 0x99 で S#1 を読み、FH を落としてくれる。
+        S#2 などを読むときは di の中で R#15 を切り替え、**必ず 1 へ戻す**(vdp_cmd_wait / ship_render の swait)。
+        CHGMOD は R#0/R#1/R#19/R#23 を書き戻すので、前後を ras_pause / ras_resume で囲む。
+        R#1 に VBLANK 割込み(bit5)を立ててはいけない(BIOS が S#0 を読めず割込みが止まらなくなる)。
      2. R#0 は BIOS の影(RG0SAV=0xF3DF)と整合させる。E1 を立てるときは影も更新する。
      3. **分割行は画面行でなく VRAM 行 0 起点で数えられる**ので、R#19 には縦スクロール量
         (g_vscroll)を足す。これを忘れるとスクロールに合わせて分割線が流れる。
@@ -94,6 +96,8 @@ extern u8 g_ras_i;                /* 次に処理する分割の添字(ISR が�
 
 void raster_init(void);   /* 起動時1回: H.KEYI へフックを設置(sound_init の後に呼ぶ) */
 void raster_arm(u8 n);    /* 今フレームの分割数を確定(表の更新だけ。R#19 の仕込みは VBLANK 割込みが行う) */
-void raster_off(void);    /* E1 を落として分割を止める(シーン遷移/バンキング前) */
+void raster_off(void);    /* 分割を止める(シーン遷移/バンキング前)。走査線割込み自体は止めない(毎フレームの合図に使う) */
+void ras_pause(void);     /* CHGMOD の前: 走査線割込みを止める(di のまま戻る) */
+void ras_resume(void);    /* CHGMOD の後・起動時: R#15=1 / IE0 を切る / IE1 を立てる / 次の合図を張る */
 
 #endif /* RASTER_H */

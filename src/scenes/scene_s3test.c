@@ -152,11 +152,13 @@ static void make_tex(void) {
 static void enter_s3(void) {
     u8 i, y, x;
     raster_off();
+    ras_pause();               /* ★CHGMOD の前後は走査線割込みを止めて張り直す(raster.c / vdp.c の chgmod) */
     __asm
         ld   a, #3
         ld   (0xFCAF), a       ; SCRMOD_W = 3 (MULTI COLOUR)
         call 0x005F            ; CHGMOD
     __endasm;
+    ras_resume();
     vdp_wreg(25, 0x00);        /* ★R#25 は BIOS が面倒を見ない。YJK/MSK の残留を落とす */
     vdp_wreg(2, S3_NAME / 0x400);
     vdp_wreg(4, S3_PAT / 0x800);
@@ -177,7 +179,7 @@ static void enter_s3(void) {
        bit1 SI=0(スプライト 8x8) / bit0 MAG=0。
        ★ここで M2 を落とすと GRAPHIC1 になり、パターン表に正しく書けていても画面は一様に見える
          (実際に 0x60 と書いて「灰色一色」になった。VRAM もレジスタも他は正しいので気づきにくい)。 */
-    vdp_wreg(1, 0x68);
+    vdp_wreg(1, 0x48);         /* ★VBLANK 割込み(bit5)は立てない(ovl_spin.c の spinfx_enter_s3 と同じ理由) */
 }
 
 static void white_pal(void);

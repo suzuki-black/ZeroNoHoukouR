@@ -1,4 +1,4 @@
-/* sound.c — PSG効果音＋BGMドライバ＋H.TIMI 60Hz割込み(常駐)。
+/* sound.c — PSG効果音＋BGMドライバ＋60Hz割込み(常駐。毎フレーム raster.c の割込み処理から呼ばれる)。
    前作 BattleshipProto(実機確定)の sfx エンジン/ISR イディオムを移植・整理し、BGMを追加。
    BGM: melody=tone A(SFX SHOTと共有・SFX優先), bass=tone B。曲データはバンク8→RAMコピー。 */
 #include "sound.h"
@@ -444,7 +444,7 @@ void play_fanfare(void) {
 /* ★開始ファンファーレ(play_fanfare_open)は表ごと bank16 へ移した(ship_render.c の fanfare_open_impl)。
      勝ちどき(play_fanfare)は叫びと重ねるため窓を音声バンクへ向けて鳴らすので、表は常駐に残す。 */
 
-/* H.TIMI から呼ばれる ISR。割込み文脈なので使用レジスタを全退避(__naked で自前 ret)。
+/* 毎フレームの合図(raster.c の走査線割込み。以前は H.TIMI)から呼ばれる ISR。割込み文脈なので使用レジスタを全退避(__naked で自前 ret)。
    snd_ticks を進め、sfx_update を回す(将来 bgm_update もここへ)。 */
 void snd_isr(void) __naked {
     __asm
@@ -480,19 +480,8 @@ static void psg_init(void) {
     bgm_stop();     /* bgmOn=0 ＋ A/B/C 消音 ＋ FM も落とす(起動/初期化でも念のため) */
 }
 
-/* H.TIMI(0xFD9F, 5バイトフック)へ JP snd_isr を仕込む。BIOSの垂直割込みが毎回CALLしてくる。 */
-static void install_isr(void) {
-    __asm
-        di
-        ld   a, #0xC3            ; JP opcode
-        ld   (0xFD9F), a
-        ld   hl, #_snd_isr
-        ld   (0xFDA0), hl
-        ei
-    __endasm;
-}
-
+/* ★snd_isr は raster.c の割込み処理が毎フレームの合図(走査線割込み)から呼ぶ。
+   以前は BIOS の H.TIMI(VBLANK)に仕込んでいたが、VBLANK 割込みはもう使わない(raster.c 冒頭)。 */
 void sound_init(void) {
     psg_init();
-    install_isr();
 }

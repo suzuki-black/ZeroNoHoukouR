@@ -4,6 +4,7 @@
 #include "vdp.h"
 #include "pcm.h"   /* ★PCM の送出口。待ちループは元から時間を捨てているので、ここで出すのが一番安い */
 #include "msx.h"
+#include "raster.h"  /* ras_pause / ras_resume(CHGMOD の前後) */
 #include "bank.h"    /* vdp_blit_bank_vram が窓めくりに使う(bank_data/bank_restore) */
 #ifdef DEBUG_PROF
 #include "prof.h"
@@ -59,12 +60,21 @@ void vdp_read_addr(u16 a) { vdp_addr(a, 0x00); }
    ★R#25 を明示的に 0 へ: BIOS CHGMOD は V9958 拡張レジスタ R#25 を管理しないため、
      SCREEN12(R#25 YJK=1)からの復帰で YJK ビットが残り、GRAPHIC4 の表示が壊れる(海が白化)。
      ここで必ず 0 に落として YJK/横スクロール拡張の残留を断つ。 */
-void vdp_screen5(void) {
+/* ★CHGMOD は走査線割込みを止めてから呼び、戻ったら走査線割込みだけで回る状態へ張り直す(raster.c)。
+   CHGMOD は R#0・R#1・R#19・R#23 を書き戻す(R#23=0。openMSX+実機BIOSで実測)。張り直さないと
+   毎フレームの合図が来なくなり、JIFFY が止まる。 */
+static void chgmod(u8 mode) {
+    ras_pause();
+    *(volatile u8 *)0xFCAF = mode;   /* SCRMOD_W */
     __asm
-        ld   a, #5
-        ld   (0xFCAF), a       ; SCRMOD_W
+        ld   a, (0xFCAF)       ; ★CHGMOD は A でモードを受け取る(0xFCAF への書込みだけでは足りない)
         call 0x005F            ; CHGMOD
     __endasm;
+    ras_resume();
+}
+
+void vdp_screen5(void) {
+    chgmod(5);
     vdp_wreg(25, 0x00);        /* YJK/YAE/SP2/MSK を全クリア(SCREEN12 残留対策) */
     g_msk = 0;                 /* ★R#25 を直接 0 にしたので控えも合わせる */
 }
@@ -100,11 +110,7 @@ void vdp_palette_game(void) {
    BIOS ワーク(SCRMOD)を 8 にして CHGMOD で GRAPHIC7 を立て、R#25 の YJK ビットを付ける。
    R#25 = 0x08: YJK=1(YJKデコード on), YAE=0(パレット併用なし)。前作(実機確定)と同一手順。 */
 void vdp_screen12(void) {
-    __asm
-        ld   a, #8
-        ld   (0xFCAF), a       ; SCRMOD_W = 8 (GRAPHIC7)
-        call 0x005F            ; CHGMOD
-    __endasm;
+    chgmod(8);                 /* GRAPHIC7 */
     vdp_wreg(25, 0x08);        /* R#25: YJK=1 → SCREEN12 */
     vdp_wreg(7, 0x00);         /* ★ボーダー=黒で固定。CHGMOD/前シーンの残留でタイトルのボーダー色が
                                   毎回変わっていたため、SCREEN5(vdp_palette_game)と同様にここでも明示設定。
@@ -159,9 +165,9 @@ void vdp_cmd_wait(void) {
         out  (0x99), a
         in   a, (0x99)
         rra                    ; CE -> Carry
-        ld   a, #0
+        ld   a, #1
         out  (0x99), a
-        ld   a, #0x8F          ; R#15 = 0 (S#0 へ戻す)
+        ld   a, #0x8F          ; R#15 = 1 (普段の値へ戻す。raster.c: BIOS が読む 0x99 を S#1 にして FH を落とさせる)
         out  (0x99), a
         ei
         ;; ★PCM の送出。ここは VDP の完了待ちで**元から捨てている時間**。
@@ -399,10 +405,7 @@ void vdp_text_s(u8 px, u8 py, u8 fg, u8 bg, u8 scale, const char *s) {
    R#26/27 横スクロール(蛇行)はスプライトに影響しないため補正不要。 */
 u8 g_vscroll;   /* ★entity.cのASM draw1が参照するため非static */   /* 現在の縦スクロール量(sprite_pos がYに加算) */
 
-void vdp_set_vscroll(u8 v) {
-    g_vscroll = v;
-    vdp_wreg(23, v);
-}
+/* ★vdp_set_vscroll は raster.c にある(R#23 を書いたら毎フレームの合図の R#19 を張り直すため)。 */
 
 void vdp_set_hscroll(u8 coarse, u8 fine) {
     vdp_wreg(26, coarse & 0x3F);   /* 8px単位の粗スクロール */
