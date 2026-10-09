@@ -17,6 +17,14 @@ extern u8  g_invinc;       /* 1=無敵(被弾しても残機/耐久を減らさ�
 extern u8  g_fm;
 extern u16 g_score;        /* スコア(撃破で加算) */
 extern u16 g_hiscore;      /* ハイスコア(セッション内。将来SRAM保存) */
+/* ★ランキング(TOP5)の表の置き場。0xE000〜0xE0FF は「そのとき動いているバンクのコードの static」の帯で、
+   各バンクが使うのは先頭から最大 198B(0xC6。gen_planes)。**末尾の 32B(0xE0E0〜0xE0FF)をランキング専用**にする。
+   ・常駐 RAM(〜0xE000)は残り 3B しか無く、0xEF00 付近はスタックが 0xEF40 まで下りてくる(2026-10-09 実測)。
+   ・全 6 面とエンディングを通して、起動後にこの 32B へ書く者は居なかった(openMSX の書込み監視)。
+   ・バンクの static がここへ伸びたら Makefile がビルドを止める(GAME.ROM の規則)。
+   中身と使い方は docs/デモとランキング設計.md。 */
+#define RANK_ADDR  0xE0E0u
+#define RANK_BYTES 32
 extern u8  g_lives;        /* 現在の残機(面開始で g_lives_idx から設定) */
 extern u8  g_php;          /* 現在の耐久HP(面開始/ミスで g_durability から補充) */
 

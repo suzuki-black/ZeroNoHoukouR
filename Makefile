@@ -663,6 +663,15 @@ GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin $(BUILD)/voice_kenkon
 	   grep -H "Undefined Global" $(BUILD)/*.map; \
 	   rm -f $@; exit 2; \
 	 fi
+# ★0xE000 から static を置くリンク(バンクのシーン・バンクのコード・hot)は、どれも 0xE0E0 の手前で止まること。
+#   0xE0E0〜0xE0FF はランキングの表(gamestate.h の RANK_ADDR)。伸びると表が壊れる(電源を入れている間の記録が消える)。
+	@for M in $(BUILD)/*.map; do \
+	   S=$$(awk '/s__DATA/{print $$1; exit}' $$M); L=$$(awk '/l__DATA/{print $$1; exit}' $$M); \
+	   [ "$$S" = "0000E000" ] || continue; \
+	   if [ $$((16#$$L)) -gt $$((0xE0)) ]; then \
+	     echo "ERROR: $$M の static が $$((16#$$L))B。0xE000 から 0xE0E0 を越え、ランキングの表(RANK_ADDR)を壊す"; rm -f $@; exit 3; \
+	   fi; \
+	 done; echo "  0xE000 帯の static: 全て 0xE0E0 未満 OK(ランキングの表と非衝突)"
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS) $(ROMSIZE_ARG)
 
 # openMSX で起動 → 数秒後にスクショ → 終了(headless 検証)
