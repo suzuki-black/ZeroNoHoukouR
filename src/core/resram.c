@@ -40,6 +40,15 @@ u8 __at(PCM_SNARE_ADDR) pcm_snare_buf[PCM_SNARE_SLOT];
    ★★待ちには**必ずフレーム上限**を付ける。「鳴り終わるまで待つ」だけだと、PCM が鳴らない機械や
      システムタイマが動かない環境で永久に戻らない(2026-10-05 に同じ型で起動直後に固まった)。
      上限に当たったら音を切って抜ける。音が途中で切れるだけで、ゲームは必ず進む。 */
+#ifdef DEBUG_PROF
+/* ★計測の版は PCM を切ってある(coldsetup.c)ので叫ばない。常駐を 24KB に収めるため本体ごと外す。
+   voice_fanfare はバンク(gen_planes.c)から呼ばれるので、ファンファーレと窓の戻しだけ残す。 */
+void voice_fanfare(u8 id) {
+    (void)id;
+    play_fanfare();
+    bank_data(g_bank);
+}
+#else
 #define VOICE_CAP_TICKS 150   /* 約2.5秒。いちばん長い「そうだいしょうげきは」で1.3秒 */
 
 static const u8  voice_bank[VOICE_N] = {
@@ -88,3 +97,4 @@ void voice_fanfare(u8 id) {
     pcm_stop();
     bank_data(g_bank);
 }
+#endif

@@ -47,7 +47,11 @@ void pcm_stop(void);
 #define VOICE_TEKI   1   /* 敵撃破！     てきげきは(結果画面) */
 #define VOICE_SOUDAI 2   /* 総大将撃破！ そうだいしょうげきは(最終面の結果画面) */
 #define VOICE_N      3
+#ifdef DEBUG_PROF
+#define voice_play(id) ((void)0)   /* ★計測の版は PCM を切ってある(coldsetup.c)。常駐が 24KB に収まらないので呼び出しごと消す */
+#else
 void voice_play(u8 id);
+#endif
 /* ★叫び＋勝ちどきファンファーレを重ねて鳴らす(結果画面)。**バンク(results_impl)から呼ぶ。**
    窓を音声バンクへ向けて鳴らし、戻る前に呼び元のバンク(g_bank)へ向け直す。 */
 void voice_fanfare(u8 id);

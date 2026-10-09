@@ -159,7 +159,7 @@ void scene_run(u8 cur) {
     ft0 = *(volatile u16 *)0xFC9E;   /* 最初のフレームの基準 */
     for (;;) {
 #ifdef DEBUG_PROF
-        u16 _pc = prof_tick();   /* 計算区間(input+update)開始 */
+        prof_compute_begin();    /* 計算区間(input+update)開始 */
 #endif
         input_poll();
         g_scene_ret = SCENE_NONE;
@@ -206,16 +206,11 @@ void scene_run(u8 cur) {
          止まっているのでフレームレート依存の速度定数に影響しない。津波スプライトのコマ送りが
          倍細かくなって**ドット単位に滑らかに**見え、同時に演出の総尺も短くなる(実測 3.9秒→3秒台)。 */
 #ifdef DEBUG_PROF
-        if (cur == SC_STAGE) {   /* ★計測はステージ(SCREEN5)中のみ。タイトル(SCREEN12)でpage切替すると壊れる */
-            u16 comp = (u16)(prof_tick() - _pc);   /* 計算区間tick(cmd_wait含む) */
-            g_prof_acc[PF_COMPUTE] += comp;
-            frame_sync(ft0, (u8)((!g_crush_t) ? 2 : 1));
-            prof_frame_end(comp);
-        } else {
-            frame_sync(ft0, 1);
-        }
-#else
+        if (cur == SC_STAGE) prof_compute_end();   /* ★計測はステージ(SCREEN5)中のみ。タイトル(SCREEN12)でpage切替すると壊れる */
+#endif
         frame_sync(ft0, (u8)((cur == SC_STAGE && !g_crush_t) ? 2 : 1));
+#ifdef DEBUG_PROF
+        if (cur == SC_STAGE) prof_frame_end();
 #endif
         ft0 = *(volatile u16 *)0xFC9E;   /* 次のフレームの基準(同期の出口＝ティック境界) */
         /* ★スプライト属性の転送は**ここ**(VBLANK の直後)で。ent_draw_all の中で書くと
