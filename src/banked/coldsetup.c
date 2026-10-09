@@ -14,6 +14,7 @@
 #include "assets_data.h" /* STAGE_COUNT */
 #include "final.h"       /* STAGE_FINAL */
 #include "opll.h"        /* ★FM の検出(起動時1回。g_cold_mode=COLD_OPLL で呼ばれる) */
+#include "rank.h"        /* ★ランキングの表の初期値(起動時1回。COLD_OPLL に相乗り) */
 #include "msx.h"         /* MSX_VER(0x002D: 0=MSX1 / 1=MSX2 / 2=MSX2+ / 3=turboR) */
 #include "pcm.h"         /* ★PCM が使えるかの検出(起動時1回)＋スネアの素材を RAM へ写す */
 #ifndef DEBUG_PROF
@@ -250,9 +251,27 @@ static void opll_detect(void) {
 #endif
 }
 
+/* ───────── ランキング(TOP5)の初期値。起動時に1回だけ(COLD_OPLL に相乗り) ─────────
+   名前はシリーズの系譜(ユーザー指定 2026-10-09): 作者・零の咆哮・同 改・真・MSX。
+   1 位は全面クリアで届くくらい(約 1 万点)。表は RANK_ADDR の固定番地(rank.h)。 */
+static const RankEnt rank_init_tbl[RANK_N] = {
+    { 10000, { 'S', 'Z', 'K' } },
+    {  8000, { 'Z', 'R', 'O' } },
+    {  6000, { 'K', 'A', 'I' } },
+    {  4000, { 'S', 'H', 'N' } },
+    {  2000, { 'M', 'S', 'X' } },
+};
+static void rank_init(void) {
+    const u8 *s = (const u8 *)rank_init_tbl;
+    u8 *d = (u8 *)g_rank;
+    u8 n;
+    for (n = 0; n < (u8)sizeof(rank_init_tbl); n++) d[n] = s[n];
+    g_hiscore = g_rank[0].score;     /* 画面の HI は 1 位から始める */
+}
+
 void banked_entry(void) {
     u8 i;
-    if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); pcm_detect(); return; }   /* ★turboR 未満はここで止まる */
+    if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); pcm_detect(); rank_init(); return; }   /* ★turboR 未満はここで止まる */
     if (g_cold_mode == COLD_HUDDIG) { hud_digits(); return; }
     for (i = 0; i < SHIP_NAAG; i++) {          /* 対空砲の発射タイマと耐久 */
         u16 t = (u16)60 + (u16)i * 11;         /* ★u16で計算し255クランプ(u8のままだと高iで桁溢れ) */

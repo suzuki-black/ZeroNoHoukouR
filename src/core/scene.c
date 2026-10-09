@@ -3,6 +3,7 @@
    bank!=0 のシーンは「冷たいシーン」= 当該バンクの 0xA000 エントリを bcall で実行(常駐窓を食わない)。
    バンク側エントリは g_scene_phase(0=init/1=update)を見て分岐し、update 結果を g_scene_ret に書く。 */
 #include "scene.h"
+#include "rank.h"      /* RANK_BANK(ランキング画面のバンク) */
 #include "pcm.h"       /* frame_sync の待ちで PCM を 1 サンプルずつ出す */
 #include "raster.h"
 #include "vdp.h"
@@ -31,6 +32,7 @@ static const u8 scene_bgm[SC_COUNT] = {
     /* SC_CONFIG */ BGM_KEEP,  /* タイトル曲を継続 */
     /* SC_STAGE  */ BGM_OFF,   /* 入場時は無音: 開始カードでファンファーレのみ→stage_introがメインBGMを開始 */
     /* SC_ENDING */ 2,         /* 静かなED曲(track2) */
+    /* SC_RANKING */ BGM_OFF,  /* 無音(アトラクトのデモも無音。タイトルへ戻ると曲が頭から鳴る) */
 };
 static void scene_bgm_enter(u8 cur) {
     u8 t = scene_bgm[cur];
@@ -105,6 +107,7 @@ static const Scene registry[SC_COUNT] = {
     /* SC_CONFIG */ { 0,          0,            6 },   /* 冷たいシーン: bank6        */
     /* SC_STAGE  */ { stage_init, stage_update, 0 },   /* ★連続縦スクロール面        */
     /* SC_ENDING */ { 0,          0,            7 },   /* 冷たいシーン: bank7        */
+    /* SC_RANKING*/ { 0,          0,     RANK_BANK },   /* 冷たいシーン: bank67(TOP5) */
 };
 
 u8 g_scene;         /* 現在のシーンID(デバッグ/HUD/検証用に公開)   */

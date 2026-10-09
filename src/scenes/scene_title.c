@@ -18,6 +18,11 @@ static const u8 konami[10] = {
     INP_UP, INP_UP, INP_DOWN, INP_DOWN, INP_LEFT, INP_RIGHT, INP_LEFT, INP_RIGHT, INP_TRIGB, INP_TRIG
 };
 static u8 kidx;   /* コナミ入力の進捗。RAM(data-loc)。init で0。 */
+/* ★放置の時計(アトラクトモード)。何も触らずに TITLE_IDLE たったらランキングへ(デモができたらデモへ)。
+   JIFFY(割込みで進む 60Hz の時計)で測る。キーかジョイを触っている間は数え直す。 */
+#define TITLE_IDLE 1200   /* 20 秒 */
+static u16 idle_t0;
+#define JIFFY (*(volatile u16 *)0xFC9E)
 
 /* ★タイトルへハイスコアを「無理矢理」載せる。
    タイトルは SCREEN12(YJK 自然画)で、4 ドットごとに J/K を共有する。
@@ -50,11 +55,14 @@ static void title_hiscore(void) {
 
 static void title_init(void) {
     kidx = 0;   /* 画は常駐が表示済み。ここで描いてよいのは YJK の明度だけの文字(下の title_hiscore)。 */
+    idle_t0 = JIFFY;
     title_hiscore();
 }
 
 static u8 title_update(void) {
     u8 e = g_input_edge;
+    if (g_input) idle_t0 = JIFFY;                       /* 触っている間は放置とみなさない */
+    else if ((u16)(JIFFY - idle_t0) >= TITLE_IDLE) return SC_RANKING;
     if (e) {
         /* コナミ進捗: 期待キーが押下エッジに含まれれば前進、外れたらリセット
            (押したのが先頭キー=UP ならそこから再開)。成立でコンフィグへ。 */

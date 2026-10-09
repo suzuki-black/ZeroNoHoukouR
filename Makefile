@@ -112,6 +112,7 @@ ROMPACK_BANKS = --bank 4 assets/cards.bin \
                 --bank 5 $(BUILD)/scene_title.ihx \
                 --bank 6 $(BUILD)/scene_config.ihx \
                 --bank 7 $(BUILD)/scene_ending.ihx \
+                --bank 67 $(BUILD)/scene_ranking.ihx \
                 --bank 8 $(BUILD)/assets.bin \
                 --bank 16 $(BUILD)/ship_render.ihx \
                 --bank 17 $(BUILD)/hot.bin \
@@ -575,7 +576,7 @@ ROMPACK_BANKS += --bank 3 $(BUILD)/ovl12.bin
 
 BANK_IHX = $(BUILD)/ovl.bin $(BUILD)/ovl6.bin $(BUILD)/ovl7.bin $(BUILD)/ovl13.bin $(BUILD)/ovl8.bin $(BUILD)/fw200.bin $(BUILD)/fw200_sh.bin $(BUILD)/ovl9.bin $(BUILD)/pby.bin $(BUILD)/pby_sh.bin $(BUILD)/ovl10.bin $(BUILD)/he111.bin $(BUILD)/he111_sh.bin $(BUILD)/ovl11.bin $(BUILD)/bank60.bin $(BUILD)/bank61.bin $(BUILD)/bank62.bin $(BUILD)/ovl12.bin $(BUILD)/boss_vram.bin $(BUILD)/gen_planes.ihx $(BUILD)/coldsetup.ihx \
            $(BUILD)/scene_title.ihx \
-           $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
+           $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/scene_ranking.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 
 # ── 実機検証: 走査線途中の MAG 切替テスト(起動シーンを差し替え): make clean && make MAGTEST=1
 ifdef MAGTEST

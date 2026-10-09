@@ -19,6 +19,7 @@ enum {
   SC_CONFIG,    /* 設定メニュー(冷たいシーン=バンク6) */
   SC_STAGE,     /* ★1本の連続縦スクロール面(海→戦艦 地続き) */
   SC_ENDING,    /* エンディング(冷たいシーン=バンク7) */
+  SC_RANKING,   /* ランキング TOP5(冷たいシーン=バンク67。rank.h の RANK_BANK) */
   SC_COUNT
 };
 
