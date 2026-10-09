@@ -118,15 +118,28 @@ void ras_next(void) __naked {   /* ★ras_apply(asm)から jp するので非sta
         ld   c, #0
         jr   00011$
     00010$:
+        ;; ★合図の行は画面の行数で変わる。212 行のモード(SCREEN5/12)は 212 行目、**192 行のモード(SCREEN3 =
+        ;;   3 面のきりもみ)は 192 行目**。212 行目のままだと 192 行のモードでは割込みが来ず、JIFFY が止まって
+        ;;   vdp_wait_frame で固まった(v0.4.0。3 面のフッドを撃沈すると固まる。2026-10-09 に openMSX で確認)。
+        ;;   行数は BIOS の控え RG9SAV(0xFFE8)の bit7(LN)。CHGMOD が画面モードに合わせて書く。
+        ld   a, (0xFFE8)
+        rla                      ; Cy = LN(1 = 212 行)
         ld   a, #RAS_TICK_LINE
+        jr   c, 00012$
+        ld   a, #192
+    00012$:
         ld   c, #1
     00011$:
         ld   hl, #_g_ras_vs
         add  a, (hl)
         ld   b, a
+        ld   a, (0xFFE8)         ; ★192 行のモード(SCREEN3 = 3 面のきりもみ)では PCM のサンプルの行を張らない。
+        rla                      ;   hot_pcm.s の行の計算は 212 行が前提で、来ない行(237 など)に張って固まった
+        jr   nc, 00013$          ;   (v0.4.0。2026-10-09 に openMSX で確認)。その間 PCM は止まったまま鳴らない
         ld   a, (_pcm_active)    ; ★PCM が鳴っている間は、次のサンプルの行と比べて近い方を張る(hot_pcm.s)
         or   a
         jp   nz, _hot_ram + 3*HOT_SLOT_PCM_ARM   ; B = この行、C = 種類
+    00013$:
         ld   a, c
         ld   (_g_ras_tick), a
         ld   a, b
