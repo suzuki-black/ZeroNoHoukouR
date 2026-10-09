@@ -1470,7 +1470,7 @@ u8 stage_update(void) {
         if (g_lives) g_lives--;
         if (g_lives == 0) {
             if (game_over_banked()) { g_lives = lives_init(); stage_setup(); }  /* CONTINUE=同面再開・スコア保持 */
-            else return SC_TITLE;
+            else return SC_RANKING;   /* ★ゲームの終わりはランキングへ(TOP5 に入ればネームエントリー。scene_ranking.c) */
         } else {
             stage_setup();              /* 残機あり: 面最初から全砲台復活 */
         }

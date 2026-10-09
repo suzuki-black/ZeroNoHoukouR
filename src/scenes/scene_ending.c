@@ -195,7 +195,7 @@ static u8 run_ending(void) {
         if (g_input_edge & INP_TRIG) break;
         vdp_wait_frame();
     }
-    return SC_TITLE;
+    return SC_RANKING;   /* ★クリアしたらランキングへ(TOP5 に入ればネームエントリー。scene_ranking.c) */
 }
 
 void banked_entry(void) {
