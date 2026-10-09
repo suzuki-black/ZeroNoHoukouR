@@ -17,6 +17,8 @@
 #include "entity.h"     /* ent_player_hit */
 #include "curtain.h"    /* curtain_reset */
 
+/* ★この 3B は hot.bin の --data-loc で 0xE000〜0xE002(バンクコードの static と同じ番地)。中ボス戦の間は
+     それらのバンクを呼ばないので重ならない(ARCHITECTURE.md §1 の RAM 表) */
 static u8 hb_x, hb_y;   /* 生む弾の四角の左上(画面) */
 static u8 hb_lastc;     /* 前のフレームのボム残数 */
 
