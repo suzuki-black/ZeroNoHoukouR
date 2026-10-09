@@ -164,9 +164,14 @@ void scene_run(u8 cur) {
 #ifdef DEBUG_PROF
         u16 _pc = prof_tick();   /* 計算区間(input+update)開始 */
 #endif
-        input_poll();
+        /* ★デモ(アトラクトモード)の間は入力を読まない。入力は前のフレームの終わりにデモのバンクが置いている。 */
+        if (!g_demo) input_poll();
         g_scene_ret = SCENE_NONE;
         call_scene(cur, 1);
+        /* ★デモのバンク(banked/demo.c)は面の処理の**後**で呼ぶ。本物の入力を読んで抜けるか決め(抜けるなら
+           g_scene_ret を直接書く)、次のフレームの自動操縦の入力を置く。前に呼ぶと、抜け先を面の処理の戻り値が
+           上書きするので、印付きの抜け先を後で書き戻す手間が要った(常駐が足りなくなって組み直した)。 */
+        if (g_demo) bcall_to(DEMO_BANK);
         if (g_scene_ret != SCENE_NONE && g_scene_ret != cur) {
             /* ★シーンを抜けるときは分割とスプライト表のミラーを必ず止める。
                分割を張ったままバンクシーン(タイトル/エンディング)へ行くと、分割行から下は
@@ -185,7 +190,7 @@ void scene_run(u8 cur) {
                ★ここに置くと**タイトル曲が鳴ったまま**叫べる(曲の差替えは下の scene_bgm_enter で、
                  まだ起きていない)。しかも既にある分岐なので常駐がほとんど増えない。
                ★ステージ間の面送り(stage_intro)はこの分岐を通らないので、面が変わるたびには鳴らない。 */
-            if (g_scene_ret == SC_STAGE) voice_play(VOICE_KENKON);
+            if (g_scene_ret == SC_STAGE) voice_play(VOICE_KENKON);   /* ★デモでは鳴らない(PCM を切ってから来るので voice_play が素通り) */
             cur = g_scene_ret;
             g_scene = cur;
             scene_video_enter(cur);
@@ -225,7 +230,7 @@ void scene_run(u8 cur) {
            フレームの中ほど(走査線 130 行目付近)になり、画面の上半分と下半分で座標が食い違って
            「走査線抜け」に見える(実機で多発。2026-10-01 に走査線番号で確認)。
            控え(sat_shadow)は RAM なのでいつ作ってもよく、VRAM へ出す時刻だけが問題。 */
-        if (cur == SC_STAGE && g_hud_on) hud_draw(g_score, g_lives);   /* ★HUD も VBLANK 中に(上端は最もラスタ競合しやすい) */
+        if (cur == SC_STAGE && g_hud_on && !g_demo) hud_draw(g_score, g_lives);   /* ★デモ中は HUD の枠に PUSH SPACE KEY(demo.c) */   /* ★HUD も VBLANK 中に(上端は最もラスタ競合しやすい) */
         if (g_sat_dirty) { g_sat_dirty = 0; vdp_sat_flush(g_spr_base, g_spr_used);
             /* ★色表も**ここ**で。ent_draw_all の中で書くと色だけ1フレーム先になり、表示の途中で
                枠の色が次の持ち主の色へ変わる(自機の影が白く点滅した。entity.c の cdirty 参照)。

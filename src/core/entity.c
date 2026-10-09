@@ -1,6 +1,7 @@
 /* entity.c — 汎用エンティティ・プールの常駐実装。
    behavior は type 別の関数ポインタ表(generalization の要)。描画は今は LMMV 矩形で代用し、
    本番でスプライト/run_ops に差し替える(APIは据え置き)。 */
+#include "rank.h"      /* g_demo */
 #include "entity.h"
 #include "hud.h"   /* SPR_TOP: HUD は最後尾の枠なので、ここより後ろへ書かない */
 #include "vdp.h"
@@ -95,6 +96,7 @@ static u8  spop_t[SPOP_MAX];                      /* 残表示フレーム(0=空
 /* 撃破サイトから呼ぶ: 画面座標(x,y)＋点数を登録。空きが無ければ最も残り少ないものを上書き。 */
 void scorepop_add(s16 sx, s16 sy, u16 val) {
     u8 i, slot = 0, tmin = 0xFF;
+    if (g_demo) return;   /* ★デモ中は出さない(数字の絵を PUSH SPACE KEY の文字に借りている。banked/demo.c) */
     for (i = 0; i < SPOP_MAX; i++) {
         if (!spop_t[i]) { slot = i; break; }              /* 空き優先 */
         if (spop_t[i] < tmin) { tmin = spop_t[i]; slot = i; }

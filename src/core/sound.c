@@ -1,6 +1,7 @@
 /* sound.c — PSG効果音＋BGMドライバ＋60Hz割込み(常駐。毎フレーム raster.c の割込み処理から呼ばれる)。
    前作 BattleshipProto(実機確定)の sfx エンジン/ISR イディオムを移植・整理し、BGMを追加。
    BGM: melody=tone A(SFX SHOTと共有・SFX優先), bass=tone B。曲データはバンク8→RAMコピー。 */
+#include "rank.h"      /* DEMO_ADDR(デモ中は無音) */
 #include "sound.h"
 #include "pcm.h"   /* スネアの拍に内蔵 PCM を重ねる */
 #include "bank.h"       /* data_read(曲データをバンク→RAM) */
@@ -17,7 +18,18 @@ static void psg(u8 r, u8 v) {
     __asm
         ld   a, (_g_pr)
         out  (0xA0), a
+        ld   a, (DEMO_ADDR)      ; ★デモ(アトラクトモード)中は音量(R#8〜10)に 0 を書く＝無音。曲は進めるので
+        or   a                   ;   面の段取り(警報の長さなど snd_ticks で測るもの)は変わらない
+        jr   z, 00001$
+        ld   a, (_g_pr)          ; ★音量だけ。R#7 まで 0 にすると bit7(ポート B の向き)が入力になり、
+        sub  #8                  ;   ジョイスティックの選択(R#15)が効かなくなる
+        cp   #3
+        jr   nc, 00001$
+        xor  a
+        jr   00002$
+    00001$:
         ld   a, (_g_pv)
+    00002$:
         out  (0xA1), a
     __endasm;
 }

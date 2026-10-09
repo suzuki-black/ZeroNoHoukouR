@@ -11,6 +11,8 @@
 #include "scene.h"
 #include "vdp.h"        /* vdp_write_addr / vdp_data / vdp_glyph(常駐) */
 #include "gamestate.h"  /* g_hiscore(電源が入っている間だけのハイスコア) */
+#include "rank.h"       /* デモ(アトラクトモード)の状態 */
+#include "sound.h"      /* fm_silence */
 
 /* 隠しコマンド(コナミ): 上上下下左右左右 B A。成立で設定メニュー(SC_CONFIG)を開く。
    B=INP_TRIGB(キーB / ジョイ トリガ2 / キーM), A=INP_TRIG(キーA / スペース / ジョイ トリガ1)。 */
@@ -18,7 +20,7 @@ static const u8 konami[10] = {
     INP_UP, INP_UP, INP_DOWN, INP_DOWN, INP_LEFT, INP_RIGHT, INP_LEFT, INP_RIGHT, INP_TRIGB, INP_TRIG
 };
 static u8 kidx;   /* コナミ入力の進捗。RAM(data-loc)。init で0。 */
-/* ★放置の時計(アトラクトモード)。何も触らずに TITLE_IDLE たったらランキングへ(デモができたらデモへ)。
+/* ★放置の時計(アトラクトモード)。何も触らずに TITLE_IDLE たったらデモへ(デモ → ランキング → タイトル)。
    JIFFY(割込みで進む 60Hz の時計)で測る。キーかジョイを触っている間は数え直す。 */
 #define TITLE_IDLE 1200   /* 20 秒 */
 static u16 idle_t0;
@@ -55,6 +57,7 @@ static void title_hiscore(void) {
 
 static void title_init(void) {
     kidx = 0;   /* 画は常駐が表示済み。ここで描いてよいのは YJK の明度だけの文字(下の title_hiscore)。 */
+    DEMO_END();   /* ★デモの途中でトリガを押して戻ってきたとき、設定を元に戻す */
     idle_t0 = JIFFY;
     title_hiscore();
 }
@@ -62,7 +65,17 @@ static void title_init(void) {
 static u8 title_update(void) {
     u8 e = g_input_edge;
     if (g_input) idle_t0 = JIFFY;                       /* 触っている間は放置とみなさない */
-    else if ((u16)(JIFFY - idle_t0) >= TITLE_IDLE) return SC_RANKING;
+    else if ((u16)(JIFFY - idle_t0) >= TITLE_IDLE) {
+        /* ★デモを始める: 設定を退避して、開始面・無敵・FM・PCM をデモ用に書き換える(戻すのは DEMO_END)。
+           面は 1 周ごとに次へ(最終面は見せない)。音は psg() が止める(PSG の音量に 0 を書く) */
+        DEMO_SAVE();
+        g_stage_sel = g_demo_next;
+        if (++g_demo_next >= DEMO_STAGES) g_demo_next = 0;
+        fm_silence(); g_opll = OPLL_NONE;   /* ★先に止める(0 にしてからでは fm_silence が素通りして鳴りっぱなし) */
+        g_invinc = 1; g_pcm = 0;
+        g_demo_ret = 0; g_demo = 1;
+        return SC_STAGE;
+    }
     if (e) {
         /* コナミ進捗: 期待キーが押下エッジに含まれれば前進、外れたらリセット
            (押したのが先頭キー=UP ならそこから再開)。成立でコンフィグへ。 */

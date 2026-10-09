@@ -33,6 +33,12 @@ static u8 run_ranking(void) {
     u16 f;
     u8 i;
     __asm ei __endasm;            /* ★_bcall は di のまま来る。vdp_wait_frame は割込みで進む JIFFY を待つ */
+    DEMO_END();                   /* ★デモから来たら、書き換えた設定を元に戻す */
+    /* ★面(デモ)から来ると画面モードは同じ SCREEN5 なので CHGMOD が走らず、面の VDP の状態(スプライトの表・
+       拡大・MSK・パレットの天候など)が残る。ここで SCREEN5 を張り直して素の状態にする */
+    vdp_screen5();
+    vdp_palette_game();
+    vdp_sprite_hide_from(0);
     vdp_set_vscroll(0);
     vdp_set_hscroll(0, 0);
     vdp_set_display_page(0);

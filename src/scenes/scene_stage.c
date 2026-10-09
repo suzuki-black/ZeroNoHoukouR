@@ -2,6 +2,7 @@
    フェーズ0: 海=蛇行なしの直進スクロール(前進)。戦艦の船尾が見えたら交戦へ。
    フェーズ1: 戦艦=船首↔船尾の往復蛇行スクロール(縦の往復＋横揺れ weaveX)＝前作の戦艦戦。
    自機は下部固定(scroll側のY補正＋weaveXは自機に非適用)。砲塔/戦闘機/撃破は次段で統合。 */
+#include "rank.h"      /* g_demo(アトラクトモードのデモ中) */
 #include "scene.h"
 #include "vdp.h"
 #include "entity.h"
@@ -778,6 +779,7 @@ static void stage_build(void) {
     g_fade = 0; g_alert = 0;
     seq = g_ovl_ok ? SEQ_SEA1 : SEQ_GO;      /* ★オーバレイが無い機械では中ボスもフェードも出せない=すぐ艦へ */
     if (curstage == STAGE_FINAL) { seq = SEQ_FADE2; g_alert = 1; }   /* ★最終面: 無音→敵大将発見の警報→イントロ付きの曲 */
+    if (g_demo && curstage >= DEMO_SHIP_FROM) seq = SEQ_SEA2;   /* ★デモの 4・5 面: 中ボスを飛ばして海2から(→警報→戦艦)。海2は海1と同じ長さ */
     g_mb = MB_NONE;        /* ★中ボスは挑戦ごとに出し直す(オーバレイと砲身の枠は上の overlay_load / sprites_load で元に戻っている) */
     /* ★パターン表のずらしを**必ず**0(表A)へ戻す。4面(He 111)と5面(P-61)の中ボスは絵を表B
        (MB_PATB=0x2000)へ書くために g_mb_pat_off を立てるが、どこでも下ろしていなかった。
@@ -893,7 +895,9 @@ void stage_init(void) {
     /* ★画面ビューア(config設定): 各画面を個別に表示して確認できる。表示後は stage_update が SC_TITLE を返す。 */
     if (g_view == 1) { draw_stage_card(); view_wait(); return; }              /* ステージ説明カードのみ */
     if (g_view == 2) { load_stage_data(); results_and_fanfare(); return; }    /* 撃破結果(SUNK)画面のみ */
-    stage_intro();        /* 1面開始: カード＋ファンファーレ→準備→BGM→開始 */
+    if (g_demo) { draw_stage_card(); stage_setup(); }   /* ★デモ: 開始カードは出す(艦を描く数秒の間、灰色の画面になるので)。
+                                                       ファンファーレと余韻は飛ばす */
+    else        stage_intro();   /* 1面開始: カード＋ファンファーレ→準備→BGM→開始 */
 }
 
 /* 撃破結果画面＋勝ちどきファンファーレ。★描画と待ちは冷たいバンク(bank19 の results_impl)。
@@ -1325,7 +1329,7 @@ u8 stage_update(void) {
     }
     /* ★エンティティは slot0 から＝HUD より手前(HUD は最後尾 HUD_SL0..31 = 最低優先)。
        宙返りの2×2合成(ovl_rot)が 0..3 を使う間だけ 4 つ後ろから詰める。 */
-    g_spr_base = (u8)(g_loop_t ? 4 : 0);
+    g_spr_base = (u8)(g_loop_t ? 4 : (g_demo ? 7 : 0));   /* ★デモ中は先頭 7 枠を PUSH SPACE KEY に譲る(banked/demo.c) */
     /* ★使ってよい上限。ふだんは HUD の手前(SPR_TOP)まで。5面の中ボスの間だけ HUD を背景に
        描くので、HUD の枠も含めて 32 枚すべて使える。 */
     {   u8 sp_top = (u8)((g_mb == MB_ACTIVE && curstage == 4) ? 32 : SPR_TOP);

@@ -266,6 +266,7 @@ static void rank_init(void) {
     u8 *d = (u8 *)g_rank;
     u8 n;
     for (n = 0; n < (u8)sizeof(rank_init_tbl); n++) d[n] = s[n];
+    for (; n < RANK_BYTES; n++) d[n] = 0;   /* 後ろの 7B = デモの状態(rank.h)。デモ中でない状態から始める */
     g_hiscore = g_rank[0].score;     /* 画面の HI は 1 位から始める */
 }
 
