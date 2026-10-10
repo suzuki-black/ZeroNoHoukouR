@@ -96,7 +96,7 @@ static u8  spop_t[SPOP_MAX];                      /* 残表示フレーム(0=空
 /* 撃破サイトから呼ぶ: 画面座標(x,y)＋点数を登録。空きが無ければ最も残り少ないものを上書き。 */
 void scorepop_add(s16 sx, s16 sy, u16 val) {
     u8 i, slot = 0, tmin = 0xFF;
-    if (g_demo) return;   /* ★デモ中は出さない(数字の絵を PUSH SPACE KEY の文字に借りている。banked/demo.c) */
+    if (g_demo) return;   /* ★デモ中は出さない(数字の絵を PRESS SPACE KEY の文字に借りている。banked/demo.c) */
     for (i = 0; i < SPOP_MAX; i++) {
         if (!spop_t[i]) { slot = i; break; }              /* 空き優先 */
         if (spop_t[i] < tmin) { tmin = spop_t[i]; slot = i; }
@@ -397,7 +397,7 @@ void ent_draw_all(void) {
     }
     /* 自機を固定最優先スロット(g_spr_base)へ */
     /* ★宙返り中は本体を描かない(2×2 合成が HUD 直後の4 slot に描いている)。影は下の影パスで描く。 */
-    if (player && !g_loop_t && slot < 32) slot = draw1(slot, player);   /* ★32 = SAT の控えの端(デモ中は先頭 7 枠＋手前の中ボスで 24 を越える) */
+    if (player && !g_loop_t && slot < 32) slot = draw1(slot, player);   /* ★32 = SAT の控えの端(デモ中は先頭 8 枠＋手前の中ボスで 24 を越える) */
     /* ★中ボスが出ている間は枠が 5〜9 枚しか無く、最後に描く影が必ず溢れて自機の影が消えた(実機で指摘)。
        その間だけ自機の影を自機の直後に描く(scene_stage が中ボスの間だけ自機の shadow を 2 にする)。 */
     /* ★枠が尽きていたら描かない。2面の中ボスが手前(18枚)に居る間に宙返り(4枚)すると HUD 9 と合わせて 31 枚が埋まり、

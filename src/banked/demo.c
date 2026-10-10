@@ -6,7 +6,7 @@
      ここで本物の入力を読み、抜けるかを決めてから、次のフレームの g_input / g_input_edge を自動操縦の値にする。
    ・抜けるときは g_scene_ret を直接書く(scene.c はその直後に遷移を見る)。
      設定を元に戻すのは、抜けた先のシーン(ランキング・タイトル)の入場で(DEMO_END)。
-   ・先頭の枠(0〜6)に PUSH SPACE KEY を出す。HUD はデモ中は描かない(scene.c)ので、その枠(24〜31)はゲームに回す
+   ・先頭の枠(0〜7)に PRESS SPACE KEY を出す。HUD はデモ中は描かない(scene.c)ので、その枠(24〜31)はゲームに回す
      (scene_stage.c の上限 sp_top と rank.h の SPR_GAME_TOP)。
      文字の絵は数字の絵(SPR_DIGIT0〜)を借りる。数字を使う得点のポップはデモ中は出さない(entity.c)。
      本物のゲームでは面の準備(hud_init)が数字を描き直すので元に戻る。
@@ -17,32 +17,34 @@
 #include "sprites.h"
 #include "hud.h"
 #include "player.h"
-#include "entity.h"     /* g_spr_base(デモ中は先頭 7 枠を文字に譲る) */
+#include "entity.h"     /* g_spr_base(デモ中は先頭 8 枠を文字に譲る) */
 #include "rank.h"
 
 #define JIFFY    (*(volatile u16 *)0xFC9E)
 #define DEMO_LEN 1500   /* 25 秒(60 ティック/秒) */
-#define TXT_Y    194    /* PUSH SPACE KEY の高さ(最下段)。★最上段は敵が出てくる行で、横 1 列 8 枚の制限に
+#define TXT_Y    194    /* PRESS SPACE KEY の高さ(最下段)。★最上段は敵が出てくる行で、横 1 列 8 枚の制限に
                            かかって後ろの文字が欠けた(HUD の枠は最低優先)。自機は下の自動操縦で上に保つ */
-#define TXT_X    72     /* 14 文字 × 8 = 112 ドットを中央に */
+#define TXT_X    68     /* 15 文字 × 8 = 120 ドットを中央に */
+#define TXT_N    8      /* 文字のスプライトの枚数(16x16 に 2 文字ずつ) */
 
 /* 16x16 1 枚に 8x8 の文字を 2 つ(左 8 列/右 8 列)。空白は ' '。 */
-static const char txt[7][2] = {
-    { 'P', 'U' }, { 'S', 'H' }, { ' ', 'S' }, { 'P', 'A' }, { 'C', 'E' }, { ' ', 'K' }, { 'E', 'Y' }
+/* ★タイトルの絵の「PRESS SPACE KEY」とそろえる(最初は PUSH と書いていた。ユーザー指摘) */
+static const char txt[TXT_N][2] = {
+    { 'P', 'R' }, { 'E', 'S' }, { 'S', ' ' }, { 'S', 'P' }, { 'A', 'C' }, { 'E', ' ' }, { 'K', 'E' }, { 'Y', ' ' }
 };
 
 /* 自動操縦の目標(自機の x)。経過時間で順に切り替える(状態を持たない) */
 static const u8 tgt_x[8] = { 128, 60, 190, 100, 170, 40, 210, 128 };
 
-/* ★文字は**いちばん優先度の高い枠(0〜6)**に置く。HUD の枠(最低優先)に置くと、戦艦の砲台や弾が同じ行に来たとき
-   横 1 列 8 枚の制限で後ろの文字が欠けた(4・5 面の戦艦。2026-10-09)。エンティティは g_spr_base=7 から描かせる
-   (entity.c はもともと先頭を譲る作り。g_spr_base は面の処理が毎フレーム決めるので、scene_stage.c 側で 7 にする)。混んだ行では文字の代わりに敵の弾が欠けるが、デモなので構わない。
+/* ★文字は**いちばん優先度の高い枠(0〜7)**に置く。HUD の枠(最低優先)に置くと、戦艦の砲台や弾が同じ行に来たとき
+   横 1 列 8 枚の制限で後ろの文字が欠けた(4・5 面の戦艦。2026-10-09)。エンティティは g_spr_base=8 から描かせる
+   (entity.c はもともと先頭を譲る作り。g_spr_base は面の処理が毎フレーム決めるので、scene_stage.c 側で 8 にする)。混んだ行では文字の代わりに敵の弾が欠けるが、デモなので構わない。
    ★宙返り(ovl_rot)は 0〜3 番を使うので、デモの自動操縦では宙返りをしない。 */
 #define TXT_SL0 0
 static void text_setup(void) {
     u8 buf[32];
     u8 i, r;
-    for (i = 0; i < 7; i++) {
+    for (i = 0; i < TXT_N; i++) {
         const u8 *g;
         for (r = 0; r < 32; r++) buf[r] = 0;
         g = vdp_glyph((u8)txt[i][0]);
@@ -57,7 +59,7 @@ static void text_setup(void) {
 
 static void text_draw(u8 on) {
     u8 i, y = on ? TXT_Y : 220;   /* ★点滅(消すときは画面外へ) */
-    for (i = 0; i < 7; i++) {
+    for (i = 0; i < TXT_N; i++) {
         vdp_sprite_pos((u8)(TXT_SL0 + i), (u8)(TXT_X + i * 16), y, (u8)(SPR_DIGIT0 + i * 4));
         vdp_sprite_color((u8)(TXT_SL0 + i), 15);   /* ★毎フレーム白に(デモの直前に敵が使っていた枠の色の書込みが残っていて、赤などに化けた) */
     }

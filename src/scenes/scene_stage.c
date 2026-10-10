@@ -1329,10 +1329,10 @@ u8 stage_update(void) {
     }
     /* ★エンティティは slot0 から＝HUD より手前(HUD は最後尾 HUD_SL0..31 = 最低優先)。
        宙返りの2×2合成(ovl_rot)が 0..3 を使う間だけ 4 つ後ろから詰める。 */
-    g_spr_base = (u8)(g_loop_t ? 4 : (g_demo ? 7 : 0));   /* ★デモ中は先頭 7 枠を PUSH SPACE KEY に譲る(banked/demo.c) */
+    g_spr_base = (u8)(g_loop_t ? 4 : (g_demo ? 8 : 0));   /* ★デモ中は先頭 8 枠を PRESS SPACE KEY に譲る(banked/demo.c) */
     /* ★使ってよい上限。ふだんは HUD の手前(SPR_TOP)まで。5面の中ボスの間だけ HUD を背景に
        描くので、HUD の枠も含めて 32 枚すべて使える。
-       ★デモ中も 32 枚(HUD は描かない)。先頭 7 枠を文字に譲ったぶんを HUD の 8 枠で取り返す。上限を 24 のままにしたら、
+       ★デモ中も 32 枚(HUD は描かない)。先頭 8 枠を文字に譲ったぶんを HUD の 8 枠で取り返す。上限を 24 のままにしたら、
          1 面の中ボス(18 枚、末尾から)が 6〜23 番に来て文字と自機の枠に重なり、自機・敵弾・文字がちらついた(2026-10-10)。
          中ボスのオーバレイも同じ上限を使う(rank.h の SPR_GAME_TOP)。 */
     {   u8 sp_top = (u8)((g_demo || (g_mb == MB_ACTIVE && curstage == 4)) ? 32 : SPR_TOP);

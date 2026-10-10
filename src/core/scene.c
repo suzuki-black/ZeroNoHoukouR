@@ -230,7 +230,7 @@ void scene_run(u8 cur) {
            フレームの中ほど(走査線 130 行目付近)になり、画面の上半分と下半分で座標が食い違って
            「走査線抜け」に見える(実機で多発。2026-10-01 に走査線番号で確認)。
            控え(sat_shadow)は RAM なのでいつ作ってもよく、VRAM へ出す時刻だけが問題。 */
-        if (cur == SC_STAGE && g_hud_on && !g_demo) hud_draw(g_score, g_lives);   /* ★デモ中は HUD の枠に PUSH SPACE KEY(demo.c) */   /* ★HUD も VBLANK 中に(上端は最もラスタ競合しやすい) */
+        if (cur == SC_STAGE && g_hud_on && !g_demo) hud_draw(g_score, g_lives);   /* ★デモ中は HUD の枠に PRESS SPACE KEY(demo.c) */   /* ★HUD も VBLANK 中に(上端は最もラスタ競合しやすい) */
         if (g_sat_dirty) { g_sat_dirty = 0; vdp_sat_flush(g_spr_base, g_spr_used);
             /* ★色表も**ここ**で。ent_draw_all の中で書くと色だけ1フレーム先になり、表示の途中で
                枠の色が次の持ち主の色へ変わる(自機の影が白く点滅した。entity.c の cdirty 参照)。
