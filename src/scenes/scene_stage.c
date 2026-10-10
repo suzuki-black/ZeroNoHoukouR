@@ -830,8 +830,8 @@ static void stage_music(void) {
 /* ミス再挑戦: 開始カード/ファンファーレ無しで即再構築。海(phase0)から再開なので海イントロ共通BGMへ戻す。 */
 static void stage_setup(void) {
     stage_build();
-    stage_music();
     stage_begin_display();
+    stage_music();   /* ★地形を表示してから曲を始める(下の stage_intro の★) */
 }
 
 /* 面別BGM(gen_assets のトラック順: 0=title/1=BBマーチ/2=ED/3=空母/4=フッド哀歌/5=双子/6=Iowa/7=海イントロ)。
@@ -860,8 +860,10 @@ static void stage_intro(void) {
     stage_build();                          /* ★カードの裏でゲーム本体の艦をバッファBへ生成(重い) */
     g_shipargs.mode = 10; bcall_to(SHIP_RENDER_BANK);  /* 開始ファンファーレ(BGM無音でこれだけ鳴る。表は bank16) */
     for (f = 0; f < 40; f++) vdp_wait_frame();     /* 少し余韻(旧版と同じ40フレーム) */
-    stage_music();                          /* まず海イントロ共通BGM(敵艦が見えたら面別へ切替)。最終面は無音(警報の後に専用曲) */
     stage_begin_display();                   /* 地形を表示=ゲーム開始 */
+    stage_music();                          /* まず海イントロ共通BGM(敵艦が見えたら面別へ切替)。最終面は無音(警報の後に専用曲)。
+                                               ★表示の**後**で。先に曲を始めると、表示の準備(約 0.3 秒)の間は本体のループが回らず
+                                                 FM の音符が書かれない＝PSG だけ先に鳴り、FM の冒頭が欠けた(2026-10-11) */
 }
 
 /* 画面ビューア: 表示済みの画面でトリガ待ち(連射で飛ばさぬよう一度離してから)。最大4秒で自動復帰。 */

@@ -86,7 +86,11 @@ void banked_entry(void) {
              その g_input は下で自動操縦の値(トリガ押しっぱなし)に置き換えているので、本物のトリガは
              「ずっと押している」扱いになり瞬間が出ない(最初そう書いて抜けられなかった)。押されているかで見る。
              デモはタイトルを 20 秒放置してから始まるので、始まった時点で押されたままということは無い。 */
-        if (g_input & (INP_TRIG | INP_TRIGB)) g_scene_ret = SC_TITLE;     /* 触ったらタイトルへ */
+        if (g_input & (INP_TRIG | INP_TRIGB)) {                         /* 触ったらタイトルへ */
+            g_scene_ret = SC_TITLE;
+            g_opll = g_fm ? g_opll_hw : OPLL_NONE;   /* ★FM はここで戻す。タイトルの曲はタイトルの入場(DEMO_END)より前に
+                                                        始まるので、戻さないと曲が丸ごと FM なしで鳴った */
+        }
         else if (el >= DEMO_LEN)                    g_scene_ret = SC_RANKING;   /* 時間切れはランキングへ */
     }
 

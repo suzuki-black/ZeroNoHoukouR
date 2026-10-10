@@ -7,6 +7,7 @@
 #include "raster.h"  /* ras_pause / ras_resume(CHGMOD の前後) */
 #include "bank.h"    /* vdp_blit_bank_vram が窓めくりに使う(bank_data/bank_restore) */
 #include "entity.h"  /* cdirty / ent_col_put(vdp_sat_flush が枠ごとに色を先に送る) */
+#include "sound.h"   /* fm_flush(1 フレーム待つ間に FM の予約も書く) */
 #ifdef DEBUG_PROF
 #include "prof.h"
 #endif
@@ -305,6 +306,10 @@ void vdp_wait_frame(void) {
        走査線割込みが出す(hot_pcm.s)ので、ここで送り出す必要は無い。 */
     while (*j == t) { }
 #endif
+    /* ★FM の予約もここで書く。書くのは本来シーンのループ(scene.c)だけで、シーンの中で待ちながら描く場面
+       (エンディングなど)では 1 回も書かれず、**最初の和音のあと FM が鳴っていなかった**
+       (「エンディングの FM が聞こえない」の正体。2026-10-11 に OPLL への書き込みを数えて確認)。 */
+    fm_flush();
 }
 
 /* ===== 自前 8x8 フォント(旧版 fontset を移植) =====
