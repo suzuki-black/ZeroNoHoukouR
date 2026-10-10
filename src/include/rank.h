@@ -18,10 +18,11 @@
 
 typedef struct {
     u16  score;
-    char name[RANK_NAME];   /* 'A'〜'Z'。終端の 0 は持たない */
+    char name[RANK_NAME];   /* 'A'〜'Z'。終端の 0 は持たない。★name[0] の bit7 = 無敵の設定で遊んだ点(RANK_INV) */
 } RankEnt;                  /* 5B */
 
 #define g_rank ((RankEnt *)RANK_ADDR)   /* g_rank[0] が 1 位 */
+#define RANK_INV  0x80   /* name[0] の印: 無敵の設定で遊んだ点(表では灰色。ユーザー指定 2026-10-11) */
 typedef char rank_fits[(RANK_N * sizeof(RankEnt) <= RANK_BYTES) ? 1 : -1];   /* ★予約の 32B に収まること */
 
 /* ★アトラクトモード(デモ)の状態。表の後ろに余る 7B(0xE0F9〜0xE0FF)に置く。常駐 RAM は残り 3B しか無い。

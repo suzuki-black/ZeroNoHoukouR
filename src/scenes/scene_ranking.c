@@ -4,6 +4,7 @@
      ・ゲームオーバー(コンティニューしない/できない)→ ここ
      ・エンディングの後 → ここ
    ゲームの終わりから来て TOP5 に入っていれば、先にネームエントリーをしてから表を出す(新しい行は点滅)。
+   無敵の設定で遊んだ点も入れるが、印を付けて表では灰色にする。
    設計は docs/デモとランキング設計.md。表の置き場と形は rank.h。
    ★エンディングと同じく update の中で描いて待ち、終わったら次のシーンを返す(ブロッキング)。
    ★音は鳴らさない(scene.c の scene_bgm で BGM_OFF)。タイトルへ戻ると曲が頭から鳴る。 */
@@ -17,6 +18,7 @@
 #define RK_TX   15     /* 文字 = 白 */
 #define RK_TOP  12     /* 1 位・見出し = 橙 */
 #define RK_NEW  11     /* 新しく入った行 = 赤(点滅) */
+#define RK_INV  14     /* 無敵の設定で遊んだ点の行 = 淡灰 */
 #define RK_HOLD 480    /* 表を出しておく時間: 8 秒(60 フレーム/秒) */
 #define NE_TIME 1800   /* ネームエントリーの制限時間: 30 秒 */
 #define NE_ED   26     /* 文字の番号: 0〜25 = A〜Z、26 = [ED](終わり) */
@@ -38,7 +40,8 @@ static void rank_line(u8 i, u8 col) {
     b[0] = ord[i][0]; b[1] = ord[i][1]; b[2] = ord[i][2];
     k = 10;                                   /* 点数の最後の桁(6〜10 桁目) */
     do { b[k--] = (char)('0' + (u8)(v % 10)); v /= 10; } while (v && k >= 6);
-    b[14] = g_rank[i].name[0]; b[15] = g_rank[i].name[1]; b[16] = g_rank[i].name[2];
+    b[14] = (char)(g_rank[i].name[0] & ~RANK_INV); b[15] = g_rank[i].name[1]; b[16] = g_rank[i].name[2];
+    if (col != RK_NEW && (g_rank[i].name[0] & RANK_INV)) col = RK_INV;   /* ★無敵の点は灰色(1 位でも) */
     vdp_text(60, (u8)(72 + i * 20), col, RK_BG, b);
 }
 
@@ -131,24 +134,26 @@ static void name_entry(u8 pos, u16 sc, char *nm) {
     }
 }
 
-/* pos に入れる(下を 1 つずつずらす) */
-static void rank_insert(u8 pos, u16 sc, const char *nm) {
+/* pos に入れる(下を 1 つずつずらす)。inv = 無敵の設定で遊んだ点(印を付ける) */
+static void rank_insert(u8 pos, u16 sc, const char *nm, u8 inv) {
     u8 i;
     for (i = RANK_N - 1; i > pos; i--) g_rank[i] = g_rank[i - 1];
     g_rank[pos].score = sc;
-    g_rank[pos].name[0] = nm[0]; g_rank[pos].name[1] = nm[1]; g_rank[pos].name[2] = nm[2];
+    g_rank[pos].name[0] = (char)(nm[0] | (inv ? RANK_INV : 0)); g_rank[pos].name[1] = nm[1]; g_rank[pos].name[2] = nm[2];
     if (g_rank[0].score > g_hiscore) g_hiscore = g_rank[0].score;
 }
 
 static u8 run_ranking(void) {
     u16 f, sc;
-    u8 i, pos;
+    u8 i, pos, inv;
     char nm[3];
     __asm ei __endasm;            /* ★_bcall は di のまま来る。vdp_wait_frame は割込みで進む JIFFY を待つ */
     /* ★入るかどうかは、デモの設定を戻す**前**に決める(デモは無敵で遊んだ点が g_score に残っている)。
-       無敵の設定で遊んだ点は記録しない(開発用の設定なので)。 */
+       ★無敵の設定で遊んだ点も記録する(印を付けて表では灰色)。最初は「記録しない」にしていたが、
+         「無敵を使わないと入れない」とユーザー指摘(2026-10-11)。 */
     sc = g_score;
-    pos = (!g_demo && !g_invinc) ? rank_pos(sc) : RANK_N;
+    inv = g_invinc;
+    pos = !g_demo ? rank_pos(sc) : RANK_N;
     g_score = 0;                  /* ★見たら捨てる(デモの後のランキングで二重に入らないように) */
     DEMO_END();                   /* ★デモから来たら、書き換えた設定を元に戻す */
     /* ★面(デモ・ゲームオーバー)から来ると画面モードは同じ SCREEN5 なので CHGMOD が走らず、面の VDP の状態
@@ -161,7 +166,7 @@ static u8 run_ranking(void) {
     vdp_set_display_page(0);
     if (pos < RANK_N) {
         name_entry(pos, sc, nm);
-        rank_insert(pos, sc, nm);
+        rank_insert(pos, sc, nm, inv);
     }
     vdp_fill(0, 0, 256, 212, RK_BG);
     vdp_text_s(80, 28, RK_TOP, RK_BG, 2, "BEST 5");   /* 6 字 × 16 = 96 ドット、中央 */
