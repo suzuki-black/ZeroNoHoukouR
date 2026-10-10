@@ -5,7 +5,7 @@
      ・常駐の関数/データ(vdp_sprite_*, g_cbul, dvx/dvy)は通常どおり呼べる
        (page1 は同一内容の RAM 複製＝番地はそのまま) */
 #include "curtain.h"
-#include "hud.h"      /* SPR_TOP: HUD の手前までしか使えない */
+#include "rank.h"     /* SPR_GAME_TOP: HUD の手前までしか使えない(デモ中は HUD が無いので 32) */
 #include "fire.h"
 #include "vdp.h"
 #include "sprites.h"
@@ -104,8 +104,8 @@ void ovl_curtain_draw(u8 base, u8 nper, u8 line) {
     /* ★余った枠は**1枚ずつ画面外へ**。停止マーカ(hide_from)は使えない: HUD は最後尾の枠
        (SPR_TOP..31)に居るので、その手前にマーカを置くと HUD ごと消える。 */
     {   u8 k;
-        for (k = (u8)(base + na); k < SPR_TOP; k++) vdp_sprite_pos_a(k, 0, 220, SPR_BULLET);
-        for (k = (u8)(base + nb); k < SPR_TOP; k++) vdp_sprite_pos_b(k, 0, 220, SPR_BULLET); }
+        for (k = (u8)(base + na); k < SPR_GAME_TOP; k++) vdp_sprite_pos_a(k, 0, 220, SPR_BULLET);
+        for (k = (u8)(base + nb); k < SPR_GAME_TOP; k++) vdp_sprite_pos_b(k, 0, 220, SPR_BULLET); }
 }
 
 /* 自機との当たり。★既存の敵弾と同じ許容(±6px, 弾の左上同士で比較)。
@@ -152,8 +152,8 @@ void ovl_curtain_volley(u8 active) {
    色表を直書きするので entity.c の色キャッシュを捨てること。 */
 void ovl_curtain_present(u8 nper, u8 line) {
     u8 base = g_spr_used, n;
-    if (base >= SPR_TOP) return;      /* ★SPR_TOP から先は HUD(最低優先の固定枠) */
-    n = (u8)(SPR_TOP - base);
+    if (base >= SPR_GAME_TOP) return;      /* ★SPR_TOP から先は HUD(最低優先の固定枠)。デモ中は HUD が無いので 32 */
+    n = (u8)(SPR_GAME_TOP - base);
     if (n > nper) n = nper;
     ovl_curtain_draw(base, n, line);
     ent_spr_cache_inval(base);

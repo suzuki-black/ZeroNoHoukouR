@@ -25,7 +25,7 @@
 #include "player.h"     /* g_player_x/y */
 #include "sound.h"
 #include "midboss.h"
-#include "hud.h"       /* SPR_TOP: HUD は最後尾の枠 */
+#include "rank.h"      /* SPR_GAME_TOP: HUD は最後尾の枠(デモ中は HUD が無いので 32) */
 #include "hotcode.h"    /* hb_*: 背景に描く弾(hot_hb.c。RAM 常駐) */
 
 extern u8 rnd(void);
@@ -67,11 +67,11 @@ static void turn_to(u8 tgt) {
 /* ent_draw_all の後に呼ぶ: 重ね→本体→影の順に末尾の枠へ置き、エンティティとの間の枠は隠して停止マーカを消す。
    影はいつも同じ色(13)。被弾や予告で白くなるのは機体だけ(中ボス共通の決まり)。 */
 static void put_sprites(void) {
-    /* ★先頭は **SPR_TOP - g_mb_n**(SPR_TOP = HUD の先頭 = ゲームが使える上限)。
+    /* ★先頭は **SPR_GAME_TOP - g_mb_n**(ふだんは SPR_TOP = HUD の先頭 = ゲームが使える上限)。
        ここで g_mb_s0 を使ってはいけない: この中ボスは**同じフレームの中で** mb_upload が
        枚数(g_mb_n)を変えるので、フレーム頭に常駐が計算した g_mb_s0 は1フレーム古い。
        実際 g_mb_n=0 のまま s0=SPR_TOP となり、18枚を HUD の枠へ書いて色表を壊した。 */
-    u8 c, j = 0, pass, sl, s0 = (u8)(SPR_TOP - g_mb_n);
+    u8 c, j = 0, pass, sl, s0 = (u8)(SPR_GAME_TOP - g_mb_n);
     const u8 *col = (const u8 *)(MB_BUF + 708);
     for (sl = g_spr_used; sl < s0; sl++) vdp_sprite_pos(sl, 0, 220, MB_CELL_PAT(0));
     sl = s0;

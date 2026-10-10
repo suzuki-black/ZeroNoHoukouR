@@ -27,7 +27,7 @@
 #include "aa_hot.h"     /* cam */
 #include "scroll.h"     /* g_sea_skip / SC_SEATMPL_Y */
 #include "midboss.h"
-#include "hud.h"       /* SPR_TOP: HUD は最後尾の枠 */
+#include "rank.h"      /* SPR_GAME_TOP: HUD は最後尾の枠(デモ中は HUD が無いので 32) */
 
 __sfr __at(0x98) DD_DAT;
 
@@ -44,7 +44,7 @@ extern const u8 barrel_col[16], barrel_flash[16];
 #define DD_BOW      160     /* 絵の中の艦首/艦尾(ドット) */
 #define DD_STERN    10
 #define DD_REQ0     4       /* 絵は mb_bank(60) の 4096 から=添字 4,5,6 */
-#define DD_SLOT0    (SPR_TOP - 8)   /* 砲身 4枚×2 隻。★HUD は最後尾(SPR_TOP..31)なのでその手前 */
+#define DD_SLOT0    (SPR_GAME_TOP - 8)   /* 砲身 4枚×2 隻。★HUD は最後尾(SPR_TOP..31)なのでその手前(デモ中は HUD が無いので 24〜31) */
 #define DD_WARN_T   12
 #define DD_PIERCE   0x7ABF
 

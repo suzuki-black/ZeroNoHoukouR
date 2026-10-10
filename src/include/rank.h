@@ -10,6 +10,7 @@
 #include "gamestate.h"   /* RANK_ADDR / RANK_BYTES / g_stage_sel / g_invinc / g_fm */
 #include "pcm.h"         /* g_pcm(デモ中は切る) */
 #include "opll.h"        /* g_opll / g_opll_hw(デモ中は FM を切る) */
+#include "hud.h"         /* SPR_TOP */
 
 #define RANK_N    5      /* 何位まで残すか */
 #define RANK_NAME 3      /* 名前の文字数 */
@@ -38,6 +39,9 @@ typedef char rank_fits[(RANK_N * sizeof(RankEnt) <= RANK_BYTES) ? 1 : -1];   /* 
 typedef char att_fits[(ATT_ADDR + 7 <= RANK_ADDR + RANK_BYTES) ? 1 : -1];
 typedef char att_addr_ok[(ATT_ADDR == DEMO_ADDR) ? 1 : -1];
 #define DEMO_BANK    68      /* デモの自動操縦(banked/demo.c) */
+/* ゲーム(エンティティ・中ボス・弾幕)が使ってよいスプライトの枠の上限。デモ中は HUD を描かないので 32 まで
+   (先頭 7 枠を PUSH SPACE KEY に譲るぶん)。常駐の scene_stage.c と同じ決まり。 */
+#define SPR_GAME_TOP ((u8)(g_demo ? 32 : SPR_TOP))
 #define DEMO_STAGES  5       /* デモで回す面の数(1〜5 面。最終面は内緒) */
 #define DEMO_SHIP_FROM 3     /* この面(0 基点)からはデモで中ボスを飛ばして戦艦を見せる(4・5 面。ユーザー指定 2026-10-09)。
                                 ★4 面の He 111 は絵の表を切り替え、5 面の P-61 はスプライトを拡大するので、

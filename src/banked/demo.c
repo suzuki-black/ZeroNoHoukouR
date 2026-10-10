@@ -6,7 +6,8 @@
      ここで本物の入力を読み、抜けるかを決めてから、次のフレームの g_input / g_input_edge を自動操縦の値にする。
    ・抜けるときは g_scene_ret を直接書く(scene.c はその直後に遷移を見る)。
      設定を元に戻すのは、抜けた先のシーン(ランキング・タイトル)の入場で(DEMO_END)。
-   ・HUD の枠(SPR_TOP〜31)に PUSH SPACE KEY を出す。HUD はデモ中は描かない(scene.c)。
+   ・先頭の枠(0〜6)に PUSH SPACE KEY を出す。HUD はデモ中は描かない(scene.c)ので、その枠(24〜31)はゲームに回す
+     (scene_stage.c の上限 sp_top と rank.h の SPR_GAME_TOP)。
      文字の絵は数字の絵(SPR_DIGIT0〜)を借りる。数字を使う得点のポップはデモ中は出さない(entity.c)。
      本物のゲームでは面の準備(hud_init)が数字を描き直すので元に戻る。
    ★状態は static に置かない(0xE000〜は面の途中で呼ぶ他のバンクと取り合う)。全部 rank.h の 7B。 */
@@ -51,6 +52,7 @@ static void text_setup(void) {
         vdp_sprite_pattern((u8)(SPR_DIGIT0 + i * 4), buf);
         vdp_sprite_color((u8)(TXT_SL0 + i), 15);
     }
+    ent_spr_cache_inval(0);   /* ★HUD の枠(24〜31)はデモ中ゲームが使う。HUD の準備が色表を直接書いたので、色の控えを捨てて書き直させる */
 }
 
 static void text_draw(void) {
@@ -59,7 +61,6 @@ static void text_draw(void) {
         vdp_sprite_pos((u8)(TXT_SL0 + i), (u8)(TXT_X + i * 16), TXT_Y, (u8)(SPR_DIGIT0 + i * 4));
         vdp_sprite_color((u8)(TXT_SL0 + i), 15);   /* ★毎フレーム白に(デモの直前に敵が使っていた枠の色の書込みが残っていて、赤などに化けた) */
     }
-    for (i = HUD_SL0; i < 32; i++) vdp_sprite_pos(i, 0, 220, SPR_DIGIT0);   /* HUD の枠は使わない(画面外へ) */
 }
 
 void banked_entry(void) {
