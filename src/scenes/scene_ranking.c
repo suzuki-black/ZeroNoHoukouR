@@ -169,6 +169,10 @@ static u8 run_ranking(void) {
     for (f = 0; f < RK_HOLD; f++) {
         vdp_wait_frame();
         if (pos < RANK_N && (f & 15) == 0) rank_line(pos, (f & 16) ? RK_NEW : RK_TX);   /* 新しい行を点滅 */
+        if ((f & 31) == 0) {                                  /* ★PRESS SPACE KEY を約 0.5 秒ずつ点滅(タイトル・デモとそろえる) */
+            if (f & 32) vdp_fill(68, 184, 120, 8, RK_BG);
+            else        vdp_text(68, 184, RK_TX, RK_BG, "PRESS SPACE KEY");   /* 15 字 = 120 ドットを中央に */
+        }
         input_poll();
         if (g_input_edge & INP_TRIG) break;
     }
