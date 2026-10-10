@@ -11,6 +11,7 @@
 #include "scene.h"
 #include "vdp.h"
 #include "rank.h"
+#include "sound.h"    /* snd_active(DEMO_END が効果音の終わりを待つ) */
 
 #define RK_BG   1      /* 背景 = 濃紺(エンディングと同じ) */
 #define RK_TX   15     /* 文字 = 白 */

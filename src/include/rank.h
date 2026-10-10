@@ -40,12 +40,12 @@ typedef char att_fits[(ATT_ADDR + 7 <= RANK_ADDR + RANK_BYTES) ? 1 : -1];
 typedef char att_addr_ok[(ATT_ADDR == DEMO_ADDR) ? 1 : -1];
 #define DEMO_BANK    68      /* デモの自動操縦(banked/demo.c) */
 /* ゲーム(エンティティ・中ボス・弾幕)が使ってよいスプライトの枠の上限。デモ中は HUD を描かないので 32 まで
-   (先頭 7 枠を PUSH SPACE KEY に譲るぶん)。常駐の scene_stage.c と同じ決まり。 */
+   (先頭 8 枠を PRESS SPACE KEY に譲るぶん)。常駐の scene_stage.c と同じ決まり。 */
 #define SPR_GAME_TOP ((u8)(g_demo ? 32 : SPR_TOP))
 #define DEMO_STAGES  5       /* デモで回す面の数(1〜5 面。最終面は内緒) */
 #define DEMO_SHIP_FROM 3     /* この面(0 基点)からはデモで中ボスを飛ばして戦艦を見せる(4・5 面。ユーザー指定 2026-10-09)。
                                 ★4 面の He 111 は絵の表を切り替え、5 面の P-61 はスプライトを拡大するので、
-                                  中ボスの間は PUSH SPACE KEY をスプライトで出せない */
+                                  中ボスの間は PRESS SPACE KEY をスプライトで出せない */
 
 /* デモを始める(タイトルから)／終える(ランキング・タイトルの入場で)。どちらもバンクのコードから呼ぶ。
    ★設定は退避して戻す(デモは開始面・無敵・FM・PCM を一時的に書き換える)。 */
@@ -54,7 +54,11 @@ typedef char att_addr_ok[(ATT_ADDR == DEMO_ADDR) ? 1 : -1];
      戻すときは設定どおり(g_fm が ON ならハードの値)。0 にする前に fm_silence で鳴っている音を止めること。
    ★マクロにしてある: ヘッダに static 関数を置くと、使わない常駐のファイルにも本体ができて常駐を食う。 */
 #define DEMO_SAVE() (g_demo_sv = (u8)((g_stage_sel & 7) | ((g_invinc & 1) << 3) | ((g_pcm & 3) << 5)))
+/* ★戻す前に、鳴っている途中の効果音が終わるのを待つ。デモ中は音量だけ 0 にして効果音は裏で進めているので、
+     残り時間のあるうちに戻すと、その残り(敵の発砲の「プッ」など)が聞こえた(2026-10-10 ユーザー指摘)。
+     割込みで進むので ei してから(バンクのシーンは di のまま来る)。使う側は sound.h と vdp.h を取り込むこと。 */
 #define DEMO_END() do { if (g_demo) { u8 _v = g_demo_sv; \
+    __asm ei __endasm; while (snd_active) vdp_wait_frame(); \
     g_stage_sel = (u8)(_v & 7); g_invinc = (u8)((_v >> 3) & 1); g_pcm = (u8)((_v >> 5) & 3); \
     g_opll = g_fm ? g_opll_hw : OPLL_NONE; \
     g_demo = 0; g_demo_ret = 0; } } while (0)
