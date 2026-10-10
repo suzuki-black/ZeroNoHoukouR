@@ -1,4 +1,4 @@
-/* prof_bank.c — DEBUG_PROF の「冷たい側」(自己診断画面と区間表示)を bank29 へ追い出したもの。
+/* prof_bank.c — DEBUG_PROF の「冷たい側」(自己診断画面と区間表示)を bank31 へ追い出したもの。
    ★理由: 演出(ラスタ分割/CPU弾幕/パレットエンジン/メガクラッシュ)を常時オンに畳んだ結果、
      DEBUG_PROF ビルドだけが常駐窓(bank0-2=24KB)を数百バイト超過するようになった。
      ここに居るのは **起動時1回** と **60フレームに1回の凍結表示** だけなので、
@@ -206,7 +206,7 @@ static u16 time_mulw_sw(void) {
 }
 
 /* ===== 表示ヘルパ(u16→10進, ラベル前置) ===== */
-static char __at(PROF_RAM_ADDR + 0x80) pbuf[24];   /* 表示整形バッファ(高位フリー帯) */
+static char __at(PROF_RAM_ADDR + 0x80) pbuf[24];   /* 表示整形バッファ(高位フリー帯)。★自己診断(起動時)だけ。0xEB80 は中ボスの MB_SBUF と同じ */
 static char hxd(u8 n) { return (char)(n < 10 ? '0' + n : 'A' + (n - 10)); }
 /* ラベル＋4個の8bit値を16進で表示(スロット/マッパー偵察用)。 */
 static void put_hex4(u8 px, u8 py, const char *label, u8 a, u8 b, u8 c, u8 d) {
@@ -217,19 +217,25 @@ static void put_hex4(u8 px, u8 py, const char *label, u8 a, u8 b, u8 c, u8 d) {
     pbuf[i] = 0;
     vdp_text(px, py, 15, 0, pbuf);
 }
+/* ★区間表示(ゲーム中)でも呼ぶので、整形はスタックで。pbuf(0xEB80)は中ボスの影パターン MB_SBUF と同じ番地で、
+     中ボス戦の最中に表示すると影を壊す(pbuf は起動時の自己診断だけが使う)。 */
 static void put_num(u8 px, u8 py, const char *label, u16 v) {
-    u8 i = 0; const char *l = label; char tmp[6]; u8 n = 0;
-    while (*l) pbuf[i++] = *l++;
+    u8 i = 0; const char *l = label; char tmp[6]; u8 n = 0; char buf[24];
+    while (*l) buf[i++] = *l++;
     if (v == 0) tmp[n++] = '0';
     else while (v) { tmp[n++] = (char)('0' + (v % 10)); v /= 10; }
-    while (n) pbuf[i++] = tmp[--n];
-    pbuf[i] = 0;
-    vdp_text(px, py, 15, 0, pbuf);
+    while (n) buf[i++] = tmp[--n];
+    buf[i] = 0;
+    vdp_text(px, py, 15, 0, buf);
 }
 
 /* ===== 用件0: 起動時の自己診断 ===== */
 static void selftest(void) {
     u16 rom_t, ram_t, io_t, null_t, hmmm_t, ratio;
+
+    /* ★計測の変数は __at(0xEB00〜)なので起動時に 0 にならない。常駐を食わないようここで消す */
+    { u8 i; for (i = 0; i < PF_N; i++) g_prof_acc[i] = 0; }
+    g_prof_over = 0; g_prof_fc = 0;
 
     /* --- 計測(画面設定前に。VDP I/O計測は画面確立後の方が安全なので後段) --- */
     tmr_reset(); busyloop();                    rom_t = tmr_read();   /* ROM実行 */

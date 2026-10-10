@@ -37,7 +37,7 @@ static u8 pal_need_reset;   /* 面開始/再開でパレット状態を捨てる
 #define CURTAIN_RING_N     12   /* 1斉射あたりの弾数(32分割方向へ等間隔) */
 #ifdef DEBUG_PROF
 #include "prof.h"
-#define PROF_CALL(grp, call) do { PROF_T0(_pt); call; PROF_ADD(grp, _pt); } while (0)
+#define PROF_CALL(grp, call) do { prof_begin(); call; prof_end(grp); } while (0)   /* ★入れ子にしない(開始 tick は 1 つ) */
 #else
 #define PROF_CALL(grp, call) do { call; } while (0)
 #endif
@@ -1308,7 +1308,7 @@ u8 stage_update(void) {
       if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_collide());
     }
 #ifdef DEBUG_PROF
-    { PROF_T0(_pd);
+    prof_begin();   /* PF_DRAW。★この区間の中に PROF_CALL を置かない(開始 tick は 1 つ) */
 #endif
     /* ★スプライトslotの予約は「弾幕が実際に出ている間だけ」。常に予約すると、最後に描かれる
        最低優先のスプライト(落ち影・撃破点数)が混雑フレームで落ち、実機で「戦闘機の影が
@@ -1369,7 +1369,7 @@ u8 stage_update(void) {
     if (g_cbul_live) curtain_present(CURTAIN_SLOTS, CURTAIN_SPLIT_LINE);   /* ★弾が居るときだけ
                                              (空振りでも色キャッシュを毎フレーム捨ててしまうため) */
 #ifdef DEBUG_PROF
-    PROF_ADD(PF_DRAW, _pd); }
+    prof_end(PF_DRAW);
 #endif
 #ifdef BGTEST
     bgt_frame();   /* ★実機検証: 背景弾の発数と FPS(海の区間に混ぜて本番と同じ経路で測る) */

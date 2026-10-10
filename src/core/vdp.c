@@ -174,7 +174,11 @@ void vdp_blit_bank_vram(u8 first_bank, u16 total, u8 hi, u16 lo) {
    必ず S#0 へ戻してから ei する(S#2 選択窓を最小化しつつ割込は基本 on に保つ)。 */
 void vdp_cmd_wait(void) {
 #ifdef DEBUG_PROF
-    PROF_T0(_pw);
+    /* ★PROF_CALL の区間の中からも呼ばれるので、開始 tick はスタックに積む(prof_begin の 1 つを使わない) */
+    __asm
+        call _pcm_now
+        push hl
+    __endasm;
 #endif
     __asm
     00001$:
@@ -193,7 +197,11 @@ void vdp_cmd_wait(void) {
         jp   c, 00001$
     __endasm;
 #ifdef DEBUG_PROF
-    PROF_ADD(PF_CMDWAIT, _pw);
+    __asm
+        pop  de
+        ld   a, #1               ; PF_CMDWAIT(prof.h の enum。asm からは名前で引けない)
+        call _prof_add
+    __endasm;
 #endif
 }
 
@@ -290,7 +298,7 @@ void vdp_wait_frame(void) {
     volatile u16 *j = (volatile u16 *)0xFC9E;   /* JIFFY */
     u16 t = *j;
 #ifdef DEBUG_PROF
-    { PROF_T0(_pw); while (*j == t) { } PROF_ADD(PF_WAIT, _pw); }
+    prof_begin(); while (*j == t) { } prof_end(PF_WAIT);   /* ★PROF_CALL の区間の中からは呼ばれない */
 #else
     /* ★ここは前景でブロックする演出(ファンファーレ・結果画面)の待ち。叫びを重ねても、PCM は
        走査線割込みが出す(hot_pcm.s)ので、ここで送り出す必要は無い。 */

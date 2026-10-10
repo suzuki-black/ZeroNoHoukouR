@@ -44,6 +44,12 @@ endif
 ifdef DEBUG_PROF
   DEFS += -DDEBUG_PROF
 endif
+# ★計測の版は PCM を切ってあるので、常駐の PCM を「鳴らない版」(入口とタイマ読みだけ)へ差し替える。
+#   本物のままだと計測を足した常駐が 24KB に収まらない(src/core/pcm_prof.s)。
+PCM_SRC = $(SRC)/core/pcm.s
+ifdef DEBUG_PROF
+  PCM_SRC = $(SRC)/core/pcm_prof.s
+endif
 # ── 海アニメ停止(切り分け用): make clean && make DEBUG_FPS=1 DEBUG_NOSEA=1
 ifdef DEBUG_NOSEA
   DEFS += -DDEBUG_NOSEA
@@ -179,7 +185,7 @@ $(BUILD)/entity.rel: $(SRC)/core/entity.c $(HDRS) | $(BUILD)
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $< -o $@
 
 # ★常駐の asm(PCM の送出)。C を介さず 1 サンプルずつ出す所なので asm で書いてある。
-$(BUILD)/pcm.rel: $(SRC)/core/pcm.s | $(BUILD)
+$(BUILD)/pcm.rel: $(PCM_SRC) | $(BUILD)
 	sdasz80 -o $@ $<
 
 $(BUILD)/crt0rom.rel: $(SRC)/crt0rom.s | $(BUILD)
@@ -285,7 +291,7 @@ $(BUILD)/demo.ihx: $(SRC)/banked/demo.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/r
 
 # 面の準備の配置処理(対空砲の初期化・主砲/停泊機の配置)を bank30 へ。常駐リクレイムのため scene_stage.c から移設。
 $(BUILD)/coldsetup.ihx: $(SRC)/banked/coldsetup.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/coldsetup.c -o $(BUILD)/coldsetup.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/coldsetup.c -o $(BUILD)/coldsetup.rel   # ★$(DEFS) が要る(DEBUG_PROF でスネアを写さない・OPLLTEST の和音)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/coldsetup.rel $(BUILD)/resident_syms.rel -o $@
 

@@ -74,12 +74,13 @@ Z80アドレス空間                          ASCII8 MegaROM(1MB = 128 bank × 
 |---|---|
 | 0xC000〜 | 常駐 `_DATA`。この中に `hot_ram[HOT_CAP=5900]` を予約（現況の末尾 `s__HEAP=0xDFFD`。天井まで 3B） |
 | 0xE000–0xE0DF | **バンクシーン/バンクコードの static**（同時にアクティブなのは1つ。最大は gen_planes の 198B。**0xE0E0 を越えたら Makefile が止める**）。★hot（`hot_hb.c` の 3B）もここに置かれている |
+| 　└ 0xE000–0xE002 | **中ボスの背景弾 `hot_hb.c` の static**（`hb_x`/`hb_y`/`hb_lastc`）。hot.bin も `--data-loc 0xE000` でリンクしているため。`hb_init`〜`hb_clear`（1面・4面の中ボス戦）の間は 0xE000 の static を持つバンクコード（gen_planes・ship_render・coldsetup・シーン）を呼ばないので重ならない。デモの自動操縦（bank68）は中ボス戦の最中も毎フレーム呼ぶが、static を持たない（`l__DATA=0`）（2026-10-09 確認。5面の `mode 7` は `hb_init` の前で、そもそも 5面は hb を使わない。警報の `mode 8/9` は中ボスの後。ミスの沈没演出(bank16)は踏むが、再挑戦で `hb_init` からやり直す）。**中ボス戦の最中に 0xE000 の static を持つバンクを呼ぶようにするなら、先にこの 3B を逃がすこと** |
 | 0xE0E0–0xE0FF | **ランキング（TOP5）の表**（`RANK_ADDR`、32B。2026-10-09 予約。起動後に書く者が居ないことを全面とエンディングで実測） |
 | 0xE100–0xE6FF | 開始カードの作業 `g_card_ram[1536]` ＝ 現在の曲 `bgm_ram[1536]`（時期が重ならないので共用） |
 | 0xE500〜 | He 111 の機体色 448B（4面の中ボス中のみ） |
 | 0xE700〜 | 艦体OPS の展開 `ship_ram` ＝ **中ボスの向きデータ `MB_BUF`(1KB)** ＝ 警報の作業行（面の準備と中ボスは同時でない） |
 | 0xE900〜 | 火球の作業 `fb_ram[512]` |
-| 0xEB00–0xEB7F | **PCM のスネア**（128B。起動時に bank30 から写す）。DEBUG_PROF の版では計測がここを使う |
+| 0xEB00–0xEB7F | **PCM のスネア**（128B。起動時に bank30 から写す）。DEBUG_PROF の版では PCM を切り、計測がここを使う（0xEB00 区間別 tick `g_prof_acc`(40B) / 0xEB28 1VBLANK 超えの数 / 0xEB2A 用件 / 0xEB2B フレーム数 / 0xEB2C・0xEB2E 区間の開始 tick / 0xEB40 自己診断の RAM 実行枠。常駐 `_DATA` を食わないよう全部ここ） |
 | 0xEB80〜 | 中ボスの影パターン `MB_SBUF`(128B) |
 | 0xEC00–0xEDFF | **CPU 弾幕 `g_cbul[64]`(512B)**。中ボス戦の間は弾幕が出ないので、**中ボスの背景弾の表(0xEC00)と海のひな形(0xED00)** が借りる。最終面も同じ帯を別用途で借りる |
 | 0xEE00–0xEEFF | **RAM オーバレイの static（256B 厳守）**。超えると 0xEF00 の分割表を壊す（実際に踏んだ） |
