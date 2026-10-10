@@ -12,6 +12,7 @@
 #include "input.h"   /* input_poll/g_input_edge/INP_* */
 #include "gamestate.h" /* g_score/g_hiscore/g_continue */
 #include "sprites.h"  /* SPR_* / vdp_sprite_pattern(mode4=パターン投入を移設) */
+#include "rank.h"     /* g_demo(デモのカードの PUSH SPACE KEY を点滅) */
 
 __sfr __at(0x98) SH_DAT;     /* VRAM データ */
 __sfr __at(0x99) SH_CTRL;    /* VDP アドレス/レジスタ */
@@ -598,10 +599,23 @@ static void fanfare_open_impl(void) {
     fanfare_seq(omel, ohar, olen, 8);
 }
 
+/* ★デモの開始カード: PUSH SPACE KEY を**VDP に**点滅させる。カードの間は艦の準備で CPU が数秒ふさがり、
+   毎フレームの処理が回らないので、SCREEN5 のページ交互表示(R#13。表示ページが奇数のとき、その偶数側と交互に出す)を使う。
+   page1 = 文字なしのカード(写し)、page0 = 文字ありのカード。page1 は地形の表示リングだが、描くのは準備の最後
+   (scroll_init)なので、それまでは空いている。交互表示は準備の終わりで止める(coldsetup.c。scroll_init より前)。 */
+static void demo_card_blink(void) {
+    vdp_fill(0, 196, 256, 8, 1);                 /* HI の行を消す(デモでは出さない。★bank19 は満杯で、描かない分岐も入らない) */
+    vdp_copy(0, 0, 0, 256, 256, 212);            /* カードを page1 へ写す(文字なし) */
+    vdp_cmd_wait();                              /* ★写し終わってから書く(先に書くと写しに文字が入る) */
+    vdp_text(72, 196, 15, 1, "PUSH SPACE KEY");  /* 14 字 = 112 ドットを中央に */
+    vdp_wreg(13, 0x33);                          /* 0.5 秒ずつ(単位 10 フレーム)交互 */
+    vdp_set_display_page(1);
+}
+
 void banked_entry(void) {
     switch (g_shipargs.mode) {
         case 10: fanfare_open_impl(); return;  /* ★開始ファンファーレ(常駐から移設) */
-        case 1: draw_card_impl(); return;
+        case 1: draw_card_impl(); if (g_demo) demo_card_blink(); return;
         case 2: death_impl(g_shipargs.cam); return;
         case 3: g_shipargs.ret = gameover_impl(); return;
         case 4: load_sprites_impl(); return;   /* ★スプライトパターン投入(sprites.cから移設) */

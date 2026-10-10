@@ -55,10 +55,10 @@ static void text_setup(void) {
     ent_spr_cache_inval(0);   /* ★HUD の枠(24〜31)はデモ中ゲームが使う。HUD の準備が色表を直接書いたので、色の控えを捨てて書き直させる */
 }
 
-static void text_draw(void) {
-    u8 i;
+static void text_draw(u8 on) {
+    u8 i, y = on ? TXT_Y : 220;   /* ★点滅(消すときは画面外へ) */
     for (i = 0; i < 7; i++) {
-        vdp_sprite_pos((u8)(TXT_SL0 + i), (u8)(TXT_X + i * 16), TXT_Y, (u8)(SPR_DIGIT0 + i * 4));
+        vdp_sprite_pos((u8)(TXT_SL0 + i), (u8)(TXT_X + i * 16), y, (u8)(SPR_DIGIT0 + i * 4));
         vdp_sprite_color((u8)(TXT_SL0 + i), 15);   /* ★毎フレーム白に(デモの直前に敵が使っていた枠の色の書込みが残っていて、赤などに化けた) */
     }
 }
@@ -100,5 +100,5 @@ void banked_entry(void) {
     g_input_edge = (u8)(inp & ~g_demo_prev);
     g_demo_prev = inp;
 
-    text_draw();
+    text_draw((u8)!(el & 32));   /* 約 0.5 秒ずつ点滅(開始カードの点滅とそろえる) */
 }

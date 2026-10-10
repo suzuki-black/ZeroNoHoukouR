@@ -274,6 +274,8 @@ void banked_entry(void) {
     u8 i;
     if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); pcm_detect(); rank_init(); return; }   /* ★turboR 未満はここで止まる */
     if (g_cold_mode == COLD_HUDDIG) { hud_digits(); return; }
+    if (g_demo) { vdp_wreg(13, 0); vdp_set_display_page(0); }   /* ★デモのカードの点滅(ページ交互表示。ship_render.c)を止める。
+                                                                    この後の scroll_init が page1 を描くので、それより前に */
     for (i = 0; i < SHIP_NAAG; i++) {          /* 対空砲の発射タイマと耐久 */
         u16 t = (u16)60 + (u16)i * 11;         /* ★u16で計算し255クランプ(u8のままだと高iで桁溢れ) */
         aa_fire[i] = (t > 255) ? 255 : (u8)t;
