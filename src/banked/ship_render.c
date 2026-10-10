@@ -382,7 +382,7 @@ static u8 gameover_impl(void) {
     go_fmt(g_score); vdp_text(84, 96, 15, 0, "SCORE"); vdp_text(132, 96, 11, 0, go_score);
     go_fmt(g_hiscore); vdp_text(84, 116, 14, 0, "HI"); vdp_text(132, 116, 14, 0, go_score);
     if (!g_continue) {
-        vdp_text(88, 160, 14, 0, "PUSH SPACE");
+        vdp_text(68, 160, 14, 0, "PRESS SPACE KEY");   /* ★タイトルの絵・デモとそろえる(15 字 = 120 ドットを中央に) */
         for (;;) { input_poll(); if (g_input_edge & INP_TRIG) break; vdp_wait_frame(); }
         return 0;
     }
