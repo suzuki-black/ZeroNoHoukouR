@@ -6,6 +6,7 @@
 #include "msx.h"
 #include "raster.h"  /* ras_pause / ras_resume(CHGMOD の前後) */
 #include "bank.h"    /* vdp_blit_bank_vram が窓めくりに使う(bank_data/bank_restore) */
+#include "entity.h"  /* cdirty / ent_col_put(vdp_sat_flush が枠ごとに色を先に送る) */
 #ifdef DEBUG_PROF
 #include "prof.h"
 #endif
@@ -621,17 +622,105 @@ static void sat_tail(u8 live) {
         for (; live < g_spr_hide_to && live < 32; live++) { VDP_DAT = hy; VDP_DAT = 0; VDP_DAT = 0; VDP_DAT = 0; }   /* ★32 枚より先はパターン表(0x7800〜)。値が化けても書かない */
     } else if (live < 32) VDP_DAT = 216;   /* 停止マーカ(=スロットliveのY)。以降のスプライト非表示 */
 }
-void vdp_sat_flush(u8 from, u8 live) {
-    u8 i, n = (u8)((u16)(live - from) * 4);
-    const u8 *src = &sat_shadow[(u16)from * 4];
-    vdp_write_addr((u16)(SPR_ATTR + (u16)from * 4));
-    for (i = 0; i < n; i++) VDP_DAT = src[i];
-    sat_tail(live);
-    if (g_spr_dual) {               /* セットBへ同一内容をミラー(追加コストは 4B×枚数) */
-        vdp_write_addr((u16)(SPR_ATTR_B + (u16)from * 4));
-        for (i = 0; i < n; i++) VDP_DAT = src[i];
-        sat_tail(live);
-    }
+/* ★色表(entity.c の cdirty の枠)も**ここで、その枠の位置の直前に**送る。
+   位置を全部送ってから色を全部送っていたら、重い面(5面の戦艦)では送るのが表示の途中(実測で 9 割が 20〜211 行目)に
+   ずれ込み、「影の位置だけ新しい枠へ移り、その枠の色はまだ白い点数や白く光った砲身のまま」の瞬間が残って、
+   自機の影が白く光った(2026-10-11 ユーザー指摘。苦労と教訓 §16-58)。枠ごとに「色→位置」なら食い違いは 1〜2 行。
+   アドレスの設定は 1 枚ごと(続けて送る形より増えるが、色を変える枠を探して区切るより常駐が小さい)。 */
+/* ★常駐の節約で asm(C で書くと 40B 余計に食い、検証用 ROM が入らない)。中身は次の C と同じ:
+     for (; from < live; from++) {
+         if (cdirty[from]) ent_col_put(from);          // 色を先に。すぐその枠の位置
+         sat_one(SPR_ATTR, from);                       // 控え(sat_shadow)の 4B を 1 枚ぶん
+         if (g_spr_dual) sat_one(SPR_ATTR_B, from);     // セットBへミラー
+     }
+     vdp_write_addr(SPR_ATTR + live*4); sat_tail(live);
+     if (g_spr_dual) { vdp_write_addr(SPR_ATTR_B + live*4); sat_tail(live); }
+   ★1 枚の 4B を続けて書くのは vdp_sprite_pos と同じ間隔(実機で落ちない。OTIR にはしない)。 */
+void vdp_sat_flush(u8 from, u8 live) __naked {
+    (void)from; (void)live;
+    __asm
+        ld   b, a                ; B = 枠(from から)
+        ld   c, l                ; C = live
+    00001$:
+        ld   a, b
+        cp   c
+        jr   nc, 00005$
+        ld   hl, #_cdirty
+        ld   e, b
+        ld   d, #0
+        add  hl, de
+        ld   a, (hl)
+        or   a
+        jr   z, 00002$
+        push bc
+        ld   a, b
+        call _ent_col_put        ; ★色を先に
+        pop  bc
+    00002$:
+        ld   hl, #0x7600         ; SPR_ATTR
+        call 00010$
+        ld   a, (_g_spr_dual)
+        or   a
+        jr   z, 00003$
+        ld   hl, #0x7200         ; SPR_ATTR_B
+        call 00010$
+    00003$:
+        inc  b
+        jr   00001$
+    00005$:                      ; 残りの枠(停止マーカ / 画面外へ)
+        ld   a, c
+        add  a, a
+        add  a, a
+        ld   e, a
+        ld   d, #0
+        push de
+        ld   hl, #0x7600
+        add  hl, de
+        push bc
+        call _vdp_write_addr
+        pop  bc
+        push bc
+        ld   a, c
+        call _sat_tail
+        pop  bc
+        pop  de
+        ld   a, (_g_spr_dual)
+        or   a
+        ret  z
+        ld   hl, #0x7200
+        add  hl, de
+        push bc
+        call _vdp_write_addr
+        pop  bc
+        ld   a, c
+        jp   _sat_tail
+    00010$:                      ; 1 枚ぶん: HL = 表の先頭, B = 枠。BC は壊さない
+        push bc
+        ld   a, b
+        add  a, a
+        add  a, a
+        ld   e, a
+        ld   d, #0
+        add  hl, de
+        push de
+        call _vdp_write_addr
+        pop  de
+        ld   hl, #_sat_shadow
+        add  hl, de
+        ld   a, (hl)
+        out  (_VDP_DAT), a
+        inc  hl
+        ld   a, (hl)
+        out  (_VDP_DAT), a
+        inc  hl
+        ld   a, (hl)
+        out  (_VDP_DAT), a
+        inc  hl
+        ld   a, (hl)
+        out  (_VDP_DAT), a
+        pop  bc
+        ret
+    __endasm;
 }
 
 

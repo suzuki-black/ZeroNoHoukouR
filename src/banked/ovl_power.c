@@ -15,7 +15,7 @@
 #define PWR_BONUS 1000u
 
 /* ★行別色(tank_col)は**常駐の RAM**にある(gamestate.h)。ここ(オーバレイ)に const で置くと
-   VBLANK の ent_col_flush() が読むときに page2 が cart へ戻っていて、ゴミを色表へ書く。 */
+   VBLANK の ent_col_put() が読むときに page2 が cart へ戻っていて、ゴミを色表へ書く。 */
 
 /* 増槽を取った: 段階を上げる。最高段階なら高得点 */
 static void take(Entity *e) {

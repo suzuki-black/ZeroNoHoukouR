@@ -68,7 +68,8 @@ extern u8 g_sat_dirty;              /* ★1=控えが更新済み。scene.c の�
 extern u8 g_spr_used;               /* ent_draw_all が使い終えたslot数(=最初の空きslot)。分割の追加描画が使う */
 extern u8 g_spr_limit;              /* ent_draw_all が使ってよいslot上限(既定32)。分割時は下げて枠を予約する */
 void ent_spr_cache_inval(u8 from);  /* slot以降の色キャッシュ無効化(追加描画が色表を直書きしたら呼ぶ) */
-void ent_col_flush(void);           /* ★溜めた色表を VRAM へ(VBLANK で scene.c が呼ぶ。SAT と同じ割当てを書く) */
+void ent_col_put(u8 slot);          /* ★溜めた色表を 1 枠ぶん VRAM へ(vdp_sat_flush がその枠の位置の直前に呼ぶ) */
+extern u8 cdirty[32];              /* 1=その枠の色表を次の vdp_sat_flush で送る */
 void    ent_reset(void);            /* プール全消去 */
 Entity *ent_spawn(u8 type);         /* 空きを1つ確保(既定値で初期化)。無ければ NULL */
 void    ent_update_all(void);       /* 全 active の behavior update を回す */

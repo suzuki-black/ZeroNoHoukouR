@@ -26,12 +26,12 @@ static Entity pool[ENT_MAX];
 
 /* 各スプライトスロットに最後に書いた単色(0xFF=coltab/未確定=強制書換)。色表の重複16B書込みを省く。 */
 static u8 slot_col[32];
-/* ★1=その枠の色表を**次の VBLANK で** VRAM へ書く(ent_col_flush)。
+/* ★1=その枠の色表を**次の VBLANK で** VRAM へ書く(vdp_sat_flush が位置の直前に ent_col_put で)。
    色表を ent_draw_all の中で書くと、SAT を VBLANK へ寄せた以降は**色だけ1フレーム先**になり、
    表示の途中(実測で走査線 172 行目)で枠の色が次フレームの持ち主の色に変わる＝画面の下半分が
    別の色で描かれる。自機の落ち影(13)の枠が点数ポップ(15)に変わる瞬間が「影が白く点滅」だった
    (2026-10-02 に openMSX＋実機BIOS で、色表を VBLANK 直後と走査線 172 で読み比べて確認)。 */
-static u8 cdirty[32];
+u8 cdirty[32];   /* ★vdp_sat_flush(vdp.c)が見る(色を変える枠は位置の直前に色を送る) */
 /* ★A1: 各スロットに最後に書いた行別色表(coltab)のポインタ(0=単色書込み後で無効)。
    同一slotに同一coltabが既に載っていれば16B書込みを省く。単色書込み時は必ず 0 にして
    「そのslotのVRAMはもう coltab でない」を記録する(=以後の同ポインタ判定が VRAM 実体と一致)。 */
@@ -472,16 +472,11 @@ void ent_draw_all(void) {
     rot++;
 }
 
-/* ★溜めた色表を VRAM へ(scene.c のループが VBLANK で呼ぶ)。SAT の転送と**同じフレームの割当て**を
-   書くので、色と位置が食い違わない。印が立っている枠だけなので空いていれば一瞬で終わる。 */
-void ent_col_flush(void) {
-    u8 i;
-    for (i = 0; i < 32; i++) {
-        if (!cdirty[i]) continue;
-        cdirty[i] = 0;
-        if (slot_ctab[i]) vdp_sprite_color_tab(i, slot_ctab[i]);
-        else               vdp_sprite_color(i, slot_col[i]);
-    }
+/* ★溜めた色表を 1 枠ぶん VRAM へ。vdp_sat_flush がその枠の位置を送る**直前に**呼ぶ(色と位置が食い違う時間を最小に)。 */
+void ent_col_put(u8 i) {
+    cdirty[i] = 0;
+    if (slot_ctab[i]) vdp_sprite_color_tab(i, slot_ctab[i]);
+    else               vdp_sprite_color(i, slot_col[i]);
 }
 
 /* 指定slot以降の色キャッシュを無効化する。★分割の追加スプライトが色表を直接書いたときに呼ぶこと。
