@@ -56,7 +56,7 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
 > will not return.
 
 ### Overview
-- **Platform:** MSX turboR software (1 MB ASCII8 mega-ROM). The engine assumes the R800.
+- **Platform:** MSX turboR software (8 Mbit (1 MB) ASCII8 MegaROM). The engine assumes the R800.
 - **Genre:** Single-player vertical shoot-'em-up.
 - **Structure:** 6 stages. Stages 1–5 are one continuous scroll each: open sea (a dogfight) →
   a **mid-boss** → open sea again → an enemy capital ship that you must destroy completely. Stage 6
@@ -141,7 +141,7 @@ Requires [SDCC](https://sdcc.sourceforge.net/), Node.js and Python 3 (with Pillo
 make
 ```
 
-This produces `GAME.ROM` (a 1 MB ASCII8 mega-ROM). `make DEBUG_FPS=1` builds a debug ROM with an
+This produces `GAME.ROM` (an 8 Mbit (1 MB) ASCII8 MegaROM). `make DEBUG_FPS=1` builds a debug ROM with an
 FPS counter (run `make clean` when switching).
 
 ### Running
@@ -168,7 +168,7 @@ src/banked/    banked scenes, RAM overlays (mid-bosses, final boss, sinking, meg
                hot code copied to RAM
 src/include/   headers
 src/crt0rom.s  ROM boot / ASCII8 mapper init / BSS clear
-tools/         asset generators (gen_*.py / gen_assets.mjs), rompack.mjs (mega-ROM packer),
+tools/         asset generators (gen_*.py / gen_assets.mjs), rompack.mjs (MegaROM packer),
                openmsx/ (a C-BIOS turboR machine definition, for experiments only — the game
                itself refuses to run on it)
 docs/          design & development notes
@@ -192,9 +192,9 @@ docs/          design & development notes
 | # | Title | Repository | What it was |
 |---|---|---|---|
 | 1 | *(untitled)* | — | A BASIC prototype written with [FunctionBASIC](https://github.com/suzuki-black/FunctionBASIC). Currently being remade; no longer in any repository. |
-| 2 | **零の咆哮** *Zero no Houkou* | [BattleshipProto](https://github.com/suzuki-black/BattleshipProto) (private) | Rewritten in C + Z80 (SDCC). 128 KB mega-ROM for MSX2+ / turboR, 5 stages. |
-| 3 | **零の咆哮 改** *Zero no Houkou Kai* | [BattleshipProtoR](https://github.com/suzuki-black/BattleshipProtoR) (public) | A ground-up turboR engine. 256 KB, v0.2.0. The clean, playable baseline. |
-| 4 | **真 零の咆哮** *Shin Zero no Houkou* | this repository | The turboR spectacle built on top of it. 1 MB, v0.4.1. |
+| 2 | **零の咆哮** *Zero no Houkou* | [BattleshipProto](https://github.com/suzuki-black/BattleshipProto) (private) | Rewritten in C + Z80 (SDCC). 1 Mbit (128 KB) MegaROM for MSX2+ / turboR, 5 stages. |
+| 3 | **零の咆哮 改** *Zero no Houkou Kai* | [BattleshipProtoR](https://github.com/suzuki-black/BattleshipProtoR) (public) | A ground-up turboR engine. 2 Mbit (256 KB), v0.2.0. The clean, playable baseline. |
+| 4 | **真 零の咆哮** *Shin Zero no Houkou* | this repository | The turboR spectacle built on top of it. 8 Mbit (1 MB), v0.4.1. |
 
 1. **The BASIC prototype.** It started as a one-stage vertical shooter in MSX-BASIC (SCREEN 5),
    written in FunctionBASIC's structured dialect and transpiled to line-numbered BASIC. The
@@ -202,8 +202,8 @@ docs/          design & development notes
    turrets to shoot. To avoid a sluggish full-screen redraw it already used the V9958's **R#23
    hardware vertical scroll**, streaming in one new row every 16 dots through a few machine-code
    routines called with `USR`.
-2. ***Zero no Houkou*** kept that scrolling idea and rewrote everything in C + Z80 as a 128 KB
-   mega-ROM: five real ships (Bismarck, Essex, Hood, the twins, Iowa) drawn from public-domain
+2. ***Zero no Houkou*** kept that scrolling idea and rewrote everything in C + Z80 as a 1 Mbit (128 KB)
+   MegaROM: five real ships (Bismarck, Essex, Hood, the twins, Iowa) drawn from public-domain
    blueprints, a pseudo multi-scroll sea, a 60 Hz interrupt PSG driver with per-stage music, an
    ending, and the hidden settings menu.
 3. ***Zero no Houkou Kai*** rebuilt the engine for the turboR alone. The key discovery was that
@@ -292,7 +292,7 @@ silhouettes may differ from the real thing.)
 > 父も、母も無い。女房も無い。ただ一振りの刀と、還らぬ戦友らへの誓ひばかりを抱いてゐる。
 
 ### 概要
-- **対応機種:** MSX turboR 用ソフト（1MB の ASCII8 メガROM）。R800 を前提に設計しています。
+- **対応機種:** MSX turboR 用ソフト（8メガビット（1MB）の ASCII8 メガROM）。R800 を前提に設計しています。
 - **ジャンル:** 1人用・縦スクロールシューティング。
 - **構成:** 全6面。1〜5面は画面カットの無い地続きの縦スクロールで、海（空戦）→ **中ボス** → 再び海
   → 敵の大型艦との戦い、と進みます。艦を**完全に撃破**するとクリア。6面は巨大爆撃機との一騎打ちです。
@@ -367,7 +367,7 @@ silhouettes may differ from the real thing.)
 make
 ```
 
-`GAME.ROM`（1MB の ASCII8 メガROM）が生成されます。`make DEBUG_FPS=1` で FPS 表示付きのデバッグ版になります
+`GAME.ROM`（8メガビット（1MB）の ASCII8 メガROM）が生成されます。`make DEBUG_FPS=1` で FPS 表示付きのデバッグ版になります
 （切り替えるときは `make clean`）。
 
 ### 実行
@@ -411,16 +411,16 @@ docs/          設計・開発ノート
 | # | タイトル | リポジトリ | どんなものか |
 |---|---|---|---|
 | 1 | （タイトルなし） | — | [FunctionBASIC](https://github.com/suzuki-black/FunctionBASIC) で書いた BASIC のプロトタイプ。現在リメイク中で、リポジトリには残っていません。 |
-| 2 | **零の咆哮** | [BattleshipProto](https://github.com/suzuki-black/BattleshipProto)（非公開） | C＋Z80（SDCC）で書き直し。MSX2+／turboR 用 128KB メガROM・全5面。 |
-| 3 | **零の咆哮 改** | [BattleshipProtoR](https://github.com/suzuki-black/BattleshipProtoR)（公開） | turboR 専用に一から作ったエンジン。256KB・v0.2.0。遊べる素の土台。 |
-| 4 | **真 零の咆哮** | 本リポジトリ | その上に turboR の見せ場を積んだもの。1MB・v0.4.1。 |
+| 2 | **零の咆哮** | [BattleshipProto](https://github.com/suzuki-black/BattleshipProto)（非公開） | C＋Z80（SDCC）で書き直し。MSX2+／turboR 用 1メガビット（128KB）のメガROM・全5面。 |
+| 3 | **零の咆哮 改** | [BattleshipProtoR](https://github.com/suzuki-black/BattleshipProtoR)（公開） | turboR 専用に一から作ったエンジン。2メガビット（256KB）・v0.2.0。遊べる素の土台。 |
+| 4 | **真 零の咆哮** | 本リポジトリ | その上に turboR の見せ場を積んだもの。8メガビット（1MB）・v0.4.1。 |
 
 1. **BASIC のプロトタイプ。** 最初は MSX-BASIC（SCREEN 5）の1面だけの縦スクロールシューティングでした。
    FunctionBASIC の構造化 BASIC で書き、行番号付きの BASIC へ変換して動かしていました。「戦艦」は文字どおり
    **背景に描いた船っぽい長方形**で、砲台3基を壊すだけ。それでも全画面の描き直しでもっさりしないよう、
    V9958 の **R#23 ハードウェア縦スクロール**を使い、16ドット進むごとに新しい1行だけを `USR` で呼ぶ
    マシン語で流し込んでいました。
-2. **「零の咆哮」** はこのスクロールの考え方を引き継ぎ、C＋Z80 の 128KB メガROM として全部を書き直しました。
+2. **「零の咆哮」** はこのスクロールの考え方を引き継ぎ、C＋Z80 の 1メガビット（128KB）のメガROM として全部を書き直しました。
    パブリックドメインの図面を元にした実在の5隻（ビスマルク・エセックス・フッド・双子艦・アイオワ）、
    海の疑似多重スクロール、60Hz 割込みの PSG 音ドライバと面別の曲、エンディング、隠しの設定メニュー。
 3. **「零の咆哮 改」** は turboR だけを相手にエンジンを作り直しました。鍵になったのは「R800 はカートリッジ

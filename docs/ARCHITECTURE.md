@@ -10,7 +10,7 @@
 ## 1. メモリ地図（Z80 64KB 空間 と ASCII8 MegaROM）
 
 ```
-Z80アドレス空間                          ASCII8 MegaROM(1MB = 128 bank × 8KB)
+Z80アドレス空間                          ASCII8 MegaROM(8Mbit = 1MB = 128 bank × 8KB)
 ┌───────────────────────────┐          ┌──────────────────────────────────┐
 │ 0x0000-0x3FFF page0 = BIOS │          │ bank0  ROM 0x00000  ┐             │
 │ 0x4000-0x5FFF ← bank0      │◀────────▶│ bank1  ROM 0x02000  ├ 常駐コード   │
@@ -442,7 +442,7 @@ turboR 内蔵の 8bit PCM（A4h にサンプル、A5h=03h で BUFF。書いた�
 
 ## 5. 実機/エミュ検証
 
-- ビルド: `make` → `GAME.ROM`（**1MB** ASCII8 MegaROM）。版は `VERSION` が単一の真実。
+- ビルド: `make` → `GAME.ROM`（**8メガビット = 1MB** の ASCII8 MegaROM）。版は `VERSION` が単一の真実。
 - openMSX は**機種で挙動が変わる**。C-BIOS の機械では走査線割込みが発火せず検証が嘘になるので、
   タイミングを見るときは**実機 BIOS を吸い出した機械**（`My_FS-A1ST_512K`）を使うこと。
 - **実機（turboR 本体）で動かせるようになった**（2026-09-30、ESERAMair 経由）。`make send` で
@@ -481,7 +481,7 @@ turboR 内蔵の 8bit PCM（A4h にサンプル、A5h=03h で BUFF。書いた�
 | オーバレイ | `ovl_palette.c` / `ovl_crush.c` / `ovl_shock.c` / `ovl_rot.c` / `ovl_power.c` / `ovl_curtain.c` | パレット / メガクラッシュ / 衝撃波 / 宙返り / 増槽 / CPU弾幕 |
 | オーバレイ | `ovl_final.c` / `ovl_sink.c` | 最終面 XB-19 / 撃沈シーン |
 | オーバレイ | `ovl_midboss.c` / `ovl_mb_pby.c` / `ovl_mb_dd.c` / `ovl_mb_he.c` / `ovl_mb_p61.c` / `ovl_bgbul.c` | 中ボス5種 ／ 5面の背景弾エンジン |
-| ツール | `tools/rompack.mjs` | .ihx＋バンク → **1MB** MegaROM。常駐24KB超過とバンク溢れをエラー、空きを表示 |
+| ツール | `tools/rompack.mjs` | .ihx＋バンク → **8メガビット(1MB)** の MegaROM。常駐24KB超過とバンク溢れをエラー、空きを表示 |
 | ツール | `tools/gen_snare.py` / `gen_voice.py` | PCM のスネアの合成 ／ 叫びの素材の変換（標本化は `pcm.s` の値を読む） |
 | ツール | `tools/gen_symdefs.mjs` / `ihx2bin.mjs` | 常駐シンボルの絶対番地（＋`hb_*` の入口）／ihx→生バイト列 |
 | ツール | `tools/gen_assets.mjs` | BGM11曲＋艦体OPS等 → `build/assets.bin`(bank8)＋`build/assets_data.h` |
