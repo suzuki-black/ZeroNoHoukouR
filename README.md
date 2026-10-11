@@ -102,8 +102,16 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
   sounding, a raster interrupt is also armed on the line where the next sample is due, so each byte
   goes out on time (3996 Hz) during play. The settings menu switches it `OFF` / `ON` / `ONLY`
   (`ONLY` drops the PSG and FM drums so the PCM snare can be heard on its own).
-- **High score** (kept while the machine is on) on the title screen, the stage card, the results
-  screen, game over and the ending.
+- **Best 5 ranking with arcade-style name entry.** When a game ends (game over without continuing,
+  or after the ending) with a top-five score, you enter three letters the old arcade way — ←/→ cycle
+  A–Z and an **[ED]** (end) mark, trigger A to set, B to step back, 30 seconds. Scores played with the
+  invincibility setting are kept too, but shown in grey. The table lives only while the machine is on.
+  The best score is shown as `HI` on the title screen, the stage card, the results screen, game over
+  and the ending.
+- **Attract mode.** Leave the title screen alone for 20 seconds and a demo plays: the real stages 1–5
+  in turn, flown by an autopilot, silent, with a blinking `PRESS SPACE KEY` (stages 1–3 show the
+  mid-boss, stages 4–5 the alert and the battleships; the final stage stays a secret). After the demo
+  comes the Best 5 table, then the title again.
 
 ### Controls
 | Input | Action |
@@ -323,8 +331,14 @@ silhouettes may differ from the real thing.)
   結果画面で「敵撃破！」「総大将撃破！」と叫びます。鳴らすためにゲームを止めることはありません。鳴っている間は
   次のサンプルの時刻に当たる行にも走査線割込みを張り、1 バイトずつ時刻どおり（3996Hz）に出します。
   設定メニューで `OFF` / `ON` / `ONLY` を選べます（`ONLY` は PSG と FM のドラムを外し、PCM のスネアだけを聞く設定）。
-- **ハイスコア**（電源が入っている間だけ）をタイトル・ステージ開始カード・結果画面・ゲームオーバー・
-  エンディングに表示。
+- **ベスト 5 のランキングと、昔のゲームセンター式のネームエントリー**。ゲームの終わり（コンティニューしない
+  ゲームオーバー、またはエンディングの後）に 5 位以内なら、←→ で A〜Z と **[ED]**（終わり）を回し、トリガーA で
+  決める・B で 1 文字戻る、で 3 文字入れます（制限時間 30 秒）。無敵の設定で遊んだ点も記録しますが、表では
+  灰色で区別します。表は電源が入っている間だけ残ります。1 位の点は `HI` としてタイトル・ステージ開始カード・
+  結果画面・ゲームオーバー・エンディングに出ます。
+- **デモ（アトラクトモード）**。タイトルを 20 秒そのままにすると、本物の 1〜5 面を順に自動操縦で見せます
+  （無音・`PRESS SPACE KEY` が点滅。1〜3 面は中ボス、4・5 面は警報から戦艦。最終面は内緒）。デモの後は
+  ベスト 5 の表、そしてタイトルへ戻ります。
 
 ### 操作
 | 入力 | 動作 |
