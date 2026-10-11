@@ -200,6 +200,12 @@ static void require_turbor(void) {
    ★ここも**冷たいバンク**。起動時に1回しか使わないものを常駐へ置かない。 */
 #define PCM_DETECT_TRIES 20000      /* タイマが動かない機械で諦めるまでの回数 */
 __sfr __at(0xE6) PCM_TMR_LO;
+/* ★PCM の口(A4h)そのものも見る。実機と openMSX は A4h を読むと PCM の刻み(15.7kHz)で回る 2bit のカウンタが返るが、
+   **WebMSX は A4h/A5h が未実装で常に 0xFF**(ソースの DeviceMissing で確認)。システムタイマだけ見ていたので WebMSX でも
+   「PCM あり」になり、鳴らない PCM のために走査線割込みを張っていた。それが 3 面の中ボス(帯 7 本の分割)の割込みと
+   ぶつかり、WebMSX でだけ駆逐艦が左右に跳んでちらついた(2026-10-11 ユーザー指摘。PCM を OFF にすると出ない)。
+   ★判定は「値が一度でも変わるか」だけ(上位 6bit が実機で何に見えるかは未確認なので、下位 2bit には頼らない)。 */
+__sfr __at(0xA4) PCM_CNT;
 
 static void pcm_detect(void) {
     u8  t = PCM_TMR_LO;                         /* 下位バイトが一番速く動く */
@@ -207,6 +213,13 @@ static void pcm_detect(void) {
     g_pcm_hw = 0;
     for (n = 0; n < PCM_DETECT_TRIES; n++) {
         if (PCM_TMR_LO != t) { g_pcm_hw = 1; break; }   /* 動いた=PCM が使える */
+    }
+    if (g_pcm_hw) {                             /* ★口のカウンタも回るか(回らなければ PCM の無いエミュレータ) */
+        t = PCM_CNT;
+        g_pcm_hw = 0;
+        for (n = 0; n < PCM_DETECT_TRIES; n++) {
+            if (PCM_CNT != t) { g_pcm_hw = 1; break; }
+        }
     }
 #ifdef DEBUG_PROF
     /* ★計測用ビルドでは 0xEB00 が区間別 tick の蓄積(g_prof_acc)に使われている。素材を置く場所が

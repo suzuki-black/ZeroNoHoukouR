@@ -132,7 +132,8 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
   [WebMSX](https://webmsx.org/) **and on real hardware** (since 2026-09-30, over an ESERAMair
   cartridge: `make send` to upload, `make verify` to read it back and compare).
 - **WebMSX does not emulate the turboR PCM**, so the snare and the voices are silent there (the PSG
-  and FM drums still play). Use openMSX or a real turboR to hear them.
+  and FM drums still play). The game notices this at boot and switches its PCM off. Use openMSX or a
+  real turboR to hear them.
 
 ### Building
 Requires [SDCC](https://sdcc.sourceforge.net/), Node.js and Python 3 (with Pillow).
@@ -358,7 +359,7 @@ silhouettes may differ from the real thing.)
   発火せず、検証が嘘になります）。テストプレイは [WebMSX](https://webmsx.org/) の turboR と、
   **実機の turboR**（2026-09-30 以降。ESERAMair 経由で `make send` → `make verify`）で行っています。
 - **WebMSX は turboR の PCM を鳴らしません**。スネアと叫びは無音になります（PSG と FM のドラムは鳴ります）。
-  PCM を聞くには openMSX か実機を使ってください。
+  ゲームは起動時にそれを見分けて PCM を切ります。PCM を聞くには openMSX か実機を使ってください。
 
 ### ビルド
 [SDCC](https://sdcc.sourceforge.net/)、Node.js、Python 3（Pillow）が必要です。
