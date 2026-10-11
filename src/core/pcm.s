@@ -31,6 +31,8 @@
 
 	.module	pcm
 	.globl	_pcm_start, _pcm_stop, _pcm_snare, _pcm_active, _pcm_lock, _g_pcm_src, _g_pcm_len, _g_pcm
+	.globl	_g_ras_n
+PCM_SNARE_RAS_MAX = 7	; ★分割がこの本数以上ある間はスネアを鳴らさない(下の _pcm_snare)
 
 PCM_DATA   = 0xA4
 PCM_CTRL   = 0xA5
@@ -100,6 +102,9 @@ _pcm_snare::
 	ld	a, (_pcm_lock)		; ★叫びが鳴っている間は譲る
 	or	a, a
 	ret	nz
+	ld	a, (_g_ras_n)		; ★画面分割が多い間(3 面の中ボスの帯 7 本で 8)は鳴らさない。スネアのサンプルの割込みが
+	cp	a, #PCM_SNARE_RAS_MAX	;   分割の間に 4〜8 行おきに挟まり(1 フレーム 25〜47 本。分割だけなら 7 本)、WebMSX の改造版など
+	ret	nc			;   PCM を鳴らすエミュレータでは帯の切替が遅れて艦が跳ぶ。PSG/FM のドラムは鳴る(2026-10-12)
 	ld	hl, #PCM_SNARE_LEN
 	ld	(_g_pcm_len), hl
 	ld	hl, #PCM_SNARE_ADDR
