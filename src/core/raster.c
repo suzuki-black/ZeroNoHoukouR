@@ -121,11 +121,16 @@ void ras_next(void) __naked {   /* ★ras_apply(asm)から jp するので非sta
         ;; ★合図の行は画面の行数で変わる。212 行のモード(SCREEN5/12)は 212 行目、**192 行のモード(SCREEN3 =
         ;;   3 面のきりもみ)は 192 行目**。212 行目のままだと 192 行のモードでは割込みが来ず、JIFFY が止まって
         ;;   vdp_wait_frame で固まった(v0.4.0。3 面のフッドを撃沈すると固まる。2026-10-09 に openMSX で確認)。
-        ;;   行数は BIOS の控え RG9SAV(0xFFE8)の bit7(LN)。CHGMOD が画面モードに合わせて書く。
-        ld   a, (0xFFE8)
-        rla                      ; Cy = LN(1 = 212 行)
+        ;;   ★192 行かどうかは**ゲーム自身が書く画面モードの控え SCRMOD(0xFCAF)が 3(SCREEN3)か**で決める。
+        ;;   最初は BIOS の控え RG9SAV(0xFFE8)の LN を見ていたが、それを入れた v0.4.1 から**実機でだけ** 3 面の中ボスの
+        ;;   艦の帯が砲身とずれた(2026-10-12 に実機で v0.4.0 / adcb885 / v0.4.1 を比べ、この変更が原因と確定)。
+        ;;   212 行で表示しているのに実機の RG9SAV の LN が 0 で、合図が画面の中の 192 行目で鳴っていたと考えられる
+        ;;   (実機の値は未確認。openMSX の BIOS では LN が 1 で再現しない)。
+        ;;   192 行のモードは撃沈の 2 演出(ovl_spin.c の spinfx_enter_s3)だけで、どちらも SCRMOD に 3 を書いてから切り替える。
+        ld   a, (0xFCAF)
+        cp   #3                  ; Z = SCREEN3(192 行)
         ld   a, #RAS_TICK_LINE
-        jr   c, 00012$
+        jr   nz, 00012$
         ld   a, #192
     00012$:
         ld   c, #1
@@ -133,9 +138,10 @@ void ras_next(void) __naked {   /* ★ras_apply(asm)から jp するので非sta
         ld   hl, #_g_ras_vs
         add  a, (hl)
         ld   b, a
-        ld   a, (0xFFE8)         ; ★192 行のモード(SCREEN3 = 3 面のきりもみ)では PCM のサンプルの行を張らない。
-        rla                      ;   hot_pcm.s の行の計算は 212 行が前提で、来ない行(237 など)に張って固まった
-        jr   nc, 00013$          ;   (v0.4.0。2026-10-09 に openMSX で確認)。その間 PCM は止まったまま鳴らない
+        ld   a, (0xFCAF)         ; ★192 行のモード(SCREEN3 = 撃沈の演出)では PCM のサンプルの行を張らない。
+        cp   #3                  ;   hot_pcm.s の行の計算は 212 行が前提で、来ない行(237 など)に張って固まった
+        jr   z, 00013$           ;   (v0.4.0。2026-10-09 に openMSX で確認)。その間 PCM は止まったまま鳴らない。
+                                 ;   ★判定は SCRMOD で(上の★。実機の RG9SAV は LN が 0 で、PCM の行を一切張っていなかった)
         ld   a, (_pcm_active)    ; ★PCM が鳴っている間は、次のサンプルの行と比べて近い方を張る(hot_pcm.s)
         or   a
         jp   nz, _hot_ram + 3*HOT_SLOT_PCM_ARM   ; B = この行、C = 種類
