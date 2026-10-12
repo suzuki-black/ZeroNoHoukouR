@@ -811,6 +811,10 @@ static u8 sfresh;
 
 /* 地形リングを表示(page1)＝ここでゲーム画面が現れる。scroll_init は prerender 済みが前提。 */
 static void stage_begin_display(void) {
+    g_sat_dirty = 0;             /* ★前の面のスプライトの控えを捨てる。撃沈の最後のフレームで作った控え(爆発・敵機)が、結果画面と
+                                    次の面の準備を挟んで、新しい面の最初のループで VRAM へ送られ 1 フレーム出ていた(実機で最終面の
+                                    頭に前の面の敵機。2026-10-12)。シーンを抜けるときの捨て(scene.c)は、同じシーンで次の面へ進む
+                                    この経路を通らない */
     scroll_init();               /* display=page1(以降 page0 は非表示=火球ベイク用に空く) */
     if (curstage != STAGE_FINAL) bake_fireballs();   /* 破壊エンプレ炎上用の火球6枚を page0(非表示域)へ事前ベイク。
                                                           ★最終面はそこを2組目のスプライト表に使う */
