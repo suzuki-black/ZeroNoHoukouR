@@ -123,9 +123,10 @@ void ras_next(void) __naked {   /* ★ras_apply(asm)から jp するので非sta
         ;;   vdp_wait_frame で固まった(v0.4.0。3 面のフッドを撃沈すると固まる。2026-10-09 に openMSX で確認)。
         ;;   ★192 行かどうかは**ゲーム自身が書く画面モードの控え SCRMOD(0xFCAF)が 3(SCREEN3)か**で決める。
         ;;   最初は BIOS の控え RG9SAV(0xFFE8)の LN を見ていたが、それを入れた v0.4.1 から**実機でだけ** 3 面の中ボスの
-        ;;   艦の帯が砲身とずれた(2026-10-12 に実機で v0.4.0 / adcb885 / v0.4.1 を比べ、この変更が原因と確定)。
-        ;;   212 行で表示しているのに実機の RG9SAV の LN が 0 で、合図が画面の中の 192 行目で鳴っていたと考えられる
-        ;;   (実機の値は未確認。openMSX の BIOS では LN が 1 で再現しない)。
+        ;;   艦の帯が砲身とずれたので、SCRMOD に変えた(2026-10-12)。
+        ;;   ★ただし本当の原因は ras_isr の遅れの経路の「はまり」だった(2026-10-13 に計測で確定。ras_isr の★)。
+        ;;     ゲームは R#9 を書かないので LN は実機でも 1 のはずで、これで直って見えたのは配置がずれた偶然と考えている。
+        ;;     SCRMOD で決める方が素直なので、このまま残す。
         ;;   192 行のモードは撃沈の 2 演出(ovl_spin.c の spinfx_enter_s3)だけで、どちらも SCRMOD に 3 を書いてから切り替える。
         ld   a, (0xFCAF)
         cp   #3                  ; Z = SCREEN3(192 行)
@@ -141,7 +142,7 @@ void ras_next(void) __naked {   /* ★ras_apply(asm)から jp するので非sta
         ld   a, (0xFCAF)         ; ★192 行のモード(SCREEN3 = 撃沈の演出)では PCM のサンプルの行を張らない。
         cp   #3                  ;   hot_pcm.s の行の計算は 212 行が前提で、来ない行(237 など)に張って固まった
         jr   z, 00013$           ;   (v0.4.0。2026-10-09 に openMSX で確認)。その間 PCM は止まったまま鳴らない。
-                                 ;   ★判定は SCRMOD で(上の★。実機の RG9SAV は LN が 0 で、PCM の行を一切張っていなかった)
+                                 ;   ★判定は SCRMOD で(上の★)
         ld   a, (_pcm_active)    ; ★PCM が鳴っている間は、次のサンプルの行と比べて近い方を張る(hot_pcm.s)
         or   a
         jp   nz, _hot_ram + 3*HOT_SLOT_PCM_ARM   ; B = この行、C = 種類
@@ -333,7 +334,15 @@ void ras_isr(void) __naked {
         ld   hl, (_g_ras_ttime)
         add  hl, de
         ld   (_g_ras_ttime), hl
-        jr   00006$
+        ;   ★合図の仕事をしたら、このフレームの残りの分割は捨てて **212 行目の合図を張る**。ras_rearm が張った
+        ;     最初の分割のままにすると、この時刻(タイマだけで決めた値)からは「まだ来ていない」と見えるので、
+        ;     次のフレームもその分割の割込みだけが来て、ここで合図の仕事をする…を繰り返した。帯は全部まとめて
+        ;     当たるので動かない(実機の 3 面の中ボスで「艦の帯が止まり、砲身だけ動く」。2026-10-13 に計測と
+        ;     openMSX の再現で確認)。タイマと VDP の水晶が別の実機では、ずれがなかなか縮まず何分も抜けなかった。
+        ;     帯はこのフレームだけ崩れるが、次の 212 行目の合図で元へ戻る。
+        call 00008$
+        ld   a, (_g_ras_n)
+        ld   (_g_ras_i), a       ; (下の 00003$ へ落ちて ras_next が合図を張る)
     00003$:
         call _ras_next
         jr   00001$
@@ -362,12 +371,7 @@ void ras_isr(void) __naked {
     00007$:
         call _snd_isr
     00006$:
-        ld   hl, (0xFC9E)        ; JIFFY(BIOS が VBLANK で進めていたもの)を自分で進める
-        inc  hl
-        ld   (0xFC9E), hl
-        call _snd_isr            ; 音(以前は BIOS が H.TIMI から呼んでいた)
-        call _ras_rearm          ; ★音の後に張り直す。ここでスネアが鳴り始めたら、最初から割込みで出せる
-                                 ;   (逆順だと、鳴り始めから次の分割まで 9ms ほど割込みで出ていなかった)
+        call 00008$
     00001$:
         pop  iy
         pop  ix
@@ -376,6 +380,13 @@ void ras_isr(void) __naked {
         pop  bc
         pop  af
         ret
+    00008$:                      ; 合図の仕事
+        ld   hl, (0xFC9E)        ; JIFFY(BIOS が VBLANK で進めていたもの)を自分で進める
+        inc  hl
+        ld   (0xFC9E), hl
+        call _snd_isr            ; 音(以前は BIOS が H.TIMI から呼んでいた)
+        jp   _ras_rearm          ; ★音の後に張り直す。ここでスネアが鳴り始めたら、最初から割込みで出せる
+                                 ;   (逆順だと、鳴り始めから次の分割まで 9ms ほど割込みで出ていなかった)
     __endasm;
 }
 
