@@ -186,7 +186,9 @@ void s3test_load_card(void) {
 u16 cam;   /* ★非static: hot.c(aa_update の画面Y算出)と共有 */
 static u8  phase;     /* 0=海(直進) / 1=戦艦(往復蛇行) */
 static u8  sdiv, wtimer, ftick;
-static s8  camdir;    /* 往復方向: -1=船首へ / +1=船尾へ */
+s8  camdir;    /* 往復方向: -1=船首へ / +1=船尾へ。★非static: オーバレイの ovl_cam_meander と共有 */
+s8  camv;      /* 往復の速さ(1/16 px/フレーム。符号つき)。★同上 */
+u8  camfr;     /* cam の端数(1/16 px)。★同上 */
 static s16 weaveX;
 static s8  wdir;
 static u8  dmode;     /* 撃破演出モード(0=通常 / 1=炎上スペクタクル中) */
@@ -763,7 +765,7 @@ static void stage_build(void) {
     g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
     g_loop_t = 0; g_loop_cd = 0; g_loop_alt = 0;   /* 宙返りも持ち越さない */
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
-    weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
+    weaveX = 0; wdir = 1; camdir = -1; camv = -16; camfr = 0; g_meander = 0; rng = 0x1234;
     vdp_msk(0);   /* ★蛇行前(海の接近)は横スクロールを使わない=左端のマスクも要らない */
 
     e = ent_spawn(ET_PLAYER);
@@ -1012,7 +1014,6 @@ static u8 defeat_update(void) {
     return SCENE_NONE;
 }
 
-static u8 vcnt;   /* 縦スクロール速度の位相(5コマ周期)。phase0=ゆっくり / phase1=高速(蛇行)。 */
 #define SEA0_DIV 3    /* phase0(海モード)で海うねりを塗る間隔(3=3フレームに1回)。実機turboRに合わせ微調整可。 */
 static u8 seatick;    /* phase0 海間引き用カウンタ。 */
 #ifdef SPINTEST
@@ -1154,7 +1155,6 @@ u8 stage_update(void) {
         static u8 di; di = (u8)((di + 1) & 7); g_dbgmask = pr[di];
     }
 #endif
-    if (++vcnt >= 5) vcnt = 0;
 
     /* ★§4-3: 早期return(g_view/dmode/hitstop)を抜けたここから page1 を RAM スロットへ。
        以降 phase処理(scroll_to/蛇行)・HUD・ホット区間(海/AI/衝突/描画/炎)まで page1常駐コードを
@@ -1232,10 +1232,14 @@ u8 stage_update(void) {
     } else {
         /* 戦艦: 船首↔船尾の往復(今の高速蛇行≈1.6px/f=緊迫感)。艦出現(cam=SHIP>STERN)から入るので、
            下降中は STERN でクランプせず BOW まで一気に見せ、以後 BOW↔STERN を往復する。 */
-        vstep = (vcnt < 3) ? 2 : 1;   /* 2,2,2,1,1=1.6px/f(現状の高速を維持) */
-        cam = (u16)((s16)cam + (s16)camdir * (s16)vstep);
-        if (camdir < 0) { if ((s16)cam <= SC_CAM_BOW)   { cam = SC_CAM_BOW;   camdir = 1;  } }
-        else            { if (cam >= SC_CAM_STERN)      { cam = SC_CAM_STERN; camdir = -1; } }
+        /* ★折り返しは急に逆転させず、減速→停止→加速する(オーバレイの ovl_cam_meander。常駐に空きが無いので)。
+             オーバレイが無い機械(page2 を RAM にできない。turboR では起きない)では、1px/フレームで往復し端で逆転する
+             (常駐に空きが無いので最小限)。艦の出現(cam=SHIP>STERN)からは船首まで一気に見せる。 */
+        if (g_ovl_ok) cam_meander();
+        else {
+            cam = (u16)((s16)cam + camdir);
+            if ((s16)cam <= SC_CAM_BOW) camdir = 1; else if (camdir > 0 && cam >= SC_CAM_STERN) camdir = -1;
+        }
         PROF_CALL(PF_SCROLL, scroll_to(cam));
         /* 蛇行(横揺れ, 速め) */
         if (++wtimer >= 2) {

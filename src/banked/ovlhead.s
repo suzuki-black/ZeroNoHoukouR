@@ -20,6 +20,7 @@
         .globl  _ovl_shock_build
         .globl  _ovl_rot_zoom
         .globl  _ovl_power_frame
+        .globl  _ovl_cam_meander
         .area   _CODE
         jp      _ovl_curtain_update   ; slot0 (OVL_SLOT_CURTAIN_UPDATE)
         jp      _ovl_curtain_ring     ; slot1 (OVL_SLOT_CURTAIN_RING)
@@ -39,7 +40,7 @@
         jp      _ovl_rot_zoom         ; slot15 (OVL_SLOT_ROT_ZOOM)
         jp      stub_ret              ; slot16 final_init(最終面のオーバレイだけ)
         jp      stub_zero             ; slot17 final_frame
-        jp      stub_ret              ; slot18 final_bgbul
+        jp      _ovl_cam_meander      ; slot18 戦艦の往復スクロール(OVL_SLOT_CAM_MEANDER。最終面では final_bgbul)
         jp      stub_ret              ; slot19 sink_init(撃沈のオーバレイだけ)
         jp      stub_zero             ; slot20 sink_frame
         jp      _ovl_power_frame      ; slot21 (OVL_SLOT_POWER_FRAME)

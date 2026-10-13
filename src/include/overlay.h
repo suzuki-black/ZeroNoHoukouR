@@ -68,6 +68,9 @@
 #define OVL_SLOT_PART           OVL_SLOT_MB_FRAME   /* 撃沈の火の粉・破片(同じ理由で slot23 を借りる) */
 #define OVL_SLOT_CRACK          OVL_SLOT_ROT_ZOOM   /* 撃沈の「縦に裂けて開く」(宙返りは撃沈中に呼ばないので slot15 を借りる) */
 #define OVL_SLOT_TILT           OVL_SLOT_FINAL_INIT /* 撃沈の「視点が倒れる」(最終面の init は撃沈中に呼ばないので slot16 を借りる) */
+#define OVL_SLOT_CAM_MEANDER    OVL_SLOT_FINAL_BGBUL /* 戦艦の往復スクロール(既定のオーバレイ ovl だけ。最終面には往復が無いので slot18 を借りる。
+                                                        中ボスのオーバレイでは空の入口=呼ばれてもスクロールが止まるだけ) */
+#define cam_meander()           final_bgbul()        /* 常駐の入口(jp 0xA036)を共用。常駐を増やさない */
 
 extern u8 g_ovl_ok;       /* 1=オーバレイ読込済み(呼んでよい)。0なら呼ばないこと */
 

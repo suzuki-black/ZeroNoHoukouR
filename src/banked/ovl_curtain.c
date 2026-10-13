@@ -10,6 +10,7 @@
 #include "vdp.h"
 #include "sprites.h"
 #include "scroll.h"
+#include "aa_hot.h"   /* cam(戦艦の往復スクロール) */
 #include "entity.h"   /* ent_player_hit: 被弾の共通処理 */
 #include "player.h"   /* g_player_x/y */
 #include "sprites.h"
@@ -157,4 +158,24 @@ void ovl_curtain_present(u8 nper, u8 line) {
     if (n > nper) n = nper;
     ovl_curtain_draw(base, n, line);
     ent_spr_cache_inval(base);
+}
+
+/* ★戦艦の往復スクロール(船首↔船尾)。折り返しは急に逆転させず、減速→停止→加速する。
+   単位は 1/16 px。最高 26(=1.6px/フレーム。以前の 2,2,2,1,1 と同じ速さ)、加速度は 2/フレーム(反転の全体で約 0.9 秒)。
+   ★急に逆転すると、画面の枠に対して一定の速さの敵弾が、艦(世界)に対しては切り替わりの瞬間に「3−2 → 3+2 行/フレーム」と
+     跳び、加速して見えた(ユーザー指摘。2026-10-13 に openMSX で同じ弾 211 発を追跡し、画面に対しては一定・世界に対しては
+     ±2 跳ぶことを確認)。弾の規約(画面に対して一定)は変えず、跳びの原因の「スクロールの急な逆転」の方をなめらかにした。
+   ★端までの残りが、止まるのに要る距離(v²/2a = v²/4 [1/16px] = v²/64 [px])を切ったら、反対向きへ加速し始める。
+   ★艦の出現(cam=SHIP>STERN)からは船首まで一気に見せるので、船尾の行き過ぎの補正は船尾へ向かうときだけ。 */
+extern s8 camdir, camv;
+extern u8 camfr;
+void ovl_cam_meander(void) {
+    s8 t = (camdir < 0) ? -26 : 26;
+    s16 a, d = (camdir < 0) ? (s16)(cam - SC_CAM_BOW) : (s16)(SC_CAM_STERN - cam);
+    if ((d << 6) <= (s16)camv * camv) { camdir = (s8)-camdir; t = (s8)-t; }
+    if (camv < t) camv += 2; else if (camv > t) camv -= 2;
+    a = (s16)camfr + camv;
+    cam = (u16)((s16)cam + (a >> 4)); camfr = (u8)(a & 15);
+    if ((s16)cam < (s16)SC_CAM_BOW) { cam = SC_CAM_BOW; camv = 0; }
+    if (camv > 0 && cam > SC_CAM_STERN) { cam = SC_CAM_STERN; camv = 0; }
 }
