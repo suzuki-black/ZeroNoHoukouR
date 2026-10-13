@@ -22,6 +22,7 @@
 typedef struct { s16 qx, qy; s8 vx, vy; u8 on, sx, ry; } PB;   /* 位置は 1/8 ドット。sx=バイト列 / ry=リング行 */
 #define pbv ((PB *)PB_RAM)
 
+extern u8 g_pb_hit;                        /* 弾が下の HUD に入った印(2=ボム棒・JAMMED 4=パワーの山) */
 void pb_init(void);                         /* 海のひな形を RAM へ写し、表を空に */
 void pb_add(s16 x, s16 y, s8 vx, s8 vy);    /* 左上 (x,y) に 1 発。速度は 1/8 ドット/フレーム */
 void pb_update(void);                       /* 動かす・画面外で消す・自機との当たり(宙返り中は当たらない) */

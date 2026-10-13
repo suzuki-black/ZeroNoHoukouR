@@ -14,6 +14,7 @@ __sfr __at(0x98) PB_DAT;
 __sfr __at(0x99) PB_CTL;
 
 /* 差分描き(asm)への受け渡し。非static(asm から名前で参照) */
+u8 g_pb_hit;   /* ★弾が下の HUD に入った印(pb_update が立て、ovl_mb_p61.c の hud_bg が見て描き直す) */
 u8 pb_ox, pb_oy, pb_nx, pb_ny, pb_w, pb_h, pb_oh, pb_oofs, pb_nofs, pb_cnt, pb_rowl, pb_r14, pb_col;
 
 /* 前回の矩形(ox,oy,w×oh)を海へ戻し、新しい矩形(nx,ny,w×h)を pb_col で描く。重なって変わらない行は触らない(BGTEST の実測版)。 */
@@ -265,7 +266,14 @@ void pb_update(void) {
         if (!b->on) continue;
         b->qx += b->vx; b->qy += b->vy;
         x = b->qx >> 3; y = b->qy >> 3;
-        if (x < 4 || x > 248 || y < 8 || y > 204) { pb_erase(b); continue; }
+        /* ★HUD(5面の中ボスの間は背景に描いている)を弾が崩さないように。弾は前の位置を海で塗り戻すので、HUD に重なると
+           数字の点まで消え、点数が変わるまで崩れたまま残った(00030 が 0003A に。ユーザー指摘)。
+           ・上の帯(スコア・残機。18 行まで): 弾をそこで消す(下の判定の y < 18)。HUD に触れさせない
+           ・下の帯(ボム棒・JAMMED・パワーの山): 自機のそばなので消さない。HUD の横の範囲に入ったら描き直させる
+             (2=左下 4=下中央。hud_bg は弾が出ていった直後に 1 回だけ描き直す)。
+             ★帯ごと毎フレーム描き直すと、上の帯に弾が居る間ずっと重く、フレームが半分に落ちた(openMSX) */
+        if ((u8)y > 185) { if (x < 84) g_pb_hit |= 2; else if (x > 114 && x < 140) g_pb_hit |= 4; }
+        if (x < 4 || x > 248 || y < 18 || y > 204) { pb_erase(b); continue; }
         dx = (s16)(x + 2 - px); dy = (s16)(y + 2 - py);
         if (dx < 0) dx = -dx;
         if (dy < 0) dy = -dy;

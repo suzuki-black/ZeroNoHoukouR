@@ -51,7 +51,7 @@ static const s8 sin64[64] = {
 
 static u8  st, st_t, hurt, fr, flast, flash, fcool, coldirty, sang, ph, hud_sc_dirty;
 static u16 t, hp, hud_last, kpts;
-static u8  hud_lv, hud_cr, hud_pw, jam_on;
+static u8  hud_lv, hud_cr, hud_pw, jam_on, pb_hit0;
 static s16 cx, cy;
 
 
@@ -125,6 +125,12 @@ static void crush_bg(u8 bars) {
     bgspr(8, 190, pat, (const u8 *)0, 13);   /* ★妨害中なので暗い色(撃てない) */
 }
 static void hud_bg(void) {
+    {   u8 m = (u8)(pb_hit0 & ~g_pb_hit);           /* ★背景の弾が崩した HUD を、弾が**出ていった直後に 1 回だけ**描き直す(ovl_bgbul.c)。
+                                                        弾が居る間は毎フレーム描き直すと重く、フレームが 2 割落ちた(openMSX)。通る間は少し欠けて見える */
+        pb_hit0 = g_pb_hit; g_pb_hit = 0;
+        if (m & 2) { hud_cr = 0xFF; jam_on = 0; }
+        if (m & 4) hud_pw = 0xFF;
+    }
     if (!hud_sc_dirty) {                             /* 最初の1回: 残機のアイコン(零戦のシルエット, 緑)。絵は表Aの SPR_ZERO をそのまま */
         u8 pat[32], i;
         hud_sc_dirty = 1;
