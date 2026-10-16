@@ -98,9 +98,77 @@ static void hs(u8 i, u8 line, s16 s, u8 r5) {
    ★艦の帯は R#26(8 ドット単位)も使うので、次の 96 行の帯で R#26 を 0 に戻す(hs は R#26/R#27 を両方書く)。
    ★スプライト表B への切替(R#5)は 128 行へ移した(元は 96 行。1 本の分割で書けるレジスタは 2 つなので、R#26 を戻す 96 行とは
      同居できない)。中ボスの間は両方の表に同じ内容を写している(g_spr_dual)ので、切替の行が変わっても見た目は同じ。 */
+#ifdef HWDIAG
+#include "hwdiag.h"
+/* ★計測 v4(make HWDIAG=1): 3 面の中ボスの帯の分割。毎フレームの合図の割込みが「入る前」と「抜けた後」の状態を見る。
+   32 回に 1 回、本体が分割表を組み直す瞬間(画面の中ほど)から、合図の後 1000 カウント(約 60 行)まで見張る。
+   値は最後に見張ったときのもの。約 4 秒ごとに次の値へ。
+     1: 合図の直前の状態  g_ras_i ×100 ＋ g_ras_tick(0 = 分割を待つ / 1 = 合図を待つ / 2 = PCM)
+     2: 合図の直後の状態  同上
+     3: 帰線の始まり(S#2 の VR が 0→1)から合図(JIFFY の変化)までのカウント(1 行 ≒ 16.25。VR が見えなければ 9999)
+     4: 状態(g_ras_i / g_ras_tick)が変わった回数  合図の前 ×100 ＋ 合図の後
+     5: 合図の直後の g_ras_vs。g_vscroll と違えば ＋1000
+   ★v3 の実機の計測(2026-10-13): 1 フレームの間に g_ras_i は一度も変わらず(割込みは合図の 1 回だけ)、
+     合図の後は 1 以下・本体が分割表を組み直す瞬間には 2。常駐の検算は一致(化けていない)。 */
+extern u8 g_ras_vs;
+static u8 dg_s2(void) __naked {       /* S#2 を読む(R#15 は 1 へ戻す) */
+    __asm
+        di
+        ld   a, #2
+        out  (0x99), a
+        ld   a, #0x8F
+        out  (0x99), a
+        in   a, (0x99)
+        ld   b, a
+        ld   a, #1
+        out  (0x99), a
+        ld   a, #0x8F
+        out  (0x99), a
+        ei
+        ld   a, b
+        ret
+    __endasm;
+}
+static u16 dg_out[5];
+static u8  dg_f, dg_blk, dg_id;
+static void dg_poll(void) {
+    u16 t0 = dg_now(), tv = 0, el;
+    u8 j = (u8)DG_JIFFY, jj, vr = 1, i, tk, pi = 0xFF, pt = 0xFF, pre = 0, post = 0, seen = 0;
+    for (;;) {
+        __asm di __endasm;                       /* ★JIFFY と状態を同じ瞬間に読む(間に割込みが入らないように) */
+        jj = (u8)DG_JIFFY; i = g_ras_i; tk = g_ras_tick;
+        __asm ei __endasm;
+        el = (u16)(dg_now() - t0);
+        if (pi != 0xFF && (i != pi || tk != pt) && jj == j) { if (seen) post++; else pre++; }
+        if (!seen) {
+            u8 v = (u8)(dg_s2() & 0x40);
+            if (v && !vr) tv = dg_now();
+            vr = v;
+            if (jj != j) {
+                seen = 1; t0 = dg_now(); el = 0; j = jj;
+                dg_out[0] = (u16)(dg_x100(pi) + pt);
+                dg_out[1] = (u16)(dg_x100(i) + tk);
+                dg_out[2] = tv ? (u16)(t0 - tv) : 9999;
+                dg_out[4] = (u16)(g_ras_vs + ((g_ras_vs != g_vscroll) ? 1000 : 0));
+            } else if (el > 9000) return;       /* 合図が来ない(2 フレーム)なら諦める */
+        } else if (el > 1000 || jj != j) break;
+        pi = i; pt = tk;
+    }
+    dg_out[3] = (u16)(dg_x100(pre) + post);
+}
+static void dg_dd(void) {
+    if ((dg_f & 31) == 0) dg_poll();
+    if (++dg_f >= 64) { dg_f = 0; if (++dg_blk >= 2) { dg_blk = 0; if (++dg_id >= 5) dg_id = 0; } }
+    dg_show((u8)(dg_id + 1), dg_out[dg_id]);
+}
+#endif
+
 u8 ovl_dd_split(u8 split_line) {
     u8 k;
     (void)split_line;
+#ifdef HWDIAG
+    dg_dd();
+#endif
     g_ras[0].line = 0; g_ras[0].reg = 5; g_ras[0].val = SPR_R5_A; g_ras[0].reg2 = 26; g_ras[0].val2 = 0; g_ras[0].pidx = RAS_NOPAL;
     g_ras[1].line = 0; g_ras[1].reg = 27; g_ras[1].val = wave(0); g_ras[1].reg2 = RAS_NOREG; g_ras[1].pidx = RAS_NOPAL;
     for (k = 1; k < 7; k++) {

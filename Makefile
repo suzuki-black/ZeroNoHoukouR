@@ -44,6 +44,11 @@ endif
 ifdef DEBUG_PROF
   DEFS += -DDEBUG_PROF
 endif
+# ── 実機の計測用 ROM(src/include/hwdiag.h): make clean && make HWDIAG=1。常駐は変えず、オーバレイの中だけで測って点数の欄に出す
+ifdef HWDIAG
+  DEFS += -DHWDIAG
+  HWDIAG_DEPS = $(BUILD)/hwdiag_sums.h
+endif
 # ★計測の版は PCM を切ってあるので、常駐の PCM を「鳴らない版」(入口とタイマ読みだけ)へ差し替える。
 #   本物のままだと計測を足した常駐が 24KB に収まらない(src/core/pcm_prof.s)。
 PCM_SRC = $(SRC)/core/pcm.s
@@ -539,7 +544,7 @@ ROMPACK_BANKS += --bank 26 $(BUILD)/ovl10.bin --asset 20 $(BUILD)/he111.bin --ba
 # 3面の中ボス(駆逐艦)用オーバレイ: パレット処理は -DOVL_DD(3面の1行だけ・9 番を艦の色に)。宙返りは通常版。
 # 入口表は ovlhead11(slot14 を ovl_dd_split=艦の帯の横ずれと荒天のうねりへ)。衝撃波(ovl_shock)は入れない。
 OVL11_RELS = $(BUILD)/ovl11_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_dd.rel
-$(BUILD)/ovl11.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_dd.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead11.rel $(BUILD)/resident_syms.rel
+$(BUILD)/ovl11.ihx: $(HWDIAG_DEPS) $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_dd.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead11.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_DD $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl11_palette.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_dd.c -o $(BUILD)/ovl_mb_dd.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
@@ -556,6 +561,9 @@ $(BUILD)/ovl11.bin: $(BUILD)/ovl11.ihx tools/ihx2bin.mjs
 	 DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/ovl11.map | head -1); \
 	 if [ $$((16#$$DL)) -gt 256 ]; then echo "ERROR: ovl11 の static が $$((16#$$DL))B。0xEE00〜0xEEFF(256B)を超えると分割表(0xEF00)を壊す"; exit 3; fi
 ROMPACK_BANKS += --bank 63 $(BUILD)/ovl11.bin
+# 計測 ROM(HWDIAG)だけ: 常駐の 2KB ごとの和(ovl_mb_dd.c が RAM 上の常駐と比べる)
+$(BUILD)/hwdiag_sums.h: $(BUILD)/rom.ihx tools/gen_hwdiag_sums.mjs
+	node tools/gen_hwdiag_sums.mjs $(BUILD)/rom.ihx $@
 
 # 5面の中ボス(P-61)用オーバレイ(bank3): パレットは -DOVL_P61(5面の1行だけ)、宙返りは -DOVL_MAG(半分に縮めて絵の表Bへ・枠 0..3)。
 # 衝撃波(ovl_shock)は入れない(枠のため。static を持たないので番地はずれない)。入口表は ovlhead12(slot14=ovl_p61_split)。
