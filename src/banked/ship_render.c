@@ -12,7 +12,7 @@
 #include "input.h"   /* input_poll/g_input_edge/INP_* */
 #include "gamestate.h" /* g_score/g_hiscore/g_continue */
 #include "sprites.h"  /* SPR_* / vdp_sprite_pattern(mode4=パターン投入を移設) */
-#include "rank.h"     /* g_demo(デモのカードの PRESS SPACE KEY を点滅) */
+#include "rank.h"     /* g_demo(デモのカードの PRESS SPACE KEY を点滅)/ g_demo_ret(デモの準備中に押された) */
 
 __sfr __at(0x98) SH_DAT;     /* VRAM データ */
 __sfr __at(0x99) SH_CTRL;    /* VDP アドレス/レジスタ */
@@ -48,8 +48,25 @@ static void swait(void) {
     __endasm;
 }
 
+/* ---- ★デモの準備中にキーで抜ける(デモの間だけ)。艦を描く(約 6 秒)間はデモのバンクが呼ばれず、開始カードで
+   PRESS SPACE KEY を押しても反応しなかった(ユーザー指摘)。塗りの入口でキーを見る。
+   押されたら g_demo_ret を立て、以後の塗りは何もせず、重いループも打ち切る(艦の絵は途中で止まるが、残りの準備はすぐ終わる)。
+   準備の後、面は始めずにタイトルへ戻る(scene_stage.c の stage_init / stage_update)。
+   ★本当のゲームの開始カードでは g_demo が 0 なので、ここは何もしない(準備の途中で面へ進むことはない)。 ---- */
+static u8 demo_quit(void) {                       /* ★塗りのたびにキーを読む(1 回数 µs。bank16 に間引く余地が無い) */
+    if (!g_demo) return 0;
+    if (!g_demo_ret) { input_poll(); if (g_input & (INP_TRIG | INP_TRIGB)) g_demo_ret = 1; }
+    return g_demo_ret;
+}
+
+/* 立った印を見るだけ(キーは見ない)。重いループの頭で使い、押されたら描くのをやめて戻る。
+   ★塗りを省くだけでは、船体の幅の計算や模様の乱数のループが回り続け、押してから戻るまで約 4 秒かかった(openMSX) */
+static u8 dq(void) { return (u8)(g_demo && g_demo_ret); }
+#define DEMO_QUIT dq()
+
 /* ---- 高速矩形塗り(LMMV, R#17間接)。dy は絶対VRAM Y。 ---- */
 static void sfill(u16 dx, u16 dy, u16 nx, u16 ny, u8 c) {
+    if (demo_quit()) return;
     swait();
     __asm di __endasm;
     SH_CTRL = 36; SH_CTRL = 0x80 | 17;
@@ -183,6 +200,7 @@ static void paint_hull_at(s16 cx) {
     s16 y, y2, h, w, i, ys, ws, nx, ny; u8 r;
     y = 0;
     while (y < 496) {
+        if (DEMO_QUIT) return;
         ys = y - 10; ws = (ys < 0) ? -1 : hull_w(ys);
         y2 = y + 1;
         while (y2 < 496) { s16 w2 = ((y2 - 10) < 0) ? -1 : hull_w(y2 - 10); if (w2 != ws) break; y2++; }
@@ -191,6 +209,7 @@ static void paint_hull_at(s16 cx) {
     }
     y = 0;
     while (y < 496) {
+        if (DEMO_QUIT) return;
         w = hull_w(y);
         y2 = y + 1;
         while (y2 < 496 && hull_w(y2) == w) y2++;
@@ -203,12 +222,14 @@ static void paint_hull_at(s16 cx) {
         y = y2;
     }
     for (i = -8; i <= 8; i++) {
+        if (DEMO_QUIT) return;
         w = i * 6; if (w < 0) w = -w;
         ys = -1; ws = 0;
         for (y = 6; y < 490; y++) if (hull_w(y) - 3 > w) { if (ys < 0) ys = y; ws = y; }
         if (ys >= 0) sfill((u16)(cx + i * 6), (u16)(B + ys), 1, (u16)(ws - ys + 1), 9);
     }
     for (ny = 8; ny < 488; ny += 2) {
+        if (DEMO_QUIT) return;
         w = hull_w(ny);
         if (w < 14) continue;
         for (nx = (s16)(cx - w + 4); nx < (s16)(cx + w - 4); nx += 2) {
@@ -243,6 +264,7 @@ static void draw_aag(u8 tbl, u8 gb, u8 gs, u8 ab, u8 as) {
         default: ax = aag_x_bb; ay = aag_y_bb; break;
     }
     for (i = 0; i < NAAG; i++) {
+        if (DEMO_QUIT) return;
         ground((s16)ax[i], (s16)ay[i], (i < 14) ? gb : gs);
         aaGun ((s16)ax[i], (s16)ay[i], (i < 14) ? ab : as);
     }
@@ -252,7 +274,7 @@ static void draw_aag(u8 tbl, u8 gb, u8 gs, u8 ab, u8 as) {
 static void run_ship_ops(const u8 *d) {
     for (;;) {
         u8 op = d[0], p1, p2, p3; s16 x; u16 y;
-        if (op == SOP_END) break;
+        if (op == SOP_END || DEMO_QUIT) break;
         x = (s16)d[1]; y = (u16)(d[2] | (d[3] << 8)); p1 = d[4]; p2 = d[5]; p3 = d[6]; d += 7;
         switch (op) {
             case SOP_GROUND:  ground(x, (s16)y, p1);                 break;
@@ -291,6 +313,7 @@ static void carrier_deck(void) {
     }
     for (i = -3; i <= 3; i++) if (i) sfill((u16)(128 + i * 15), (u16)(B + 28), 1, 424, 9);
     for (ny = 8; ny < 488; ny += 2) {
+        if (DEMO_QUIT) return;
         w = carrier_w(ny); if (w < 14) continue;
         for (nx = (s16)(128 - w + 3); nx < (s16)(128 + w - 3); nx += 2)
             { r = rnd(); if (r < 70) spset((u16)nx, (u16)(B + ny), (u8)((r & 1) ? 9 : 14)); }

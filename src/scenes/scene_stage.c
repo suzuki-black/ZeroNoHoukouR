@@ -903,8 +903,13 @@ void stage_init(void) {
     /* ★画面ビューア(config設定): 各画面を個別に表示して確認できる。表示後は stage_update が SC_TITLE を返す。 */
     if (g_view == 1) { draw_stage_card(); view_wait(); return; }              /* ステージ説明カードのみ */
     if (g_view == 2) { load_stage_data(); results_and_fanfare(); return; }    /* 撃破結果(SUNK)画面のみ */
-    if (g_demo) { draw_stage_card(); stage_setup(); }   /* ★デモ: 開始カードは出す(艦を描く数秒の間、灰色の画面になるので)。
-                                                       ファンファーレと余韻は飛ばす */
+    if (g_demo) {   /* ★デモ: 開始カードは出す(艦を描く数秒の間、灰色の画面になるので)。ファンファーレと余韻は飛ばす */
+        draw_stage_card();
+        stage_build();
+        /* ★準備の途中でキーが押されたら(ship_render.c の demo_quit。デモの間だけ)、地形を表示せず曲も始めない。
+             艦の絵は途中で止まっているので、この面は始めずに次の stage_update でタイトルへ戻る */
+        if (!g_demo_ret) { stage_begin_display(); stage_music(); }
+    }
     else        stage_intro();   /* 1面開始: カード＋ファンファーレ→準備→BGM→開始 */
 }
 
@@ -1037,6 +1042,11 @@ u8 stage_update(void) {
     }
 #endif
     if (g_view) { g_view = 0; return SC_TITLE; }   /* ★ビューア表示(カード/結果)はstage_initで完結→タイトルへ戻る */
+    if (g_demo && g_demo_ret) {                    /* ★デモの準備中に押された=面を始めずタイトルへ(上の stage_init の★)。
+                                                      g_demo_ret はタイトルの入場(DEMO_END)で戻す。g_demo が 0 の本物のゲームでは見ない */
+        g_opll = g_fm ? g_opll_hw : OPLL_NONE;     /* ★FM の設定を戻す(demo.c で抜けるときと同じ。タイトルの曲は入場より前に始まる) */
+        return SC_TITLE;
+    }
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
     /* ★メガクラッシュ(設計メモ §4-1「安い出力で最大の爽快」)。Bボタンで発動。
        発動中はスクロールもAIもBGMも全部止め、画面全体を雷光が覆う。数瞬のち(CRUSH_WIPE)に
