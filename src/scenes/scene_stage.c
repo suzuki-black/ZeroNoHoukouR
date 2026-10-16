@@ -1418,7 +1418,8 @@ u8 stage_update(void) {
         bgm_play(BGM_MIDBOSS);
         {   /* ★中ボスが出る瞬間: 枠に残った敵機・敵弾の属性を消す(中ボスは末尾の枠を自分で書くまで数フレームかかる。
                5面は拡大がかかって2倍で見えた=実機で指摘)。敵そのものは直前のフェードアウト(ovl_power.c)で消えている */
-            spr_hide_from(0);   /* ★エンティティは 0 から(HUD は最後尾で、直後に hud_draw が書く) */
+            spr_hide_from(g_spr_base);   /* ★エンティティの枠から(HUD は最後尾で、直後に hud_draw が書く)。★0 からにすると、デモの
+                                            PRESS SPACE KEY(0〜7 番)まで 1 フレーム消えた(デモ中は 8 番から) */
             scorepop_reset();
             g_mb_front = 0; g_mb_s0 = 0xFF;   /* ★枠の並びは既定(末尾)から始める */
         }

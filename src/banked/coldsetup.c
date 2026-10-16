@@ -283,8 +283,20 @@ static void rank_init(void) {
     g_hiscore = g_rank[0].score;     /* 画面の HI は 1 位から始める */
 }
 
+/* ───────── 海テンプレート(512, 256x16): 色1地＋色2を420点＋色7を320点(継目を隠す粗ノイズ)。scroll_build_sea から ─────────
+   ★常駐の scroll.c から移した(常駐の節約)。乱数の値(srng)は面をまたいで続けるので常駐に残してある(同じ模様になる)。 */
+extern u16 srng;
+static u8 srnd(void) { srng = (u16)(srng * 25173 + 13849); return (u8)(srng >> 8); }
+static void sea_build(void) {
+    u16 k;
+    vdp_fill(0, SC_SEATMPL_Y, 256, 16, 1);
+    for (k = 0; k < 420; k++) vdp_fill(srnd(), (u16)(SC_SEATMPL_Y + (srnd() & 15)), 1, 1, 2);
+    for (k = 0; k < 320; k++) vdp_fill(srnd(), (u16)(SC_SEATMPL_Y + (srnd() & 15)), 1, 1, 7);
+}
+
 void banked_entry(void) {
     u8 i;
+    if (g_cold_mode == COLD_SEA) { sea_build(); return; }
     if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); pcm_detect(); rank_init(); return; }   /* ★turboR 未満はここで止まる */
     if (g_cold_mode == COLD_HUDDIG) { hud_digits(); return; }
     if (g_demo) { vdp_wreg(13, 0); vdp_set_display_page(0); }   /* ★デモのカードの点滅(ページ交互表示。ship_render.c)を止める。

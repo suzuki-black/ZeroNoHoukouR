@@ -1,6 +1,11 @@
 /* scroll.c — 連続縦スクロール地形＋疑似多重スクロール海(旧版 SEA13 移植)。scroll.h 参照。 */
 #include "scroll.h"
 #include "vdp.h"
+#include "hud.h"        /* hud_draw: 縦スクロールを変えた瞬間に点数の位置も書き直す */
+#include "rank.h"       /* g_demo / g_demo_t0(デモの PRESS SPACE KEY) */
+#include "sprites.h"    /* SPR_DIGIT0 / COLDSETUP_BANK */
+#include "opll.h"       /* g_cold_mode / COLD_SEA */
+#include "bank.h"       /* bcall_to */
 
 #define PAGE1_Y   256           /* 表示リング(page1)の基準Y */
 
@@ -9,15 +14,12 @@ u8  g_sea_only;    /* ★1=最終面: 艦バッファB(=ボスのコマ置き場
 s16 drawn_top, drawn_bot;   /* リングに今描いてある世界行(16行単位)。★非static: 撃沈(ovl_sink.c)がリングへ書いてよい行の判定に使う */
 
 /* 海テンプレート用の乱数(旧版と同LCG。斑点の見た目のみ) */
-static u16 srng = 12345;
-static u8 srnd(void) { srng = (u16)(srng * 25173 + 13849); return (u8)(srng >> 8); }
+u16 srng = 12345;   /* ★非static: 海テンプレートの作り(冷たいバンク coldsetup.c の sea_build)が使う。面をまたいで続けるので常駐に置く */
 
 /* 海テンプレート(512, 256x16)を構築: 色1地＋色2を420点＋色7を320点(継目を隠す粗ノイズ)。 */
 void scroll_build_sea(void) {
-    u16 k;
-    vdp_fill(0, SC_SEATMPL_Y, 256, 16, 1);
-    for (k = 0; k < 420; k++) vdp_fill(srnd(), (u16)(SC_SEATMPL_Y + (srnd() & 15)), 1, 1, 2);
-    for (k = 0; k < 320; k++) vdp_fill(srnd(), (u16)(SC_SEATMPL_Y + (srnd() & 15)), 1, 1, 7);
+    /* ★中身(数百回の一括塗り)は冷たいバンク(coldsetup.c の sea_build)へ移した(常駐の節約。面の準備でしか呼ばない) */
+    g_cold_mode = COLD_SEA; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
 }
 
 /* 世界行 r を page1 リングの該当16pxスロットへ。艦行=バッファB, それ以外=海テンプレ。 */
@@ -166,5 +168,19 @@ void scroll_to(u16 cam) {
     while (drawn_bot < vb) { drawn_bot++; draw_row(drawn_bot); if (drawn_top < drawn_bot - 15) drawn_top = drawn_bot - 15; }
     while (drawn_top > vt) { drawn_top--; draw_row(drawn_top); if (drawn_bot > drawn_top + 15) drawn_bot = drawn_top + 15; }
     g_cam = cam;
-    vdp_set_vscroll((u8)cam);
+    {   u8 same = (u8)((u8)cam == g_vscroll);
+        /* ★R#23 は毎回書く(vdp_set_vscroll は合図の R#19 も張り直す。変わらないときに省いたら、衝撃波の帯などで
+             ずれた合図が戻らず、4 面で合図の割込みが最大 89 フレーム続けて遅れた=openMSX)。点数の書き直しだけ省く。 */
+        vdp_set_vscroll((u8)cam);
+        if (same) return;
+    }
+    /* ★画面に固定して見せるスプライト(点数・デモの PRESS SPACE KEY)は、縦スクロール(R#23)を変えた**この瞬間に**
+         位置(縦スクロールの補正つき)も書き直す。R#23 はここで表示の途中から効くが、ほかのスプライトの位置は 2 回後の
+         帰線でまとめて送るので、その間の表示で 1〜2 行ずれ、戦艦の往復の間は表示 1 回ごとに上下に揺れていた
+         (2026-10-14。openMSX で点数の縦位置が 7→9→7→8… と交互に変わるのを確認)。点数は画面の一番上なのでもう
+         表示し終えており、デモの文字は一番下なのでまだ走査線が届いていない=どちらもここで書けばそろう。 */
+    if (g_demo == 2) {
+        u8 i, y = (u8)(((u16)(*(volatile u16 *)0xFC9E - g_demo_t0) & 32) ? 220 : 194);   /* demo.c の点滅と同じ */
+        for (i = 0; i < 8; i++) vdp_sprite_pos(i, (u8)(68 + i * 16), y, (u8)(SPR_DIGIT0 + i * 4));
+    } else if (g_hud_on) hud_draw(g_score, g_lives);
 }
