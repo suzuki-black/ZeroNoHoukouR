@@ -131,9 +131,10 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
   machine the raster interrupts never fire). Play-testing is done on the turboR machine of
   [WebMSX](https://webmsx.org/) **and on real hardware** (since 2026-09-30, over an ESERAMair
   cartridge: `make send` to upload, `make verify` to read it back and compare).
-- **WebMSX does not emulate the turboR PCM**, so the snare and the voices are silent there (the PSG
-  and FM drums still play). The game notices this at boot and switches its PCM off. Use openMSX or a
-  real turboR to hear them.
+- **The official WebMSX does not emulate the turboR PCM**, so the snare and the voices are silent there
+  (the PSG and FM drums still play). The game notices this at boot and switches its PCM off. Use openMSX
+  or a real turboR to hear them. Some WebMSX builds add the turboR PCM; for those, use the separate
+  WebMSX ROM (see *Running* below).
 
 ### Building
 Requires [SDCC](https://sdcc.sourceforge.net/), Node.js and Python 3 (with Pillow).
@@ -143,7 +144,8 @@ make
 ```
 
 This produces `GAME.ROM` (an 8 Mbit (1 MB) ASCII8 MegaROM). `make DEBUG_FPS=1` builds a debug ROM with an
-FPS counter (run `make clean` when switching).
+FPS counter (run `make clean` when switching). `make webmsx` builds `WEBMSX.ROM`, the WebMSX build
+(run `make clean && make` afterwards to get back to `GAME.ROM`).
 
 ### Running
 Under openMSX, with a turboR machine (e.g. `Panasonic_FS-A1GT` or `Panasonic_FS-A1ST`, which need
@@ -159,7 +161,15 @@ A machine without the turboR system ROMs will not do: on a C-BIOS machine (such 
 
 `GAME.ROM` also runs in [WebMSX](https://webmsx.org/) (drag-and-drop, turboR machine). **The turboR PCM
 is not emulated there** — even with the turboR machine selected, the snare and the voices stay silent.
-A pre-built ROM is attached to each [release](https://github.com/suzuki-black/ZeroNoHoukouR/releases).
+
+Some WebMSX builds add the turboR PCM (for example the one on
+[file-hunter.com](https://www.file-hunter.com/MSX/)). There, use the **WebMSX ROM** (`*-webmsx.rom` in the
+release, or `make webmsx`). With `GAME.ROM` the opening shout breaks up into short bursts in those builds:
+WebMSX answers interrupts a little later than a real turboR, and the game's timing for each PCM sample is
+tuned to the real machine. The WebMSX ROM leaves a wider margin; everything else is identical.
+On openMSX and real hardware, use `GAME.ROM`.
+
+Pre-built ROMs are attached to each [release](https://github.com/suzuki-black/ZeroNoHoukouR/releases).
 
 ### Project structure
 ```
@@ -358,8 +368,9 @@ silhouettes may differ from the real thing.)
   開発・検証します（**実機 BIOS を吸い出した機種定義**を使ってください。C-BIOS の機械では走査線割込みが
   発火せず、検証が嘘になります）。テストプレイは [WebMSX](https://webmsx.org/) の turboR と、
   **実機の turboR**（2026-09-30 以降。ESERAMair 経由で `make send` → `make verify`）で行っています。
-- **WebMSX は turboR の PCM を鳴らしません**。スネアと叫びは無音になります（PSG と FM のドラムは鳴ります）。
+- **本家の WebMSX は turboR の PCM を鳴らしません**。スネアと叫びは無音になります（PSG と FM のドラムは鳴ります）。
   ゲームは起動時にそれを見分けて PCM を切ります。PCM を聞くには openMSX か実機を使ってください。
+  turboR の PCM を足した WebMSX もあり、そちらでは WebMSX 用の ROM を使ってください（下の「実行」）。
 
 ### ビルド
 [SDCC](https://sdcc.sourceforge.net/)、Node.js、Python 3（Pillow）が必要です。
@@ -369,7 +380,8 @@ make
 ```
 
 `GAME.ROM`（8メガビット（1MB）の ASCII8 メガROM）が生成されます。`make DEBUG_FPS=1` で FPS 表示付きのデバッグ版になります
-（切り替えるときは `make clean`）。
+（切り替えるときは `make clean`）。`make webmsx` で WebMSX 用の `WEBMSX.ROM` を作ります（その後 `GAME.ROM` に戻すときは
+`make clean && make`）。
 
 ### 実行
 openMSX では turboR の機種（例: `Panasonic_FS-A1GT` や `Panasonic_FS-A1ST`。本体 ROM が必要）で:
@@ -383,6 +395,13 @@ turboR の本体 ROM の無い機種では動きません。C-BIOS の機種（[
 
 `GAME.ROM` は [WebMSX](https://webmsx.org/)（ドラッグ&ドロップ・turboR 機種）でも動作します。ただし **WebMSX は
 turboR の PCM を鳴らしません**。turboR 機種を選んでも、スネアと叫びは無音です。
+
+turboR の PCM を足した WebMSX（たとえば [file-hunter.com](https://www.file-hunter.com/MSX/) のもの）では、
+**WebMSX 用の ROM**（リリースの `*-webmsx.rom`、または `make webmsx`）を使ってください。`GAME.ROM` だと、そうした
+WebMSX ではゲーム開始の叫びが細切れに途切れます。WebMSX は割込みの応答が実機の turboR より少し遅く、PCM の
+1 サンプルごとのタイミングは実機に合わせてあるためです。WebMSX 用の ROM はその余裕を広げただけで、ほかは同じです。
+openMSX と実機では `GAME.ROM` を使ってください。
+
 ビルド済みの ROM は[リリースページ](https://github.com/suzuki-black/ZeroNoHoukouR/releases)にも添付しています。
 
 ### ディレクトリ構成

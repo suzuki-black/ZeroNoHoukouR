@@ -16,6 +16,8 @@ GAME_DEBUG*.ROM
 __pycache__/
 # 検証ROM(make hstest 等がリポジトリ直下に置く。curl のパスを固定するため build/ ではなくここ)
 TEST.ROM
+# WebMSX 用の ROM(make webmsx)。リリースに同梱するもので、リポジトリには入れない
+WEBMSX.ROM
 # 実機から読み戻した内容(curl で取ったもの)
 readback.bin
 

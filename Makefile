@@ -49,6 +49,13 @@ ifdef HWDIAG
   DEFS += -DHWDIAG
   HWDIAG_DEPS = $(BUILD)/hwdiag_sums.h
 endif
+# ── WebMSX 用の ROM: make webmsx(中身は make clean && make WEBMSX=1 → WEBMSX.ROM)。
+#    違いは hot_pcm.s の .if WEBMSX の中だけ(PCM のサンプルの行を遠めに張る。理由は hot_pcm.s の★)。製品の GAME.ROM は変わらない
+ifdef WEBMSX
+  PCM_WEBMSX = 1
+else
+  PCM_WEBMSX = 0
+endif
 # ★計測の版は PCM を切ってあるので、常駐の PCM を「鳴らない版」(入口とタイマ読みだけ)へ差し替える。
 #   本物のままだと計測を足した常駐が 24KB に収まらない(src/core/pcm_prof.s)。
 PCM_SRC = $(SRC)/core/pcm.s
@@ -321,10 +328,16 @@ $(BUILD)/prof_bank.ihx: $(SRC)/banked/prof_bank.c $(HDRS) $(BUILD)/bankhead.rel 
 # ── RAM実行モジュール(hot.c) ──
 # 常駐が予約した hot_ram[] の実番地(rom.noi の _hot_ram)へ --code-loc してリンク→ ihx→bin へ変換。
 # rompack は .bin を bank17 先頭から配置し、起動時 hot_load() が hot_ram[] へ転写する。
-$(BUILD)/hot.ihx: $(SRC)/banked/hot.c $(SRC)/banked/hot_hb.c $(SRC)/banked/hot_pcm.s $(HDRS) $(BUILD)/hothead.rel $(BUILD)/resident_syms.rel
+# hot_pcm.s の設定(WEBMSX = 0/1)。★中身が変わったときだけ書き直す(毎回書くと hot.ihx が毎回作り直しになる)
+$(BUILD)/pcm_cfg.inc: FORCE
+	@mkdir -p $(BUILD)
+	@echo "WEBMSX = $(PCM_WEBMSX)" > $@.tmp
+	@if cmp -s $@.tmp $@; then rm -f $@.tmp; else mv $@.tmp $@; fi
+FORCE:
+$(BUILD)/hot.ihx: $(SRC)/banked/hot.c $(SRC)/banked/hot_hb.c $(SRC)/banked/hot_pcm.s $(BUILD)/pcm_cfg.inc $(HDRS) $(BUILD)/hothead.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/hot.c -o $(BUILD)/hot.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(INC) $(SRC)/banked/hot_hb.c -o $(BUILD)/hot_hb.rel   # ★中ボスの背景弾はサイズ優先
-	sdasz80 -o $(BUILD)/hot_pcm.rel $(SRC)/banked/hot_pcm.s   # ★面中の PCM(割込みから呼ぶ)。必ずリンクの最後=hot_ram の末尾
+	sdasz80 -I$(BUILD) -o $(BUILD)/hot_pcm.rel $(SRC)/banked/hot_pcm.s   # ★面中の PCM(割込みから呼ぶ)。必ずリンクの最後=hot_ram の末尾
 	@HA=$$(awk '/^DEF _hot_ram /{print $$3}' $(BUILD)/rom.noi); \
 	 if [ -z "$$HA" ]; then echo "ERROR: rom.noi に _hot_ram が無い(hotcode.c を常駐にリンクせよ)"; exit 2; fi; \
 	 echo "  hot.c を hot_ram=$$HA へリンク"; \
@@ -735,7 +748,14 @@ hstest:
 	$(MAKE) HSTEST=1
 	@mv GAME.ROM TEST.ROM && echo "  TEST.ROM を作った(make send-test で実機へ)"
 
-.PHONY: send send-test verify hstest run clean
+# WebMSX 用の ROM を WEBMSX.ROM として作る(リリースに GAME.ROM と別に同梱する)。作ったあと build/ は WebMSX 用のままなので、
+# 製品を作るときは make clean && make
+webmsx:
+	$(MAKE) clean
+	$(MAKE) WEBMSX=1
+	@mv GAME.ROM WEBMSX.ROM && echo "  WEBMSX.ROM を作った(WebMSX 用。製品は make clean && make)"
+
+.PHONY: send send-test verify hstest webmsx run clean FORCE
 
 clean:
 	rm -rf $(BUILD) GAME.ROM
