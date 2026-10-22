@@ -120,7 +120,7 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
 | Space / keyboard **A** / trigger A | Fire · confirm |
 | Keyboard **B** or **M** / trigger B (alone) | Mega crash (bomb) |
 | Fire + B (A+B) | Loop manoeuvre |
-| ↑↑↓↓←→←→ B A on the title screen | Hidden settings menu (difficulty, lives, durability, starting stage, continue, invincibility, **FM sound**, **PCM sound**, screen viewer) |
+| ↑↑↓↓←→←→ B A on the title screen | Hidden settings menu (difficulty, lives, durability, starting stage, continue, invincibility, **FM sound**, **PCM sound**, screen viewer, **sound test**) |
 
 ### Requirements
 - **Target hardware: MSX turboR only** (FS-A1ST / FS-A1GT). The cartridge checks the machine at boot
@@ -358,7 +358,7 @@ silhouettes may differ from the real thing.)
 | スペース／キーボード **A**／トリガーA | 発射・決定 |
 | キーボード **B** または **M**／トリガーB（単押し） | メガクラッシュ（ボム） |
 | 撃ちながら B（A＋B） | 宙返り |
-| タイトルで ↑↑↓↓←→←→ B A | 隠しの設定メニュー（難易度・残機・耐久・開始面・継続・無敵・**FM音源**・**PCM**・画面ビューア） |
+| タイトルで ↑↑↓↓←→←→ B A | 隠しの設定メニュー（難易度・残機・耐久・開始面・継続・無敵・**FM音源**・**PCM**・画面ビューア・**サウンドテスト**） |
 
 ### 動作環境
 - **MSX turboR 専用**（FS-A1ST / FS-A1GT）。起動時に機種を見て、turboR 未満なら

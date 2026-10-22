@@ -22,8 +22,9 @@ void scroll_build_sea(void) {
     g_cold_mode = COLD_SEA; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
 }
 
-/* 世界行 r を page1 リングの該当16pxスロットへ。艦行=バッファB, それ以外=海テンプレ。 */
-static void draw_row(s16 r) {
+/* 世界行 r を page1 リングの該当16pxスロットへ。艦行=バッファB, それ以外=海テンプレ。
+   ★非static: 面の始まりのリング描き(冷たいバンク coldsetup.c の scroll_init_body)も使う */
+void draw_row(s16 r) {
     u16 dy = (u16)(PAGE1_Y + (u8)((u16)r << 4));
     if (!g_sea_only && r >= SC_SHIP_R0 && r < SC_SHIP_R1)
         vdp_copy(0, (u16)(SC_SHIPBUF_Y + (u16)(r - SC_SHIP_R0) * 16), 0, dy, 256, 16);
@@ -134,22 +135,9 @@ void sea_frame(void) {
 }
 
 void scroll_init(void) {
-    s16 r;
-    /* ★page1 を表示する"前"に、リング窓を描き切り・縦位置も確定させる。
-       旧実装は先に display=page1 してから draw_row していたため、page1 に残る
-       前ステージの最終フレーム(破壊/炎上画面)が上書きされ切るまでの数十μs、
-       画面に露出していた(=ステージ遷移時に一瞬ゴミが見える。実機でも発生)。
-       カード(page0)を出したまま page1 を完成させ、最後に一気に切替えることで解消。 */
-    /* sea_init(stage) は呼び元(scene_stage)が艦種に合わせて呼ぶ */
-
-    g_cam = SC_CAM_START;
-    drawn_top = (s16)(g_cam >> 4);
-    drawn_bot = (s16)((g_cam + 211) >> 4);
-    for (r = drawn_top; r <= drawn_bot; r++) draw_row(r);   /* page1 リングを新面で満たす(まだ非表示) */
-    vdp_set_vscroll((u8)g_cam);       /* 縦位置も新面へ。★flip前に確定=表示した瞬間に窓が正しい */
-    /* 最後に page1 を出す。R#23→R#2 の順=両者の隙間(数μs)にフレーム境界が来ても、
-       その間見えるのは page0(カード)側だけ。旧ステージの page1 は決して露出しない。 */
-    vdp_set_display_page(1);          /* 完成済み page1 を表示=ここでゲーム画面が現れる */
+    /* ★中身(リングを新面で満たして page1 を出す)は冷たいバンク(coldsetup.c の scroll_init_body)へ移した
+       (常駐の節約。面の始まりに 1 回しか呼ばない。サウンドテストの入口の置き場を作るため) */
+    g_cold_mode = COLD_SCRINIT; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
 }
 
 /* ★最終面: 世界の縦座標を add(16の倍数)だけずらす。表示リングは 256px 周期、世界行 r のスロットは

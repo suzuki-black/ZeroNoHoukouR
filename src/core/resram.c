@@ -98,3 +98,14 @@ void voice_fanfare(u8 id) {
     bank_data(g_bank);
 }
 #endif
+
+/* ★サウンドテスト(設定画面 = バンク)から曲と叫びを鳴らす入口。v = 曲の番号 / SNDT_STOP = 曲を止める /
+   SNDT_VOICE|番号 = 叫び(鳴り終わるまで待つ)。曲も叫びも素材のバンクを窓(0xA000)に出して読むので、
+   バンクのコードからは直接呼べない(窓から自分が追い出される)。ここ(常駐)で鳴らし、最後に窓を
+   呼び元のバンク(g_bank)へ向け直す(voice_fanfare と同じ作法)。 */
+void snd_test(u8 v) {
+    if (v & SNDT_VOICE) voice_play((u8)(v & 3));
+    else if (v == SNDT_STOP) bgm_stop();
+    else bgm_play(v);
+    bank_data(g_bank);
+}

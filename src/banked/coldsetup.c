@@ -294,9 +294,31 @@ static void sea_build(void) {
     for (k = 0; k < 320; k++) vdp_fill(srnd(), (u16)(SC_SEATMPL_Y + (srnd() & 15)), 1, 1, 7);
 }
 
+/* ───────── 表示リング(page1)を新面で満たして表示する。scroll_init から(面の始まりに1回) ─────────
+   ★常駐の scroll.c から移した(常駐の節約。サウンドテストの入口の置き場を作るため)。
+   ★page1 を表示する"前"に、リング窓を描き切り・縦位置も確定させる。
+     旧実装は先に display=page1 してから draw_row していたため、page1 に残る
+     前ステージの最終フレーム(破壊/炎上画面)が上書きされ切るまでの数十μs、
+     画面に露出していた(=ステージ遷移時に一瞬ゴミが見える。実機でも発生)。
+     カード(page0)を出したまま page1 を完成させ、最後に一気に切替えることで解消。
+   sea_init(stage) は呼び元(scene_stage)が艦種に合わせて呼ぶ */
+extern void draw_row(s16 r);   /* scroll.c(常駐) */
+static void scroll_init_body(void) {
+    s16 r;
+    g_cam = SC_CAM_START;
+    drawn_top = (s16)(g_cam >> 4);
+    drawn_bot = (s16)((g_cam + 211) >> 4);
+    for (r = drawn_top; r <= drawn_bot; r++) draw_row(r);   /* page1 リングを新面で満たす(まだ非表示) */
+    vdp_set_vscroll((u8)g_cam);       /* 縦位置も新面へ。★flip前に確定=表示した瞬間に窓が正しい */
+    /* 最後に page1 を出す。R#23→R#2 の順=両者の隙間(数μs)にフレーム境界が来ても、
+       その間見えるのは page0(カード)側だけ。旧ステージの page1 は決して露出しない。 */
+    vdp_set_display_page(1);          /* 完成済み page1 を表示=ここでゲーム画面が現れる */
+}
+
 void banked_entry(void) {
     u8 i;
     if (g_cold_mode == COLD_SEA) { sea_build(); return; }
+    if (g_cold_mode == COLD_SCRINIT) { scroll_init_body(); return; }
     if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); pcm_detect(); rank_init(); return; }   /* ★turboR 未満はここで止まる */
     if (g_cold_mode == COLD_HUDDIG) { hud_digits(); return; }
     if (g_demo) { vdp_wreg(13, 0); vdp_set_display_page(0); }   /* ★デモのカードの点滅(ページ交互表示。ship_render.c)を止める。

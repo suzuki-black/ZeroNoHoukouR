@@ -55,5 +55,9 @@ void voice_play(u8 id);
 /* ★叫び＋勝ちどきファンファーレを重ねて鳴らす(結果画面)。**バンク(results_impl)から呼ぶ。**
    窓を音声バンクへ向けて鳴らし、戻る前に呼び元のバンク(g_bank)へ向け直す。 */
 void voice_fanfare(u8 id);
+/* ★サウンドテスト(設定画面 = バンク)から曲・叫びを鳴らす(resram.c)。v = 曲の番号 / SNDT_STOP / SNDT_VOICE|叫びの番号 */
+#define SNDT_STOP  0x7F
+#define SNDT_VOICE 0x80
+void snd_test(u8 v);
 
 #endif /* PCM_H */
