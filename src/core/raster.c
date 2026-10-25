@@ -465,12 +465,19 @@ void ras_pause(void) __naked {
      ras_apply が張る行(残りの分割と毎フレームの合図)が古い R#23 で計算されてずれ、合図が「発火できない行」
      へ落ちてフレームを飛ばした(openMSX の 5 面で 5 秒に最大 22 フレーム。2026-10-07)。
    ・次が合図なら R#19 も張り直す。張り直さないと、スクロール量しだいで二度と割込みが来ない。
-   ・分割が残っているときは、待っている分割の R#19 は触らない(以前どおり) */
+   ・分割が残っているときは、待っている分割の R#19 は触らない(以前どおり)
+   ★g_vs_split = 1 の間(最終面)は g_vscroll だけを書き、R#23 は書かない。R#23 は分割表のフレーム先頭(0 行目)の
+     分割が、スプライト表の組の切り替えと同時に書く(ovl_final.c の arm_splits)。表示の途中で R#23 だけ変えると、
+     スプライトの位置を書き終えるまでの間、ボスの帯に 1 行の段差が出た(実機で「走査線抜け」として指摘。2026-10-24)。 */
+u8 g_vs_split;
 void vdp_set_vscroll(u8 v) __naked {
     (void)v;                     /* A = v(sdcccall 1) */
     __asm
         di
         ld   (_g_vscroll), a
+        ld   hl, #_g_vs_split
+        bit  0, (hl)
+        jr   nz, 00009$          ; ★R#23 は分割表が書く
         ld   (_g_ras_vs), a
         out  (0x99), a
         ld   a, #0x80+23
@@ -478,6 +485,7 @@ void vdp_set_vscroll(u8 v) __naked {
         ld   a, (_g_ras_tick)
         or   a
         call nz, _ras_next
+    00009$:
         ei
         ret
     __endasm;
@@ -513,6 +521,7 @@ void raster_off(void) {
         vdp_wreg(1, (u8)(*(volatile u8 *)0xF3E0 & 0xFE));   /* RG1SAV から MAG を落とした値 */
     }
     __asm di __endasm;
+    g_vs_split = 0;      /* ★分割を止めたら R#23 の後回し(最終面)もやめる。続けると R#23 を書く人がいなくなる */
     g_ras_n = 0;
     g_ras_i = 0;
     ras_next();          /* ★待っていた分割の行を、毎フレームの合図へ張り替える */

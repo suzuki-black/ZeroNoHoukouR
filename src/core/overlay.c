@@ -3,12 +3,14 @@
 #include "ramexec.h"
 #include "curtain.h"
 #include "final.h"
+#include "vdp.h"      /* g_vs_split */
 
 u8 g_ovl_ok;
 
 /* ★0x4000-0x5FFF に居ること(overlay.h の制約)。Makefile がリンク後に検証する。 */
 void overlay_load(u8 bank) {
     g_ovl_ok = 0;
+    g_vs_split = 0;   /* ★R#23 の後回し(最終面のオーバレイだけが立てる)をやめる。撃沈・次の面のオーバレイでは分割表が R#23 を書かない */
     if (!g_ramx2_ok) return;   /* page2 を RAM 化できない機械ではオーバレイも使えない(安全側) */
 
     /* ★複製中は割込みを止めない。8KB を di で囲んだら **223ms** 割込みが止まり、BGM ごと

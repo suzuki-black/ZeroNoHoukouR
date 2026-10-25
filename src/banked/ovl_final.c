@@ -39,7 +39,9 @@ static const u16 pg_patr[2] = { 250, 1018 };       /* ボス 24 枚のパター�
 static const u16 pg_colr[2] = { 224, 0 };          /* 表 B の色表の行 */
 static const u8  pg_r6[2]   = { 0x0F, 0x3F };
 static const u8  pg_r5[2]   = { SPR_R5_B, 0x07 };
-static u8 ap;              /* 表示中の組 */
+static u8 ap;              /* 次の合図(フレームの頭)から表示する組(最後に積んだ組) */
+static u8 vs_put;          /* ★ボスの位置を計算したときの縦スクロール値。フレーム頭の分割で R#23 にこれを書く(arm_splits) */
+static u16 arm_j;          /* 最後に分割表を積んだときの JIFFY。まだ合図が来ていなければ、積んだ組はまだ表示されていない */
 static u8 pg_src[2];       /* 各組に載っているコマ(光るコマを含む添字。0xFF=未) */
 #define BOSS_PAT0 160              /* ボス 24 枚のパターン番号の先頭(4 の倍数)。パターン表の 250〜255 行 */
 #define WALL_PAT  72               /* 壁のパターン(空母の停泊機の枠。この面では使わない) */
@@ -146,14 +148,19 @@ static void clamp_cy(void) {
 }
 
 /* コマを VRAM からパターン表と表 B の色表へ(HMMM 2 本。VDP が CPU と並行に流す) */
-/* 今フレームに書く組を決める: コマが替わるなら表示していない組へ載せて切り替える。戻り=書く組 */
+/* 今フレームに書く組を決める。戻り=書く組。
+   ★位置は毎フレーム「表示していない組」へ書き、フレームの頭で組と R#23 を同時に切り替える(arm_splits)。以前は、コマが
+     替わらないフレームは表示中の組へ直接書いていて、表示の途中で R#23 が先に変わり、書き終えるまでの間ボスの帯に 1 行の
+     段差が出た(実機で「登場の回転・拡大の間に走査線が抜ける」と指摘。openMSX で、R#23 は 23 行目前後、位置を書き終えるのは
+     87 行目前後と測った。2026-10-24)。
+   ★30fps なので 1 回の処理の間に合図が 2 回来る。前に積んだ組がまだ表示されていない(合図が来ていない)ときは、
+     表示中の組を避けて、その積んだ組へ書き直す。 */
 static u8 load_frame(void) {
     u8 src = fr, q;
     u16 y;
     if (glow && fr >= BOSS_F_FULL && fr < BOSS_F_BANK0 + 6)   /* 光るコマ: 通常,左1..3,右1..3 の順 */
         src = (u8)(BOSS_F_GLOW0 + ((fr == BOSS_F_FULL) ? 0 : (fr - BOSS_F_BANK0 + 1)));
-    if (pg_src[ap] == src) return ap;          /* 替わらない: 表示中の組の位置だけ書く */
-    q = (u8)(1 - ap);
+    q = (*(volatile u16 *)0xFC9E == arm_j) ? ap : (u8)(1 - ap);   /* 表示していない組 */
     if (pg_src[q] != src) {
         /* コマの置き場: 前半は page2/3(y=528〜)、入り切らない残りは page0(y=32〜) */
         y = frame_y(src);
@@ -174,6 +181,7 @@ static u8 load_frame(void) {
 /* 表 B の属性: ボス 24 枚＋壁 8 枚 */
 static void put_sprites(u8 blink, u8 pg) {
     u8 i, n = meta[0], z = boss_mag() ? 2 : 1, vs = g_vscroll;
+    vs_put = vs;
     const u8 *tl = meta + 8;
     s16 ox = (s16)(cx + (s16)(s8)meta[2] * z), oy = (s16)(cy + (s16)(s8)meta[3] * z);
     s16 step = (s16)(16 * z);
@@ -198,16 +206,24 @@ static void put_sprites(u8 blink, u8 pg) {
     }
 }
 
-/* 分割表: HUD 帯(表A/等倍) → ボス帯(表B/コマに応じて拡大) → 自機帯(表A/等倍) */
+/* 分割表: HUD 帯(表A/等倍) → ボス帯(表B/コマに応じて拡大) → 自機帯(表A/等倍)
+   ★R#23(縦スクロール)もフレームの頭でパターン表の組と同時に書く(g_vs_split。vdp_set_vscroll は g_vscroll だけを書く)。
+     ボスの位置(vs_put で計算)と R#23 が必ず同じ瞬間に切り替わる。★[0] の reg2 を 23 にすると ras_rearm が g_ras_vs で
+     上書きするので、R#23 は 2 本目([1])に置く。積んでいる途中で合図が割り込まないよう di で囲む */
 static void arm_splits(void) {
+    __asm di __endasm;
     g_ras[0].line = 0;   /* 画面の頭: パターン表の組を切り替え(R#6)。表Aへ戻すのは前フレームの壁の行で済んでいる */
     g_ras[0].reg = 6; g_ras[0].val = pg_r6[ap]; g_ras[0].reg2 = 5; g_ras[0].val2 = SPR_R5_A; g_ras[0].pidx = RAS_NOPAL;
-    g_ras[1].line = FINAL_TOP_LINE;
-    g_ras[1].reg = 5; g_ras[1].val = pg_r5[ap]; g_ras[1].reg2 = 1; g_ras[1].val2 = (u8)(r1n | boss_mag());
-    g_ras[1].pidx = RAS_NOPAL;
-    g_ras[2].line = FINAL_WALL_LINE;
-    g_ras[2].reg = 5; g_ras[2].val = SPR_R5_A; g_ras[2].reg2 = 1; g_ras[2].val2 = r1n; g_ras[2].pidx = RAS_NOPAL;
-    raster_arm(3);
+    g_ras[1].line = 0;
+    g_ras[1].reg = 23; g_ras[1].val = vs_put; g_ras[1].reg2 = RAS_NOREG; g_ras[1].pidx = RAS_NOPAL;
+    g_ras[2].line = FINAL_TOP_LINE;
+    g_ras[2].reg = 5; g_ras[2].val = pg_r5[ap]; g_ras[2].reg2 = 1; g_ras[2].val2 = (u8)(r1n | boss_mag());
+    g_ras[2].pidx = RAS_NOPAL;
+    g_ras[3].line = FINAL_WALL_LINE;
+    g_ras[3].reg = 5; g_ras[3].val = SPR_R5_A; g_ras[3].reg2 = 1; g_ras[3].val2 = r1n; g_ras[3].pidx = RAS_NOPAL;
+    raster_arm(4);
+    arm_j = *(volatile u16 *)0xFC9E;
+    __asm ei __endasm;
 }
 
 static void spawn_weakpoints(void) {
@@ -270,6 +286,7 @@ void ovl_final_init(void) {
 u8 ovl_final_frame(void) {
     u16 el;
     u8 blink = 0;
+    g_vs_split = 1;   /* ★R#23 はフレームの頭の分割で書く(arm_splits)。分割を止める・オーバレイを読み替えると常駐が 0 に戻す */
     if (tick == 0 && st == ST_WAIT) {
         u8 i;
         t0 = g_bgm_t0;   /* ★曲を鳴らし始めた瞬間(登場はイントロ 576f に合わせる) */
