@@ -43,6 +43,7 @@ void hud_colors(void) {
 u8 g_hud_skip;
 static u8 pat_buf[32];     /* 32B すべてを毎回書く用途の作業場(数字の投入・ボム棒・上位2桁・HUD の属性)。
                               ★ローカル配列にすると sdcc が IX のスタック枠を組んで常駐を食う。 */
+static u8 dig[5];          /* 今のスコアの 5 桁 */
 
 /* ★asm(C だと常駐を 30B 近く食った)。A = a、L = b */
 static void score_hi_pattern(u8 a, u8 b) __naked {
@@ -84,7 +85,7 @@ void hud_init(void) {
     /* ★数字パターンの投入(10桁ぶんの転送)は**冷たいバンク**(coldsetup)へ出してある。
        面の準備で1回しか走らないのに常駐を 60B 超食っていたため(叫びの置き場所が要って見直した)。 */
     g_cold_mode = COLD_HUDDIG; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
-    score_hi_pattern(0, 0);
+    score_hi_pattern(dig[0], dig[1]);   /* ★0, 0 と焼くと、ミスの再開や次の面で上 2 桁が次に変わるまで 00 に見える(hud_draw は変わるまで焼かない) */
     hud_colors();
     g_spr_base = 0;   /* ★エンティティは slot0 から＝HUD より手前。HUD は最後尾(HUD_SL0..31) */
 }
@@ -151,7 +152,7 @@ static void hud_put(u8 k, u8 x, u8 y, u8 pat) __naked {
 void hud_draw(u16 score, u8 lives) {
     /* ★桁分解(除算×10)はスコア/残機が変化した時だけ=毎フレームの高価な除算を回避(Z80は除算がライブラリ呼び)。
        スプライト位置(vscroll補正で毎フレーム変わる)は毎回書く。 */
-    static u16 last_score = 0xFFFF; static u8 dig[5] = { 0,0,0,0,0 };
+    static u16 last_score = 0xFFFF;
     static u8  last_lives = 0xFF;   /* 残機は最大 5(設定の 2/3/5。増える仕組みは無い)なので桁分解は要らない */
     static u8  last_crush = 0xFF;   /* ボム残数: 変化時だけパターンを書き換える */
     static u8  last_vs;

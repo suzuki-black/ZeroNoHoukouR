@@ -737,6 +737,7 @@ static void stage_build(void) {
     load_stage_data();    /* 艦名/撃沈文/敵機カラー/主砲座標を当該面ぶんRAMへ(ミス再開経路も網羅) */
     prerender_ship();     /* 艦をバッファB(オフスクリーン)へ。stage_begin_display の前に必須 */
     vdp_sprite_init();
+    g_spr_patb = 0;           /* ★最終面のミスの再開: 第 2 のパターン表はオーバレイが最初のフレームで丸ごと写し直す */
     sprites_load(curstage);   /* ★静的パターン＋この面の戦闘機8方向×3サイズを生成 */
     /* ★セットBの用意を hud_init の**前**に済ませ、g_spr_dual も先に立てる。
        hud_init はスプライト色を書くので、後回しにするとセットB側が単色(赤)のまま残る。

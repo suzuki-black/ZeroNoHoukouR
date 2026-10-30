@@ -38,12 +38,13 @@ void vdp_set_pal(u8 idx, u8 r, u8 g, u8 b) {
 /* ★書き込み用と読み出し用は**最後の 1 バイトしか違わない**(bit6 を立てると書き込み)。
    2 本に分けて書くと中身が丸ごと重複するので 1 本にまとめる(常駐の回収)。
    呼び出しが 1 段増えるが、どちらも VDP のポートアクセスが主体で、増える数十サイクルは誤差。 */
-static void vdp_addr(u16 a, u8 wr) {
+static void vdp_addr_hi(u8 hi, u16 a, u8 wr) {   /* hi = R#14(0x10000 以上を指すとき用) */
     __asm di __endasm;
-    VDP_CTRL = (a >> 14) & 7;   VDP_CTRL = 0x80 | 14;
+    VDP_CTRL = hi;              VDP_CTRL = 0x80 | 14;
     VDP_CTRL = a & 0xFF;        VDP_CTRL = ((a >> 8) & 0x3F) | wr;
     __asm ei __endasm;
 }
+static void vdp_addr(u16 a, u8 wr) { vdp_addr_hi((u8)((a >> 14) & 7), a, wr); }
 void vdp_write_addr(u16 a) { vdp_addr(a, 0x40); }
 
 void vdp_data(u8 v) {
@@ -522,12 +523,17 @@ void vdp_sprite_init(void) {
     }
 }
 
-u8 g_spr_patb;   /* 1=絵の表B(0x2000。4面の中ボスの間だけ下の帯で使う)にも同じ絵を書く */
+u8 g_spr_patb;   /* 絵の第 2 の表へも同じ絵を書く。1=0x2000(4面の中ボスの間だけ下の帯で使う) / SPR_PATB_FINAL=0x1F800(最終面の組1) */
 void vdp_sprite_pattern(u8 patnum, const u8 *d32) {
     u8 i;
-    vdp_write_addr(SPR_PAT + (u16)patnum * 8);
+    u16 a = (u16)patnum * 8;
+    vdp_write_addr(SPR_PAT + a);
     for (i = 0; i < 32; i++) VDP_DAT = d32[i];
-    if (g_spr_patb) { vdp_write_addr((u16)(0x2000 + (u16)patnum * 8)); for (i = 0; i < 32; i++) VDP_DAT = d32[i]; }
+    if (g_spr_patb) {
+        if (g_spr_patb == SPR_PATB_FINAL) vdp_addr_hi(7, (u16)(0xF800 + a), 0x40);
+        else vdp_write_addr((u16)(0x2000 + a));
+        for (i = 0; i < 32; i++) VDP_DAT = d32[i];
+    }
 }
 /* スプライトパターン(32B=16x16 1枚)を VRAM から読み出す。 */
 void vdp_sprite_pattern_read(u8 patnum, u8 *d32) {

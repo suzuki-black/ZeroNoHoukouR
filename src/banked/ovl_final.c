@@ -55,21 +55,6 @@ static void wr_addr(u16 a) {
     __asm ei __endasm;
 }
 
-/* 17bit 番地(組1のパターン表 0x1F800〜)への書き込みアドレス */
-static void wr_addr17(u8 hi, u16 lo) {
-    __asm di __endasm;
-    FV_CTRL = (u8)(((lo >> 14) & 3) | (hi << 2)); FV_CTRL = 0x80 | 14;
-    FV_CTRL = (u8)(lo & 0xFF);                    FV_CTRL = (u8)(((lo >> 8) & 0x3F) | 0x40);
-    __asm ei __endasm;
-}
-/* 16x16 のパターンを両方のパターン表へ(影/壁など、両方の組で同じに見えるべきもの) */
-static void pat_both(u8 pat, const u8 *d) {
-    u8 i;
-    vdp_sprite_pattern(pat, d);
-    wr_addr17(1, (u16)(0xF800 + (u16)pat * 8));
-    for (i = 0; i < 32; i++) FV_DAT = d[i];
-}
-
 /* =====================================================================
    ボス
    ===================================================================== */
@@ -81,10 +66,7 @@ static u8  glow, glow_t;   /* 1=被弾で全体を光らせる(明るい灰の�
 static s8  bl;          /* 傾きの段階 -3..3(左..右)。目標へ 1 段ずつ近づけて間を補間する */
 static Entity *shadow;  /* 海面に落ちるボスの影(ET_SHOOTER=何もしない実体。描画だけ既存の仕組み) */
 static u8  wp_php[6];   /* 弱点の前フレームの耐久(減ったら軽い被弾音) */
-#define SPR_BOSS_SHADOW 56   /* 旧・艦載機の手描き枠(この面では使わない) */
-#define SPR_BOSS_SHADOW_H 52 /* 主砲塔の枠(この面では使わない) */
 #define SHADOW_SLOT 23       /* ボス帯の中の影は表 B の最後の 1 枚(ボスが 24 枚使うコマでは出さない) */
-#define SPR_FAR_SHADOW  60   /* 最終面の自機の遠い影(entity.c の draw_shadow が使う) */
 static s16 cx, cy;      /* ボス中心(画面座標) */
 static s16 tx;          /* 横移動の目標 */
 static s16 lastx;       /* 前フレームの cx(端で詰まったのを見つける) */
@@ -128,8 +110,8 @@ static void read_meta(void) {
     __asm ei __endasm;
     for (i = 0; i < 97; i++) meta[i] = FV_DAT;
     meta_fr = fr;
-    pat_both(SPR_BOSS_SHADOW, meta + 32);      /* 影もコマの角度で回す(等倍で出す 16px) */
-    pat_both(SPR_BOSS_SHADOW_H, meta + 64);    /* 同じ影の半分の解像度(拡大の帯で出すと 16px) */
+    vdp_sprite_pattern(SPR_BOSS_SHADOW, meta + 32);      /* 影もコマの角度で回す(等倍で出す 16px) */
+    vdp_sprite_pattern(SPR_BOSS_SHADOW_H, meta + 64);    /* 同じ影の半分の解像度(拡大の帯で出すと 16px) */
 }
 static u8 boss_mag(void) { return meta[1]; }
 static u8  shb_on;          /* 1=ボス帯の中に影を出す(表 B の SHADOW_SLOT) */
@@ -294,8 +276,9 @@ u8 ovl_final_frame(void) {
            表示が page1 に切り替わった後(＝最初のフレーム)でないと書けない。 */
         vdp_copy(0, 240, 0, 1008, 256, 16);          /* パターン表を丸ごと組1へ(自機/弾/HUD の絵も両方に要る) */
         vdp_cmd_wait();
-        pat_both(WALL_PAT, wall_pat);
-        pat_both(SPR_FAR_SHADOW, player_far_shadow_pat);
+        g_spr_patb = SPR_PATB_FINAL;   /* ★以後の書き換え(影・壁・スコアの上 2 桁)は両方の組へ。片方だけだとコマごとに新旧が交互に出る */
+        vdp_sprite_pattern(WALL_PAT, wall_pat);
+        vdp_sprite_pattern(SPR_FAR_SHADOW, player_far_shadow_pat);
         for (i = 0; i < 2; i++) {
             u16 k;
             wr_addr(pg_col[i]);

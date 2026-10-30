@@ -364,8 +364,8 @@ static u8 draw_shadow(u8 slot, const Entity *e) {
     /* ★宙返り中の自機は高度ぶん影を離す。本体は拡大されて手前に出るので、影が同じ位置だと
        本体の下に隠れて「上がっている」感じが出ない。影は海面に残して離すのが一番効く。 */
     u8 off = (e->type == ET_PLAYER) ? g_loop_alt : 0, pat = e->pat;
-    /* ★最終面(g_py_min!=0)の自機は高空＝海面の影は遠くて小さい(パターン60=小さな影、右下へ大きく離す) */
-    if (off == 0 && g_py_min && e->type == ET_PLAYER) { pat = 60; off = 14; }
+    /* ★最終面(g_py_min!=0)の自機は高空＝海面の影は遠くて小さい(SPR_FAR_SHADOW=小さな影、右下へ大きく離す) */
+    if (off == 0 && g_py_min && e->type == ET_PLAYER) { pat = SPR_FAR_SHADOW; off = 14; }
     { s16 sx = (s16)(e->x + SHADOW_DX + off);
       if (sx > 255) return slot;   /* ★画面の右外へ出る影は描かない。u8 に丸めると回り込んで**左端に影が出た**(実機で指摘。
                                       最終面は高空でずらす量が大きく、自機が右端に寄ると起きる) */
