@@ -226,6 +226,7 @@ void scene_run(u8 cur) {
            「走査線抜け」に見える(実機で多発。2026-10-01 に走査線番号で確認)。
            控え(sat_shadow)は RAM なのでいつ作ってもよく、VRAM へ出す時刻だけが問題。 */
         if (cur == SC_STAGE && g_hud_on && !g_demo) hud_draw(g_score, g_lives);   /* ★デモ中は HUD の枠に PRESS SPACE KEY(demo.c) */   /* ★HUD も VBLANK 中に(上端は最もラスタ競合しやすい) */
+        g_hud_skip = 0;   /* ★省いてよいのは scroll_to と同じフレームの中だけ */
         if (g_sat_dirty) { g_sat_dirty = 0; vdp_sat_flush(g_spr_base, g_spr_used); }
             /* ★色表も同じ関数が**枠ごとに位置の直前で**送る。ent_draw_all の中で書くと色だけ1フレーム先になり、
                表示の途中で枠の色が次の持ち主の色へ変わる(自機の影が白く点滅した。entity.c の cdirty 参照)。 */

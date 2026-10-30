@@ -52,6 +52,7 @@ void ovl_curtain_ring(s16 cx, s16 cy, u8 n, u8 spd, u8 ang, u8 col) {
 void ovl_curtain_update(void) {
     u8 i;
     CBul *b = g_cbul;
+    if (!g_cbul_live) return;   /* ★弾が居ない間は 64 発ぶんの空回しを省く(生死と g_cbul_live は必ず一緒に増減する) */
     for (i = 0; i < CBUL_MAX; i++, b++) {
         s16 x, y;
         if (!b->alive) continue;
@@ -116,6 +117,7 @@ void ovl_curtain_collide(void) {
     u8 i;
     CBul *b = g_cbul;
     s16 px = (s16)g_player_x, py = (s16)g_player_y;
+    if (!g_cbul_live) return;   /* ★同上 */
     for (i = 0; i < CBUL_MAX; i++, b++) {
         s16 dx, dy;
         if (!b->alive) continue;

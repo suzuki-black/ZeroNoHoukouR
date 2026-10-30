@@ -64,6 +64,7 @@ void vdp_wait_frame(void);
    よって縦スクロール中もスプライトを画面固定に見せるため、vdp_sprite_pos は
    現在の縦スクロール量を Y に加算して補正する(この値は vdp_set_vscroll が保持)。 */
 void vdp_set_vscroll(u8 v);                 /* R#23 = v(縦スクロール)。0で無効化。 */
+void vdp_hud_burst(const u8 *src);           /* HUD の 8 枚の属性 32B を表 A(と表 B)へ続けて送る(hud.c) */
 extern u8 g_vs_split;                       /* 1 = R#23 は分割表(フレーム先頭)が書く。vdp_set_vscroll は g_vscroll だけ(最終面。raster.c) */
 extern u8 g_vscroll;                        /* 現在の縦スクロール量(vdp_set_vscroll が保持)。
                                                ★entity.c の asm と raster.c(分割行の VRAM 行補正)が参照する。 */
@@ -104,7 +105,7 @@ extern u8 g_spr_hide_to;   /* 0 以外: vdp_sat_flush は停止マーカを書�
 #define SPR_R5_A 0xEF
 #define SPR_R5_B 0xE7
 extern u8 g_spr_dual;                      /* 1=属性/色をセットBへもミラー(分割しても見た目不変の土台) */
-void vdp_sprite_setb_init(u8 color);       /* セットBを初期化(色表を単色で埋め全枚を画面外へ)。1回だけ */
+/* セットBの初期化(色表を単色で埋め全枚を画面外へ)は冷たいバンク(coldsetup.c の COLD_SETB)。面の準備で 1 回 */
 void vdp_sprite_pos_a(u8 slot, u8 x, u8 y, u8 patnum);   /* セットA限定(ミラーしない) */
 void vdp_sprite_color_a(u8 slot, u8 color);
 void vdp_sprite_color_b(u8 slot, u8 color);

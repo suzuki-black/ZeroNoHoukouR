@@ -8,6 +8,7 @@
 #include "bank.h"    /* vdp_blit_bank_vram が窓めくりに使う(bank_data/bank_restore) */
 #include "entity.h"  /* cdirty / ent_col_put(vdp_sat_flush が枠ごとに色を先に送る) */
 #include "sound.h"   /* fm_flush(1 フレーム待つ間に FM の予約も書く) */
+#include "hud.h"     /* HUD_SL0(vdp_hud_burst) */
 #ifdef DEBUG_PROF
 #include "prof.h"
 #endif
@@ -536,27 +537,70 @@ void vdp_sprite_pattern_read(u8 patnum, u8 *d32) {
 }
 
 
-/* ★色表も両セットへミラー。entity.c の slot_col/slot_ctab キャッシュが効いており、これらが呼ばれるのは
-   実測 66フレームに1回程度＝ミラーしても追加コストは無視できる。 */
-void vdp_sprite_color(u8 slot, u8 color) {
-    u8 i;
-    vdp_write_addr(SPR_COLOR + (u16)slot * 16);
-    for (i = 0; i < 16; i++) VDP_DAT = color;
-    if (g_spr_dual) {
-        vdp_write_addr((u16)(SPR_COLOR_B + (u16)slot * 16));
-        for (i = 0; i < 16; i++) VDP_DAT = color;
-    }
+/* ★色表も両セットへミラー。
+   ★asm(2 本で中身を共有)。C のループだと 1 枠 0.6ms かかり、ポートへの書き込み(約 0.28ms)より手間の方が
+     重かった(2026-10-28、openMSX の 5 面戦艦で色の書き直しが 1 フレーム 7 枠・4ms)。
+   ★1 バイトごとの間隔は vdp_hud_burst と同じ形(ld/out/inc/djnz。OTIR にはしない)。 */
+void vdp_sprite_color(u8 slot, u8 color) __naked {
+    (void)slot; (void)color;
+    __asm
+        ld   c, l                ; C = 色
+        ld   de, #0              ; DE = 0: 単色
+        jr   _vdp_sprite_color_tab
+    __endasm;
 }
 
 /* mode2の「1ライン1色」で陰影を付ける: 16行それぞれの色を tab16[0..15] から書く(row0=上)。 */
-void vdp_sprite_color_tab(u8 slot, const u8 *tab16) {
-    u8 i;
-    vdp_write_addr(SPR_COLOR + (u16)slot * 16);
-    for (i = 0; i < 16; i++) VDP_DAT = tab16[i];
-    if (g_spr_dual) {
-        vdp_write_addr((u16)(SPR_COLOR_B + (u16)slot * 16));
-        for (i = 0; i < 16; i++) VDP_DAT = tab16[i];
-    }
+void vdp_sprite_color_tab(u8 slot, const u8 *tab16) __naked {
+    (void)slot; (void)tab16;
+    __asm
+        ld   b, a                ; B = 枠
+        ld   h, #0x74            ; SPR_COLOR の上位
+        call 00010$
+        ld   a, (_g_spr_dual)
+        or   a
+        ret  z
+        ld   h, #0x70            ; SPR_COLOR_B の上位
+    00010$:                      ; H = 表の上位, B = 枠, C = 色, DE = 色表(0 なら単色)。BC・DE は壊さない
+        push bc
+        push de
+        ld   a, b
+        rrca
+        rrca
+        rrca
+        rrca                     ; 枠 * 16 の上下を入れ替えた形
+        ld   l, a
+        and  #0x0F
+        add  a, h
+        ld   h, a
+        ld   a, l
+        and  #0xF0
+        ld   l, a
+        call _vdp_write_addr
+        pop  de
+        pop  bc
+        push bc
+        push de
+        ld   b, #16
+        ld   a, d
+        or   e
+        jr   z, 00012$
+    00011$:
+        ld   a, (de)
+        out  (_VDP_DAT), a
+        inc  de
+        djnz 00011$
+        jr   00013$
+    00012$:
+        ld   a, c
+        out  (_VDP_DAT), a
+        inc  de
+        djnz 00012$
+    00013$:
+        pop  de
+        pop  bc
+        ret
+    __endasm;
 }
 
 /* ★縦スクロール補正後の属性Yを求める。**216(0xD8)は停止マーカ**なので、計算結果がちょうど 216 に
@@ -582,6 +626,38 @@ void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum) {
         VDP_DAT = patnum;
         VDP_DAT = 0;
     }
+}
+
+/* ★HUD の 8 枚(HUD_SL0..)の属性 32B を、表ごとに 1 回のアドレス設定で続けて送る(hud.c の hud_draw)。HL = 32B。
+   1 枚ずつ vdp_sprite_pos で書くと、表 2 組で 128 回のポート書き込みになり(turboR は 1 回約 7µs)、HUD の描き直し 1 回に
+   約 1.9ms かかっていた(openMSX、戦艦の場面。毎フレーム 2 回呼ぶ)。続けて送れば 72 回。
+   ★1 バイトずつ ld/out/inc で送る(vdp_sat_flush と同じ間隔)。OTIR は速すぎて実機で欠ける(vdp_sat_flush の★)。asm(常駐の節約) */
+void vdp_hud_burst(const u8 *src) __naked {
+    (void)src;
+    __asm
+        push hl
+        ld   hl, #SPR_ATTR + HUD_SL0 * 4
+        call _vdp_write_addr
+        pop  hl
+        push hl
+        call 00010$
+        pop  hl
+        ld   a, (_g_spr_dual)
+        or   a
+        ret  z
+        push hl
+        ld   hl, #SPR_ATTR_B + HUD_SL0 * 4
+        call _vdp_write_addr
+        pop  hl
+    00010$:
+        ld   b, #32
+    00011$:
+        ld   a, (hl)
+        out  (_VDP_DAT), a
+        inc  hl
+        djnz 00011$
+        ret
+    __endasm;
 }
 
 void vdp_sprite_hide_from(u8 slot) {
@@ -632,111 +708,102 @@ static void sat_tail(u8 live) {
    ずれ込み、「影の位置だけ新しい枠へ移り、その枠の色はまだ白い点数や白く光った砲身のまま」の瞬間が残って、
    自機の影が白く光った(2026-10-11 ユーザー指摘。苦労と教訓 §16-58)。枠ごとに「色→位置」なら食い違いは 1〜2 行。
    アドレスの設定は 1 枚ごと(続けて送る形より増えるが、色を変える枠を探して区切るより常駐が小さい)。 */
-/* ★常駐の節約で asm(C で書くと 40B 余計に食い、検証用 ROM が入らない)。中身は次の C と同じ:
+/* ★常駐の節約で asm。中身は次の C と同じ:
+     sat_pass(SPR_ATTR, from, live, 1);                       // セットA(色を変える枠は色を先に。色は両表へ)
+     if (g_spr_dual) sat_pass(SPR_ATTR_B, from, live, 0);     // セットB(色はもう送ってある)
+   sat_pass(表, from, live, col):
+     vdp_write_addr(表 + from*4);
      for (; from < live; from++) {
-         if (cdirty[from]) ent_col_put(from);          // 色を先に。すぐその枠の位置
-         sat_one(SPR_ATTR, from);                       // 控え(sat_shadow)の 4B を 1 枚ぶん
-         if (g_spr_dual) sat_one(SPR_ATTR_B, from);     // セットBへミラー
+         if (col && cdirty[from]) { ent_col_put(from); vdp_write_addr(表 + from*4); }   // 色→その枠の位置
+         控え(sat_shadow)の 4B を送る                                                  // アドレスは自動で次の枠へ
      }
-     vdp_write_addr(SPR_ATTR + live*4); sat_tail(live);
-     if (g_spr_dual) { vdp_write_addr(SPR_ATTR_B + live*4); sat_tail(live); }
+     sat_tail(live);
+   ★以前は 1 枚ごとに A・B へ交互に書き、そのたびにアドレスを張り直していた(24 枚で 48 回)。表ごとに通しで流せば
+     張り直しは色を変えた枠のぶんだけで済む(2026-10-28、openMSX の 1 面戦艦で転送 6.7ms/フレームの大半がこれだった)。
+     セットBは 96 行目より下の帯でしか出ないので、Aを全部送ってからでも表示に間に合う。
    ★1 枚の 4B を続けて書くのは vdp_sprite_pos と同じ間隔(実機で落ちない。OTIR にはしない)。 */
 void vdp_sat_flush(u8 from, u8 live) __naked {
     (void)from; (void)live;
     __asm
         ld   b, a                ; B = 枠(from から)
         ld   c, l                ; C = live
-    00001$:
-        ld   a, b
-        cp   c
-        jr   nc, 00005$
-        ld   hl, #_cdirty
-        ld   e, b
-        ld   d, #0
-        add  hl, de
-        ld   a, (hl)
-        or   a
-        jr   z, 00002$
         push bc
-        ld   a, b
-        call _ent_col_put        ; ★色を先に
+        ld   de, #0x7601         ; D = SPR_ATTR の上位, E = 1(色も送る)
+        call 00020$
         pop  bc
-    00002$:
-        ld   hl, #0x7600         ; SPR_ATTR
-        call 00010$
-        ld   a, (_g_spr_dual)
-        or   a
-        jr   z, 00003$
-        ld   hl, #0x7200         ; SPR_ATTR_B
-        call 00010$
-    00003$:
-        inc  b
-        jr   00001$
-    00005$:                      ; 残りの枠(停止マーカ / 画面外へ)
-        ld   a, c
-        add  a, a
-        add  a, a
-        ld   e, a
-        ld   d, #0
-        push de
-        ld   hl, #0x7600
-        add  hl, de
-        push bc
-        call _vdp_write_addr
-        pop  bc
-        push bc
-        ld   a, c
-        call _sat_tail
-        pop  bc
-        pop  de
         ld   a, (_g_spr_dual)
         or   a
         ret  z
-        ld   hl, #0x7200
-        add  hl, de
+        ld   de, #0x7200         ; SPR_ATTR_B, 色は送らない
+    00020$:                      ; 1 表ぶん: D = 表の上位(下位は 0), B = from, C = live, E = 色の有無
+        call 00030$
+    00021$:
+        ld   a, b
+        cp   c
+        jr   nc, 00025$
+        dec  e
+        inc  e
+        jr   z, 00022$
+        ld   hl, #_cdirty
+        add  a, l
+        ld   l, a
+        jr   nc, 00026$
+        inc  h
+    00026$:
+        ld   a, (hl)
+        or   a
+        jr   z, 00022$
         push bc
-        call _vdp_write_addr
+        push de
+        ld   a, b
+        call _ent_col_put        ; ★色を先に
+        pop  de
         pop  bc
-        ld   a, c
-        jp   _sat_tail
-    00010$:                      ; 1 枚ぶん: HL = 表の先頭, B = 枠。BC は壊さない
-        push bc
+        call 00030$              ; その枠の位置へ戻す
+    00022$:
         ld   a, b
         add  a, a
         add  a, a
-        ld   e, a
-        ld   d, #0
-        add  hl, de
+        ld   hl, #_sat_shadow
+        add  a, l
+        ld   l, a
+        jr   nc, 00027$
+        inc  h
+    00027$:
+        ld   a, (hl)
+        out  (_VDP_DAT), a
+        inc  hl
+        ld   a, (hl)
+        out  (_VDP_DAT), a
+        inc  hl
+        ld   a, (hl)
+        out  (_VDP_DAT), a
+        inc  hl
+        ld   a, (hl)
+        out  (_VDP_DAT), a
+        inc  b
+        jr   00021$
+    00025$:                      ; 残りの枠(停止マーカ / 画面外へ)。アドレスはもう枠 live を指している
+        ld   a, c
+        jp   _sat_tail
+    00030$:                      ; 書込みアドレス = D * 256 + B * 4。BC・DE は壊さない
+        push bc
         push de
+        ld   a, b
+        add  a, a
+        add  a, a
+        ld   l, a
+        ld   h, d
         call _vdp_write_addr
         pop  de
-        ld   hl, #_sat_shadow
-        add  hl, de
-        ld   a, (hl)
-        out  (_VDP_DAT), a
-        inc  hl
-        ld   a, (hl)
-        out  (_VDP_DAT), a
-        inc  hl
-        ld   a, (hl)
-        out  (_VDP_DAT), a
-        inc  hl
-        ld   a, (hl)
-        out  (_VDP_DAT), a
         pop  bc
         ret
     __endasm;
 }
 
 
-/* セットBを使える状態にする(起動時/シーン初期化で1回)。色表を単色で埋め、全枚を画面外へ。
-   ★色表は 32枚 × 16B = 512B。毎フレーム書くものではない(ここで一度だけ)。 */
-void vdp_sprite_setb_init(u8 color) {
-    u16 i;
-    vdp_write_addr(SPR_COLOR_B);
-    for (i = 0; i < 32 * 16; i++) VDP_DAT = color;
-    for (i = 0; i < 32; i++) { vdp_write_addr((u16)(SPR_ATTR_B + i * 4)); VDP_DAT = 216; }
-}
+/* ★vdp_sprite_setb_init(セットBの色表を単色で埋め全枚を画面外へ。面の準備で 1 回)は冷たいバンク(coldsetup.c の
+     COLD_SETB)へ移した(常駐の節約。HUD の書き込みをまとめて送る形にした分の置き場)。 */
 
 /* ---- セットA限定の書き込み(g_spr_dual でもミラーしない) ----
    ★分割の追加スプライトは「上帯はA・下帯はB」と**別内容**を同じslotに置くので、

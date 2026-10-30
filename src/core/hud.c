@@ -38,20 +38,46 @@ void hud_colors(void) {
 
 /* ★スコアの上位2桁を 1 枚のパターンに詰める。16x16 のパターンは前半16B=左8列/後半16B=右8列
    なので、左に万の位、右に千の位の 8x8 グリフを置けばよい。桁が変わったときだけ焼き直す。
-   ★作業場は static(RAM 32B)。ローカル配列にすると sdcc が IX のスタック枠を組み、0 埋めの
-     ループも毎回回して常駐を 150B 食った。下半分は常に 0 で crt0 が _DATA をゼロ化するので、
-     書くのは各桁の 8 行だけでよい。 */
-static u8 hi_pat[32];      /* 上位2桁詰め(下半分は常に0のまま使い回す) */
-static u8 pat_buf[32];     /* 32B すべてを毎回書く用途の作業場(数字の投入・ボム棒)。
+   ★作業場は pat_buf を借りる(常駐 RAM が足りない。焼くのは 1 面に数回だけなので毎回 0 で埋め直してよい)。
+     ローカル配列にすると sdcc が IX のスタック枠を組んで常駐を 150B 食った。 */
+u8 g_hud_skip;
+static u8 pat_buf[32];     /* 32B すべてを毎回書く用途の作業場(数字の投入・ボム棒・上位2桁・HUD の属性)。
                               ★ローカル配列にすると sdcc が IX のスタック枠を組んで常駐を食う。 */
 
-static void score_hi_pattern(u8 a, u8 b) {
-    const u8 *g = vdp_glyph((u8)('0' + a));
-    u8 r;
-    for (r = 0; r < 8; r++) hi_pat[r] = g[r];
-    g = vdp_glyph((u8)('0' + b));
-    for (r = 0; r < 8; r++) hi_pat[16 + r] = g[r];
-    vdp_sprite_pattern(SPR_SCOREHI, hi_pat);
+/* ★asm(C だと常駐を 30B 近く食った)。A = a、L = b */
+static void score_hi_pattern(u8 a, u8 b) __naked {
+    (void)a; (void)b;
+    __asm
+        ld   c, a                ; C = 万の位
+        ld   e, l                ; E = 千の位
+        ld   hl, #_pat_buf
+        ld   b, #32
+        xor  a
+    00001$:
+        ld   (hl), a             ; 下半分は 0
+        inc  hl
+        djnz 00001$
+        push de
+        ld   a, c
+        ld   de, #_pat_buf
+        call 00010$              ; 左 8 列 = 万の位
+        pop  de
+        ld   a, e
+        ld   de, #_pat_buf + 16
+        call 00010$              ; 右 8 列 = 千の位
+        ld   de, #_pat_buf
+        ld   a, #SPR_SCOREHI
+        jp   _vdp_sprite_pattern
+    00010$:                      ; 数字 A の 8 行を DE へ
+        push de
+        add  a, #0x30            ; '0'
+        call _vdp_glyph          ; DE = グリフ
+        ex   de, hl
+        pop  de
+        ld   bc, #8
+        ldir
+        ret
+    __endasm;
 }
 
 void hud_init(void) {
@@ -87,14 +113,54 @@ static void crush_pattern(u8 bars) {
     vdp_sprite_pattern(SPR_CRUSH, pat_buf);
 }
 
+/* HUD の k 番目の枠(HUD_SL0 + k)の属性を pat_buf に組む。Y は縦スクロールの補正つき、216(停止マーカ)は 215 へ避ける。
+   ★asm(C だと 60B あり、常駐に入らなかった)。A = k、L = x、スタックに y・pat(1 バイトずつ。呼ばれた側が片付ける) */
+static void hud_put(u8 k, u8 x, u8 y, u8 pat) __naked {
+    (void)k; (void)x; (void)y; (void)pat;
+    __asm
+        pop  bc                  ; 戻り番地
+        pop  de                  ; E = y, D = pat
+        push bc
+        add  a, a
+        add  a, a                ; k * 4
+        ld   c, l                ; C = x
+        ld   hl, #_pat_buf
+        add  a, l
+        ld   l, a
+        jr   nc, 00001$
+        inc  h
+    00001$:
+        ld   a, (_g_vscroll)
+        add  a, e
+        dec  a                   ; 表示 Y = 属性 Y + 1
+        cp   #216
+        jr   nz, 00002$
+        dec  a                   ; 216 は停止マーカ
+    00002$:
+        ld   (hl), a
+        inc  hl
+        ld   (hl), c
+        inc  hl
+        ld   (hl), d
+        inc  hl
+        ld   (hl), #0
+        ret
+    __endasm;
+}
+
 void hud_draw(u16 score, u8 lives) {
     /* ★桁分解(除算×10)はスコア/残機が変化した時だけ=毎フレームの高価な除算を回避(Z80は除算がライブラリ呼び)。
        スプライト位置(vscroll補正で毎フレーム変わる)は毎回書く。 */
     static u16 last_score = 0xFFFF; static u8 dig[5] = { 0,0,0,0,0 };
-    static u8  last_lives = 0xFF;   static u8 ldig = 0;
+    static u8  last_lives = 0xFF;   /* 残機は最大 5(設定の 2/3/5。増える仕組みは無い)なので桁分解は要らない */
     static u8  last_crush = 0xFF;   /* ボム残数: 変化時だけパターンを書き換える */
+    static u8  last_vs;
     u8 crush_n = g_crush;
     u8 i;
+    /* ★同じフレームの 2 回目(scroll_to で描いた後の VBLANK の分)は、入力が全部同じなら省く(VRAM はもう同じ中身)。
+         g_hud_skip は scroll_to が描いた直後に立て、scene.c のループが毎フレーム倒す=前のフレームからは持ち越さない。 */
+    if (g_hud_skip && score == last_score && lives == last_lives && crush_n == last_crush && g_vscroll == last_vs) return;
+    last_vs = g_vscroll;
     if (score != last_score) {
         static const u16 place[5] = { 10000, 1000, 100, 10, 1 };
         u8 hi0 = dig[0], hi1 = dig[1];
@@ -104,31 +170,28 @@ void hud_draw(u16 score, u8 lives) {
            点が入るたびに動くのは下位桁なので、ほとんどのフレームで焼き直しは起きない。 */
         if (dig[0] != hi0 || dig[1] != hi1) score_hi_pattern(dig[0], dig[1]);
     }
-    if (lives != last_lives) { ldig = (u8)(lives % 10); last_lives = lives; }
-    /* ★上位2桁は1枚(16x16)、残り3桁は従来どおり1桁1枚。位置は詰める前と同じ(8,16,24,32,40)。 */
-    vdp_sprite_pos(HUD_SL0,            8, 2, SPR_SCOREHI);
-    for (i = 2; i < 5; i++)
-        vdp_sprite_pos((u8)(HUD_SL0 + i - 1), (u8)(8 + i * 8), 2, (u8)(SPR_DIGIT0 + dig[i] * 4));
-    /* ★残機は下段(ボム棒と同じ行)。上段に置くとスコアと同じ走査線を食い、最低優先度の HUD が
-       欠けやすくなる(上段4枚なら実測で約3%、5枚以上だと一気に増える)。 */
-    vdp_sprite_pos(HUD_SL_LICON, 212, 188, SPR_ZERO);                       /* 残機=零戦シルエット */
-    vdp_sprite_pos(HUD_SL_LNUM,  234, 190, (u8)(SPR_DIGIT0 + ldig * 4));    /* 予備機数(9頭打ち) */
-    /* ★ボム残数を画面下(左)へ。1〜3 は棒の本数そのもの( | / | | / | | | )で数えずに読める。
-       4以上(コンフィグや将来のパワーアップ)は棒1本＋数字にする(棒を4本以上並べても読めない)。
-       残0のときは画面外へ退避して見せない。
-       ★Y=216 は停止マーカなので vdp_sprite_pos 側の spr_y が回避する(ここでは気にしなくてよい)。 */
+    last_lives = lives;
     if (crush_n != last_crush) {
         last_crush = crush_n;
-        if (crush_n) crush_pattern((u8)(crush_n <= 3 ? crush_n : 1));
+        if (crush_n) crush_pattern((u8)(crush_n <= 3 ? crush_n : 1));   /* ★pat_buf を使うので、下で属性を組む前に */
     }
-    if (crush_n) {
-        vdp_sprite_pos(HUD_SL_BAR, 8, 190, SPR_CRUSH);
-        if (crush_n > 3) vdp_sprite_pos(HUD_SL_BNUM, 27, 192, (u8)(SPR_DIGIT0 + (crush_n % 10) * 4));
-        else             vdp_sprite_pos(HUD_SL_BNUM, 0, 220, SPR_DIGIT0);   /* 画面下端外へ */
-    } else {
-        vdp_sprite_pos(HUD_SL_BAR, 0, 220, SPR_CRUSH);
-        vdp_sprite_pos(HUD_SL_BNUM, 0, 220, SPR_DIGIT0);
-    }
+    /* ★8 枚の属性(Y,X,パターン,0)を pat_buf に組み、表ごとに 1 回で送る(vdp_hud_burst)。並びは HUD_SL0 からの枠の順:
+         0=スコア上位2桁(詰め) / 1..3=百・十・一の位 / 4=ボム棒 / 5=ボム残数 / 6=残機アイコン / 7=予備機数。
+       ★上位2桁は1枚(16x16)、残り3桁は従来どおり1桁1枚。位置は詰める前と同じ(8,16,24,32,40)。 */
+    hud_put(0, 8, 2, SPR_SCOREHI);
+    for (i = 2; i < 5; i++) hud_put((u8)(i - 1), (u8)(8 + i * 8), 2, (u8)(SPR_DIGIT0 + dig[i] * 4));
+    /* ★残機は下段(ボム棒と同じ行)。上段に置くとスコアと同じ走査線を食い、最低優先度の HUD が
+       欠けやすくなる(上段4枚なら実測で約3%、5枚以上だと一気に増える)。 */
+    hud_put(6, 212, 188, SPR_ZERO);                          /* 残機=零戦シルエット */
+    hud_put(7, 234, 190, (u8)(SPR_DIGIT0 + lives * 4));      /* 予備機数(最大 5) */
+    /* ★ボム残数を画面下(左)へ。1〜3 は棒の本数そのもの( | / | | / | | | )で数えずに読める。
+       4以上(コンフィグや将来のパワーアップ)は棒1本＋数字にする(棒を4本以上並べても読めない)。
+       残0のときは画面外へ退避して見せない。 */
+    if (crush_n) hud_put(4, 8, 190, SPR_CRUSH);
+    else         hud_put(4, 0, 220, SPR_CRUSH);                                  /* 画面下端外へ */
+    if (crush_n > 3) hud_put(5, 27, 192, (u8)(SPR_DIGIT0 + (crush_n % 10) * 4));
+    else             hud_put(5, 0, 220, SPR_DIGIT0);                             /* 3 本以下(0 を含む)は数字を出さない */
+    vdp_hud_burst(pat_buf);
 #ifdef DEBUG_FPS
     /* ★デバッグROMのみ。左2桁=g_fps(JIFFY基準の参考値)、右4桁=フレームカウンタ(ストップウォッチ実測用の真値)。
        使い方: 右4桁を読む→スマホで正確に10秒→もう一度読む→(差)/10=実FPS。JIFFYの進み方に依存しない。 */

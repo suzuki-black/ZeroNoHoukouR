@@ -170,5 +170,5 @@ void scroll_to(u16 cam) {
     if (g_demo == 2) {
         u8 i, y = (u8)(((u16)(*(volatile u16 *)0xFC9E - g_demo_t0) & 32) ? 220 : 194);   /* demo.c の点滅と同じ */
         for (i = 0; i < 8; i++) vdp_sprite_pos(i, (u8)(68 + i * 16), y, (u8)(SPR_DIGIT0 + i * 4));
-    } else if (g_hud_on) hud_draw(g_score, g_lives);
+    } else if (g_hud_on) { hud_draw(g_score, g_lives); g_hud_skip = 1; }
 }

@@ -742,7 +742,7 @@ static void stage_build(void) {
        hud_init はスプライト色を書くので、後回しにするとセットB側が単色(赤)のまま残る。
        分割行(CURTAIN_SPLIT_LINE=96)より下に出る HUD＝メガクラッシュ残数(slot7/8)は
        セットBが見えるので、実際に「白のつもりが赤」になっていた。 */
-    vdp_sprite_setb_init(11);   /* セットBの色表を用意し全枚を画面外へ(1回だけ) */
+    g_cold_mode = COLD_SETB; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;   /* セットBの色表を用意し全枚を画面外へ(1回だけ。冷たいバンク) */
     /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない。
        ★最終面はミラーしない: 表Bはボス帯(ボス＋壁)専用で、ゲームのスプライトは表Aだけに書く。 */
     g_spr_dual = (u8)(curstage != STAGE_FINAL);
@@ -757,44 +757,26 @@ static void stage_build(void) {
        すべて RAM オーバレイ側なので、載らない機械では残数0＝表示も出さない(空撃ちでストックだけ
        減る、という壊れ方を避ける)。**overlay_load の後**で判定すること。 */
     pw_done = 0;                              /* 銀の敵機(増槽持ち)は海モード1回につき1機 */
-    g_crush = g_ovl_ok ? CRUSH_MAX : 0;
-    /* ★最終面も他の面と同じくボムを補充し、弾の段階も前の面から持ち越す(ユーザー指定)。
-       そのうえで「敵大将発見」の電文のあとに自機が増槽と爆弾を投棄して 0 になる(gen_planes.c の jettison)。
-       最終面がボム無し・初期装備なのは変わらない(宙返りだけで倒すコンセプト。津波は全画面の拡大でボスの帯と両立しない)。 */
-    g_crush_t = 0;
-    g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
-    g_loop_t = 0; g_loop_cd = 0; g_loop_alt = 0;   /* 宙返りも持ち越さない */
+    /* ★ボム残数・宙返り・往復の向きなど、ここから下の段取りで読まない変数の初期値は、後ろの冷たいバンク(coldsetup.c の
+         stage_vars)でまとめて入れる(常駐の節約) */
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
-    weaveX = 0; wdir = 1; camdir = -1; camv = -16; camfr = 0; g_meander = 0; rng = 0x1234;
+    weaveX = 0; wdir = 1; rng = 0x1234;
     vdp_msk(0);   /* ★蛇行前(海の接近)は横スクロールを使わない=左端のマスクも要らない */
 
     e = ent_spawn(ET_PLAYER);
     if (e) { e->x = 120; e->y = 176; e->pat = SPR_ZERO; e->coltab = zcol; e->shadow = 1; }  /* 零戦＋行別陰影＋落ち影 */
 
-    g_php = g_durability ? g_durability : 1;   /* 1機あたりの耐久HP(設定) */
 #ifdef BGTEST
     g_invinc = 1;                              /* ★実機検証: 測定が途切れないよう無敵 */
 #endif
-    g_pinv = 0;
-    g_miss = 0;
     dmode = 0; dtimer = 0; raided = 0; final_over = 0;
-    g_fade = 0; g_alert = 0;
+    g_alert = 0;
     seq = g_ovl_ok ? SEQ_SEA1 : SEQ_GO;      /* ★オーバレイが無い機械では中ボスもフェードも出せない=すぐ艦へ */
     if (curstage == STAGE_FINAL) { seq = SEQ_FADE2; g_alert = 1; }   /* ★最終面: 無音→敵大将発見の警報→イントロ付きの曲 */
     if (g_demo && curstage >= DEMO_SHIP_FROM) seq = SEQ_SEA2;   /* ★デモの 4・5 面: 中ボスを飛ばして海2から(→警報→戦艦)。海2は海1と同じ長さ */
-    g_mb = MB_NONE;        /* ★中ボスは挑戦ごとに出し直す(オーバレイと砲身の枠は上の overlay_load / sprites_load で元に戻っている) */
-    /* ★パターン表のずらしを**必ず**0(表A)へ戻す。4面(He 111)と5面(P-61)の中ボスは絵を表B
-       (MB_PATB=0x2000)へ書くために g_mb_pat_off を立てるが、どこでも下ろしていなかった。
-       そのため**1周クリアして電源を切らずに1面から始めると**、1面の中ボス(Fw 200)の絵が
-       表B へ書かれ、画面には表A に残った砲身・艦載機のパターンが出る＝スプライトがめちゃくちゃに
-       なっていた(実機で指摘。openMSX＋実機BIOS で、この値を仕込んで再現させて確認。2026-10-02)。 */
-    g_mb_pat_off = 0;
-
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
-    g_gun_kills = 0;
-    g_lturret = 0;         /* ★生存砲台O(1)カウンタを0初期化(直後のspawn_turret×4で++) */
-    bcall_to(COLDSETUP_BANK);   /* ★対空砲の初期化＋主砲4基・停泊機の配置(bank30。常駐の節約) */
+    bcall_to(COLDSETUP_BANK);   /* ★変数の初期値(stage_vars)＋対空砲の初期化＋主砲4基・停泊機の配置(bank30。常駐の節約) */
     nburn = 0;             /* 炎上サイト表クリア(面リスタートで炎を消す) */
     special_reset();       /* 艦種別固有兵装のタイマ初期化 */
     g_py_min = 0;

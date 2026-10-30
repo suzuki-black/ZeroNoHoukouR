@@ -6,6 +6,8 @@
 #include "entity.h"
 #include "fire.h"        /* FIRE_* */
 #include "gamestate.h"
+#include "midboss.h"     /* g_mb / g_mb_pat_off / MB_NONE(stage_vars) */
+#include "overlay.h"     /* g_ovl_ok(stage_vars) */
 #include "scroll.h"      /* SC_SHIP_R0 */
 #include "ship.h"        /* SHIP_NAAG / g_shipargs */
 #include "sprites.h"     /* SPR_BARREL0 / SPR_HELLCAT / barrel_col / SPR_DIGIT0 */
@@ -315,12 +317,53 @@ static void scroll_init_body(void) {
     vdp_set_display_page(1);          /* 完成済み page1 を表示=ここでゲーム画面が現れる */
 }
 
+/* ───────── スプライトのセットBを使える状態にする(面の準備で1回。COLD_SETB) ─────────
+   色表(0x7000, 32枚 × 16B)を色 11 で埋め、属性(0x7200)は全枚を画面外(Y=216=停止マーカ)へ。
+   ★常駐の vdp.c(vdp_sprite_setb_init)から移した(常駐の節約) */
+__sfr __at(0x98) CS_DAT;
+static void setb_init(void) {
+    u16 i;
+    vdp_write_addr(0x7000);
+    for (i = 0; i < 32 * 16; i++) CS_DAT = 11;
+    for (i = 0; i < 32; i++) { vdp_write_addr((u16)(0x7200 + i * 4)); CS_DAT = 216; }
+}
+
+/* ───────── 面の始まりの変数の初期値(COLD_STAGE の頭。stage_build から) ─────────
+   ★常駐の scene_stage.c(stage_build)から移した(常駐の節約)。stage_build のこの呼び出しより前の段取りでは読まない変数だけ */
+extern s8 camdir, camv;   /* scene_stage.c(往復の向き・速さ。オーバレイの ovl_cam_meander と共有) */
+extern u8 camfr;
+static void stage_vars(void) {
+    g_crush = g_ovl_ok ? CRUSH_MAX : 0;
+    /* ★最終面も他の面と同じくボムを補充し、弾の段階も前の面から持ち越す(ユーザー指定)。
+       そのうえで「敵大将発見」の電文のあとに自機が増槽と爆弾を投棄して 0 になる(gen_planes.c の jettison)。
+       最終面がボム無し・初期装備なのは変わらない(宙返りだけで倒すコンセプト。津波は全画面の拡大でボスの帯と両立しない)。 */
+    g_crush_t = 0;
+    g_shock_t = 0;   /* 衝撃波は面をまたいで持ち越さない */
+    g_loop_t = 0; g_loop_cd = 0; g_loop_alt = 0;   /* 宙返りも持ち越さない */
+    camdir = -1; camv = -16; camfr = 0; g_meander = 0;
+    g_php = g_durability ? g_durability : 1;   /* 1機あたりの耐久HP(設定) */
+    g_pinv = 0;
+    g_miss = 0;
+    g_fade = 0;
+    g_mb = MB_NONE;        /* ★中ボスは挑戦ごとに出し直す(オーバレイと砲身の枠は stage_build の overlay_load / sprites_load で元に戻っている) */
+    /* ★パターン表のずらしを**必ず**0(表A)へ戻す。4面(He 111)と5面(P-61)の中ボスは絵を表B
+       (MB_PATB=0x2000)へ書くために g_mb_pat_off を立てるが、どこでも下ろしていなかった。
+       そのため**1周クリアして電源を切らずに1面から始めると**、1面の中ボス(Fw 200)の絵が
+       表B へ書かれ、画面には表A に残った砲身・艦載機のパターンが出る＝スプライトがめちゃくちゃに
+       なっていた(実機で指摘。openMSX＋実機BIOS で、この値を仕込んで再現させて確認。2026-10-02)。 */
+    g_mb_pat_off = 0;
+    g_gun_kills = 0;
+    g_lturret = 0;         /* ★生存砲台O(1)カウンタを0初期化(直後のspawn_turret×4で++) */
+}
+
 void banked_entry(void) {
     u8 i;
+    if (g_cold_mode == COLD_SETB) { setb_init(); return; }
     if (g_cold_mode == COLD_SEA) { sea_build(); return; }
     if (g_cold_mode == COLD_SCRINIT) { scroll_init_body(); return; }
     if (g_cold_mode == COLD_OPLL) { require_turbor(); opll_detect(); pcm_detect(); rank_init(); return; }   /* ★turboR 未満はここで止まる */
     if (g_cold_mode == COLD_HUDDIG) { hud_digits(); return; }
+    stage_vars();
     if (g_demo) { vdp_wreg(13, 0); vdp_set_display_page(0); }   /* ★デモのカードの点滅(ページ交互表示。ship_render.c)を止める。
                                                                     この後の scroll_init が page1 を描くので、それより前に */
     for (i = 0; i < SHIP_NAAG; i++) {          /* 対空砲の発射タイマと耐久 */
