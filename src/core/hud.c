@@ -84,7 +84,7 @@ static void score_hi_pattern(u8 a, u8 b) __naked {
 void hud_init(void) {
     /* ★数字パターンの投入(10桁ぶんの転送)は**冷たいバンク**(coldsetup)へ出してある。
        面の準備で1回しか走らないのに常駐を 60B 超食っていたため(叫びの置き場所が要って見直した)。 */
-    g_cold_mode = COLD_HUDDIG; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
+    cold_call(COLD_HUDDIG);
     score_hi_pattern(dig[0], dig[1]);   /* ★0, 0 と焼くと、ミスの再開や次の面で上 2 桁が次に変わるまで 00 に見える(hud_draw は変わるまで焼かない) */
     hud_colors();
     g_spr_base = 0;   /* ★エンティティは slot0 から＝HUD より手前。HUD は最後尾(HUD_SL0..31) */

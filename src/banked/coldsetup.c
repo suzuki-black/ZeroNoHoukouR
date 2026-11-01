@@ -11,6 +11,7 @@
 #include "scroll.h"      /* SC_SHIP_R0 */
 #include "ship.h"        /* SHIP_NAAG / g_shipargs */
 #include "sprites.h"     /* SPR_BARREL0 / SPR_HELLCAT / barrel_col / SPR_DIGIT0 */
+#include "input.h"       /* input_poll / g_input(画面ビューア) */
 #include "vdp.h"         /* vdp_glyph / vdp_sprite_pattern(常駐。HUD の数字投入で使う) */
 #include "aa_hot.h"      /* aa_fire / aa_hp / aa_dead */
 #include "assets_data.h" /* STAGE_COUNT */
@@ -356,8 +357,35 @@ static void stage_vars(void) {
     g_lturret = 0;         /* ★生存砲台O(1)カウンタを0初期化(直後のspawn_turret×4で++) */
 }
 
+/* ───────── 火球 1 枚を page0 へ並べる(面の準備で 6 回。COLD_FB0 + k) ─────────
+   絵は常駐の bake_fireballs が fb_ram(0xE900)へ読んである。 */
+extern const u8 fb_box[3], fb_px[6];
+static void fb_bake(u8 k) {
+    const u8 *p = (const u8 *)0xE900;
+    u8 box = fb_box[k >> 1], bytes = (u8)(box / 2), row, cb;
+    for (row = 0; row < box; row++) {
+        vdp_write_addr((u16)((u16)row * 128 + fb_px[k] / 2));
+        for (cb = 0; cb < bytes; cb++) vdp_data(*p++);
+    }
+}
+
+/* 画面ビューア: 表示済みの画面でトリガ待ち(連射で飛ばさぬよう一度離してから)。最大4秒で自動復帰。
+   ★_bcall は di したまま呼ぶ。vdp_wait_frame は割込みで進むので先に ei する。 */
+static void view_wait(void) {
+    u8 armed = 0; u16 f;
+    __asm ei __endasm;
+    for (f = 0; f < 240; f++) {
+        input_poll();
+        if (!(g_input & INP_TRIG)) armed = 1;
+        if (armed && (g_input_edge & INP_TRIG)) break;
+        vdp_wait_frame();
+    }
+}
+
 void banked_entry(void) {
     u8 i;
+    if (g_cold_mode >= COLD_FB0) { fb_bake((u8)(g_cold_mode - COLD_FB0)); return; }
+    if (g_cold_mode == COLD_VIEW) { view_wait(); return; }
     if (g_cold_mode == COLD_SETB) { setb_init(); return; }
     if (g_cold_mode == COLD_SEA) { sea_build(); return; }
     if (g_cold_mode == COLD_SCRINIT) { scroll_init_body(); return; }

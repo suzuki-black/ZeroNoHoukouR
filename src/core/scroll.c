@@ -22,7 +22,7 @@ u16 srng = 12345;   /* ★非static: 海テンプレートの作り(冷たいバ
 /* 海テンプレート(512, 256x16)を構築: 色1地＋色2を420点＋色7を320点(継目を隠す粗ノイズ)。 */
 void scroll_build_sea(void) {
     /* ★中身(数百回の一括塗り)は冷たいバンク(coldsetup.c の sea_build)へ移した(常駐の節約。面の準備でしか呼ばない) */
-    g_cold_mode = COLD_SEA; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
+    cold_call(COLD_SEA);
 }
 
 /* 世界行 r を page1 リングの該当16pxスロットへ。艦行=バッファB, それ以外=海テンプレ。
@@ -140,7 +140,7 @@ void sea_frame(void) {
 void scroll_init(void) {
     /* ★中身(リングを新面で満たして page1 を出す)は冷たいバンク(coldsetup.c の scroll_init_body)へ移した
        (常駐の節約。面の始まりに 1 回しか呼ばない。サウンドテストの入口の置き場を作るため) */
-    g_cold_mode = COLD_SCRINIT; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
+    cold_call(COLD_SCRINIT);
 }
 
 /* ★最終面: 世界の縦座標を add(16の倍数)だけずらす。表示リングは 256px 周期、世界行 r のスロットは

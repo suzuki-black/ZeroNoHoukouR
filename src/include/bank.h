@@ -28,5 +28,6 @@ void data_read(u8 bank, u16 off, u8 *dst, u16 len);
 extern u8 g_bank;
 void bcall(void);        /* crt0rom.s の _bcall を呼ぶ(低レベル) */
 void bcall_to(u8 bank);  /* g_bank=bank; bcall(); の定型(シーン等から使う) */
+void cold_call(u8 mode); /* 冷たいバンク(coldsetup.c)へ用件 mode(opll.h の COLD_*)で 1 回出す */
 
 #endif /* BANK_H */

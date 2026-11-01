@@ -41,6 +41,8 @@ extern u8 g_fm;       /* 設定メニュー: 1=FM を鳴らす(既定) / 0=PSG �
 #define COLD_SEA    3  /* 同: 海テンプレートを作る(scroll_build_sea。面の準備で1回。常駐節約のため冷たいバンクへ) */
 #define COLD_SCRINIT 4 /* 同: 表示リングを新面で満たして page1 を出す(scroll_init。面の始まりに1回。同上) */
 #define COLD_SETB   5  /* 同: スプライトのセットBを用意する(色表を色 11 で埋め全枚を画面外へ。面の準備で1回。同上) */
+#define COLD_VIEW   6  /* 同: 画面ビューアのトリガ待ち(隠し設定から。常駐の節約) */
+#define COLD_FB0    7  /* 同: fb_ram の火球 k 枚目を page0 へ並べる(COLD_FB0 + k。k=0..5。面の準備で 6 回。同上) */
 extern u8 g_cold_mode;
 void opll_w(u8 reg, u8 val);   /* レジスタ書込み(規定のウェイト込み)。g_opll=0 なら何もしない */
 

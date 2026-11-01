@@ -23,7 +23,7 @@ void main(void) {
 #ifdef DEBUG_PROF
     prof_selftest();      /* 実機µs自己診断(CPUモード比/VDP I/O単価/HMMM所要)→トリガで抜ける */
 #endif
-    g_cold_mode = COLD_OPLL; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;
+    cold_call(COLD_OPLL);
                           /* ★FM(MSX-MUSIC)の検出(bank30)。turboR は必ず内蔵。無ければ以降 FM は鳴らさない */
     sound_init();         /* PSG初期化(音の割込み処理 snd_isr は raster.c が毎フレーム呼ぶ) */
     raster_init();        /* ★H.KEYI へフック設置。以降は走査線割込みだけで回る(VBLANK 割込みは切る。

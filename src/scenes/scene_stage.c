@@ -506,7 +506,7 @@ static void bgt_frame(void) {
 #define FB_PAGE0_Y 0             /* 火球ベイク先(page0の非表示域 上端。ゲーム中は表示page1) */
 const u8  fb_box[3] = { 32, 22, 16 };   /* 0=大(主砲=ドームを包む) 1=中(大型AA) 2=小(極小AA)。★非static: 撃沈シーンが沈んだ炎を外すのに使う */
 /* page0非表示域の各コマのベイクX(6枚: s0f0,s0f1,s1f0,s1f1,s2f0,s2f1)。1行内に横並び(<256px)。 */
-static const u8  fb_px[6] = { 0, 32, 64, 86, 108, 124 };
+const u8  fb_px[6] = { 0, 32, 64, 86, 108, 124 };   /* ★非static: 冷たいバンク(coldsetup.c の fb_bake)も引く */
 
 /* 火球6枚(丸・2コマ×3サイズ: gen_assetsがビルド時ベイク)を バンク→RAM→page0非表示域 へ展開。 */
 /* ★fb_ram: 火球ベイクの一時バッファ。bake_fireballs(セットアップ時)だけ使う冷データなので、
@@ -515,14 +515,9 @@ static u8 __at(0xE900) fb_ram[FB_RAM_MAX];
 static void bake_fireballs(void) {
     u8 k;
     for (k = 0; k < 6; k++) {
-        u8 box = fb_box[k >> 1], bytes = (u8)(box / 2), row;
-        data_read(ASSET_BANK, fb_off[k], fb_ram, (u16)((u16)box * bytes));
-        for (row = 0; row < box; row++) {
-            const u8 *p = &fb_ram[(u16)row * bytes];
-            u8 cb;
-            vdp_write_addr((u16)((u16)(FB_PAGE0_Y + row) * 128 + fb_px[k] / 2));
-            for (cb = 0; cb < bytes; cb++) vdp_data(p[cb]);
-        }
+        u8 box = fb_box[k >> 1];
+        data_read(ASSET_BANK, fb_off[k], fb_ram, (u16)((u16)box * (box / 2)));
+        cold_call((u8)(COLD_FB0 + k));   /* ★VRAM へ並べるのは冷たいバンク(常駐の節約)。読むのだけ窓を差し替えるのでここ */
     }
 }
 
@@ -743,7 +738,7 @@ static void stage_build(void) {
        hud_init はスプライト色を書くので、後回しにするとセットB側が単色(赤)のまま残る。
        分割行(CURTAIN_SPLIT_LINE=96)より下に出る HUD＝メガクラッシュ残数(slot7/8)は
        セットBが見えるので、実際に「白のつもりが赤」になっていた。 */
-    g_cold_mode = COLD_SETB; bcall_to(COLDSETUP_BANK); g_cold_mode = COLD_STAGE;   /* セットBの色表を用意し全枚を画面外へ(1回だけ。冷たいバンク) */
+    cold_call(COLD_SETB);   /* セットBの色表を用意し全枚を画面外へ(1回だけ。冷たいバンク) */
     /* 以後 属性/色はセットBへもミラー＝分割しても見た目は変わらない。
        ★最終面はミラーしない: 表Bはボス帯(ボス＋壁)専用で、ゲームのスプライトは表Aだけに書く。 */
     g_spr_dual = (u8)(curstage != STAGE_FINAL);
@@ -857,17 +852,6 @@ static void stage_intro(void) {
                                                  FM の音符が書かれない＝PSG だけ先に鳴り、FM の冒頭が欠けた(2026-10-11) */
 }
 
-/* 画面ビューア: 表示済みの画面でトリガ待ち(連射で飛ばさぬよう一度離してから)。最大4秒で自動復帰。 */
-static void view_wait(void) {
-    u8 armed = 0; u16 f;
-    for (f = 0; f < 240; f++) {
-        input_poll();
-        if (!(g_input & INP_TRIG)) armed = 1;
-        if (armed && (g_input_edge & INP_TRIG)) break;
-        vdp_wait_frame();
-    }
-}
-
 /* シーン入場(新規ゲーム): スコア/被弾/残機を初期化し、開始面(config選択)からレイアウト構築。 */
 static void results_and_fanfare(void);   /* 前方宣言(ビューアの結果表示で使う。定義は下方) */
 
@@ -886,7 +870,7 @@ void stage_init(void) {
        実VRAMがCHGMODで乖離する同種の穴だった。 */
     rendered_stage = -1;
     /* ★画面ビューア(config設定): 各画面を個別に表示して確認できる。表示後は stage_update が SC_TITLE を返す。 */
-    if (g_view == 1) { draw_stage_card(); view_wait(); return; }              /* ステージ説明カードのみ */
+    if (g_view == 1) { draw_stage_card(); cold_call(COLD_VIEW); return; }              /* ステージ説明カードのみ */
     if (g_view == 2) { load_stage_data(); results_and_fanfare(); return; }    /* 撃破結果(SUNK)画面のみ */
     if (g_demo) {   /* ★デモ: 開始カードは出す(艦を描く数秒の間、灰色の画面になるので)。ファンファーレと余韻は飛ばす */
         draw_stage_card();

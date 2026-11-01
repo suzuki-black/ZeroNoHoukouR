@@ -2,6 +2,8 @@
    バンク選択は 0x7800 への書込のみ(他窓に書くと暴走)。
    g_bank / bcall のトランポリン本体は crt0rom.s(_bcall)側。 */
 #include "bank.h"
+#include "sprites.h"   /* COLDSETUP_BANK */
+#include "opll.h"      /* g_cold_mode / COLD_STAGE */
 
 u8 g_bank;   /* crt0 の _bcall が参照。bcall() 前に呼ぶバンク番号を入れる。 */
 
@@ -16,6 +18,13 @@ void bank_restore(void) {
 void bcall_to(u8 bank) {
     g_bank = bank;
     bcall();
+}
+
+/* 冷たいバンク(coldsetup.c)へ用件 mode で 1 回出す。 */
+void cold_call(u8 mode) {
+    g_cold_mode = mode;
+    bcall_to(COLDSETUP_BANK);
+    g_cold_mode = COLD_STAGE;
 }
 
 /* データバンク bank のオフセット off から len バイトを dst(RAM)へコピー。
