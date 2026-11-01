@@ -1165,6 +1165,7 @@ u8 stage_update(void) {
         pal_update();
     }
 
+    g_vs_late = 1;   /* ★このフレームの scroll_to は R#23 を帰線へ回す(scroll.c)。最終面は自分で倒す(分割表が書く) */
     if (curstage == STAGE_FINAL) {
         if (g_ovl_ok && final_frame()) final_over = 1;   /* スクロール/ボス/分割表 */
     } else if (phase == 0) {
@@ -1244,9 +1245,12 @@ u8 stage_update(void) {
     }
 
     /* ★画面揺れ: 被弾/砲台撃破で数フレーム、R#23を縦±2pxジッタ(既存scroll上に上書き)。 */
-    if (g_shake) { g_shake--; vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 5) - 2)); }
+    if (g_shake) {
+        g_shake--;
+        if (!g_vs_split) { g_vscroll = (u8)((s16)cam + (s16)(rnd() % 5) - 2); g_vs_pend = 1; }   /* ★R#23 は点数と同じ帰線で。最終面の R#23 は分割表が決めるので揺らさない */
+    }
 
-    /* ★HUD は**ここでは描かない**。scene.c のループが次の VBLANK で描く(走査線 0〜20 行目)。
+    /* ★HUD は**ここでは描かない**。scene.c のループが次の VBLANK で R#23 と一緒に描く(走査線 0〜20 行目)。
        画面最上部の HUD は最もラスタ競合しやすく、表示が始まってから書くと
        ラスタが既に上端を通過→R#23 とズレて 1px 上下振動する。ここ(走査線 42 行目付近)では
        もう遅い(実測。2026-10-01)。描いてよいかの条件だけ渡す。 */

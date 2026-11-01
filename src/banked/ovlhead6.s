@@ -9,6 +9,7 @@
         .globl  _ovl_final_init
         .globl  _ovl_final_frame
         .globl  _ovl_final_bgbul
+        .globl  _ovl_final_arm
         .area   _CODE
         jp      stub_ret             ; slot0  curtain_update
         jp      stub_ret             ; slot1  curtain_ring
@@ -33,7 +34,7 @@
         jp      stub_zero            ; slot20 sink_frame
         jp      stub_ret             ; slot21 power_frame(最終面に銀の敵機は出ない)
         jp      stub_ret             ; slot22 mb_init(中ボスのオーバレイだけ)
-        jp      stub_ret             ; slot23 mb_frame
+        jp      _ovl_final_arm       ; slot23 mb_frame の入口を借りる(final_arm)
 stub_zero:
         xor     a
         ld      d, a

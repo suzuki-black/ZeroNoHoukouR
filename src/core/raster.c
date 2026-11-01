@@ -230,13 +230,13 @@ void ras_apply(void) __naked {   /* ★asm から CALL するので非static */
      必ず VBLANK 文脈で行うこと。 */
 void ras_rearm(void) __naked {
     /* ★asm(常駐の回収。C 版と同じ動作):
-         g_ras_i=0 / g_ras_vs=g_vscroll / 分割が無ければ次の合図を張って終わり
+         g_ras_i=0 / g_ras_vs=g_vs_show / 分割が無ければ次の合図を張って終わり
          先頭分割の reg2 が 23 なら val2 = g_ras_vs
          先頭が line==0 なら、line==0 が続く限り ras_apply(各 ras_apply が次の行を張る)。そうでなければ ras_next */
     __asm
         xor  a
         ld   (_g_ras_i), a
-        ld   a, (_g_vscroll)
+        ld   a, (_g_vs_show)
         ld   (_g_ras_vs), a
         ld   c, a
         ld   a, (_g_ras_n)
@@ -435,6 +435,7 @@ void ras_resume(void) __naked {
         ld   (_g_ras_n), a
         ld   (_g_ras_i), a
         ld   (_g_vscroll), a     ; ★CHGMOD が R#23=0 にしている
+        ld   (_g_vs_show), a
         ld   (_g_ras_vs), a
         out  (0x99), a
         ld   a, #0x80+23
@@ -467,9 +468,12 @@ void ras_pause(void) __naked {
    ・次が合図なら R#19 も張り直す。張り直さないと、スクロール量しだいで二度と割込みが来ない。
    ・分割が残っているときは、待っている分割の R#19 は触らない(以前どおり)
    ★g_vs_split = 1 の間(最終面)は g_vscroll だけを書き、R#23 は書かない。R#23 は分割表のフレーム先頭(0 行目)の
-     分割が、スプライト表の組の切り替えと同時に書く(ovl_final.c の arm_splits)。表示の途中で R#23 だけ変えると、
-     スプライトの位置を書き終えるまでの間、ボスの帯に 1 行の段差が出た(実機で「走査線抜け」として指摘。2026-10-24)。 */
+     分割が、スプライト表の組の切り替えと同時に書く(ovl_final.c の ovl_final_arm)。表示の途中で R#23 だけ変えると、
+     スプライトの位置を書き終えるまでの間、ボスの帯に 1 行の段差が出た(実機で「走査線抜け」として指摘。2026-10-24)。
+   ★g_vs_show は合図が R#23 へ書き直す値。g_vscroll はスプライトの位置の計算に使う値。面の間は g_vscroll だけを先に進め、
+     次の帰線でここへ揃える(g_vs_pend)。最終面は分割表を積むときに書く(ovl_final_arm)。 */
 u8 g_vs_split;
+u8 g_vs_show;
 void vdp_set_vscroll(u8 v) __naked {
     (void)v;                     /* A = v(sdcccall 1) */
     __asm
@@ -478,6 +482,7 @@ void vdp_set_vscroll(u8 v) __naked {
         ld   hl, #_g_vs_split
         bit  0, (hl)
         jr   nz, 00009$          ; ★R#23 は分割表が書く
+        ld   (_g_vs_show), a
         ld   (_g_ras_vs), a
         out  (0x99), a
         ld   a, #0x80+23

@@ -40,7 +40,7 @@ static const u16 pg_colr[2] = { 224, 0 };          /* 表 B の色表の行 */
 static const u8  pg_r6[2]   = { 0x0F, 0x3F };
 static const u8  pg_r5[2]   = { SPR_R5_B, 0x07 };
 static u8 ap;              /* 次の合図(フレームの頭)から表示する組(最後に積んだ組) */
-static u8 vs_put;          /* ★ボスの位置を計算したときの縦スクロール値。フレーム頭の分割で R#23 にこれを書く(arm_splits) */
+static u8 vs_put;          /* ★ボスの位置を計算したときの縦スクロール値。フレーム頭の分割で R#23 にこれを書く(ovl_final_arm) */
 static u16 arm_j;          /* 最後に分割表を積んだときの JIFFY。まだ合図が来ていなければ、積んだ組はまだ表示されていない */
 static u8 pg_src[2];       /* 各組に載っているコマ(光るコマを含む添字。0xFF=未) */
 #define BOSS_PAT0 160              /* ボス 24 枚のパターン番号の先頭(4 の倍数)。パターン表の 250〜255 行 */
@@ -131,7 +131,7 @@ static void clamp_cy(void) {
 
 /* コマを VRAM からパターン表と表 B の色表へ(HMMM 2 本。VDP が CPU と並行に流す) */
 /* 今フレームに書く組を決める。戻り=書く組。
-   ★位置は毎フレーム「表示していない組」へ書き、フレームの頭で組と R#23 を同時に切り替える(arm_splits)。以前は、コマが
+   ★位置は毎フレーム「表示していない組」へ書き、フレームの頭で組と R#23 を同時に切り替える(ovl_final_arm)。以前は、コマが
      替わらないフレームは表示中の組へ直接書いていて、表示の途中で R#23 が先に変わり、書き終えるまでの間ボスの帯に 1 行の
      段差が出た(実機で「登場の回転・拡大の間に走査線が抜ける」と指摘。openMSX で、R#23 は 23 行目前後、位置を書き終えるのは
      87 行目前後と測った。2026-10-24)。
@@ -190,10 +190,19 @@ static void put_sprites(u8 blink, u8 pg) {
 
 /* 分割表: HUD 帯(表A/等倍) → ボス帯(表B/コマに応じて拡大) → 自機帯(表A/等倍)
    ★R#23(縦スクロール)もフレームの頭でパターン表の組と同時に書く(g_vs_split。vdp_set_vscroll は g_vscroll だけを書く)。
+   ★積むのは 1 回目の合図の後(scene.c のループ)。計算が 1 回目に間に合うフレームと間に合わないフレームがあるので、ここで積むと
+     R#23 が変わる帰線が揺れ、点数とスプライトの属性(2 回目の帰線で送る)との間で 1 行上下した。1 回目の後に積めば、3 つとも
+     2 回目の帰線で切り替わる。
      ボスの位置(vs_put で計算)と R#23 が必ず同じ瞬間に切り替わる。★[0] の reg2 を 23 にすると ras_rearm が g_ras_vs で
      上書きするので、R#23 は 2 本目([1])に置く。積んでいる途中で合図が割り込まないよう di で囲む */
-static void arm_splits(void) {
+void ovl_final_arm(void) {
+    /* ★今の画面の分割を消化し終えて(壁の行を過ぎて)から書き換える。1 回目の合図の直後に書き換えると、その画面は 0 行目(R#6・R#23)が
+         古い組、20 行目(R#5)が新しい組になり、ボス帯の組と縦位置が食い違って走査線が抜けた(実機で指摘。2026-10-31)。 */
+    {   u16 j = *(volatile u16 *)0xFC9E;
+        while (*(volatile u8 *)&g_ras_i < g_ras_n && *(volatile u16 *)0xFC9E == j) { }
+    }
     __asm di __endasm;
+    g_vs_show = vs_put;
     g_ras[0].line = 0;   /* 画面の頭: パターン表の組を切り替え(R#6)。表Aへ戻すのは前フレームの壁の行で済んでいる */
     g_ras[0].reg = 6; g_ras[0].val = pg_r6[ap]; g_ras[0].reg2 = 5; g_ras[0].val2 = SPR_R5_A; g_ras[0].pidx = RAS_NOPAL;
     g_ras[1].line = 0;
@@ -205,6 +214,7 @@ static void arm_splits(void) {
     g_ras[3].reg = 5; g_ras[3].val = SPR_R5_A; g_ras[3].reg2 = 1; g_ras[3].val2 = r1n; g_ras[3].pidx = RAS_NOPAL;
     raster_arm(4);
     arm_j = *(volatile u16 *)0xFC9E;
+    g_ft0 = (u16)(arm_j - 1);   /* ★次の合図で scene.c の 2 回目の待ちを抜ける。計算が 2 回目の合図を過ぎたときも R#23 より先に点数を書かない */
     __asm ei __endasm;
 }
 
@@ -268,7 +278,8 @@ void ovl_final_init(void) {
 u8 ovl_final_frame(void) {
     u16 el;
     u8 blink = 0;
-    g_vs_split = 1;   /* ★R#23 はフレームの頭の分割で書く(arm_splits)。分割を止める・オーバレイを読み替えると常駐が 0 に戻す */
+    g_vs_late = 0;
+    g_vs_split = 1;   /* ★R#23 はフレームの頭の分割で書く(ovl_final_arm)。分割を止める・オーバレイを読み替えると常駐が 0 に戻す */
     if (tick == 0 && st == ST_WAIT) {
         u8 i;
         t0 = g_bgm_t0;   /* ★曲を鳴らし始めた瞬間(登場はイントロ 576f に合わせる) */
@@ -385,7 +396,6 @@ u8 ovl_final_frame(void) {
     } else {
         put_sprites(blink, load_frame());
     }
-    arm_splits();
     return (u8)(st == ST_DONE);
 }
 

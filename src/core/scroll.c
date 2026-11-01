@@ -9,6 +9,9 @@
 
 #define PAGE1_Y   256           /* 表示リング(page1)の基準Y */
 
+u8 g_vs_late;   /* 1 = 次の scroll_to は R#23 を書かず、帰線へ回す(1 回で倒れる) */
+u8 g_vs_pend;   /* 1 = 帰線で g_vscroll を R#23 へ書く(scene.c のループ) */
+
 u16 g_cam;
 u8  g_sea_only;    /* ★1=最終面: 艦バッファB(=ボスのコマ置き場)を海の行として描かない。全行を海テンプレから */
 s16 drawn_top, drawn_bot;   /* リングに今描いてある世界行(16行単位)。★非static: 撃沈(ovl_sink.c)がリングへ書いてよい行の判定に使う */
@@ -156,11 +159,20 @@ void scroll_to(u16 cam) {
     while (drawn_bot < vb) { drawn_bot++; draw_row(drawn_bot); if (drawn_top < drawn_bot - 15) drawn_top = drawn_bot - 15; }
     while (drawn_top > vt) { drawn_top--; draw_row(drawn_top); if (drawn_bot > drawn_top + 15) drawn_bot = drawn_top + 15; }
     g_cam = cam;
+    /* ★面の間は R#23 を今書かず、次の帰線で点数・スプライトの属性と一緒に書く(scene.c のループ。g_vs_pend)。
+         R#23 を表示の途中で書くと、点数の行に当たったフレームは点数の上下で段差になり(走査線抜け。中ボスの撃破の後は
+         処理が軽くなって点数の行まで早まる)、ほかのスプライトは 2 回後の帰線で送るので、スクロール量が変わるたびに
+         パワーアップの山形が上下に震えた(2026-10-31。openMSX で R#23 を書く行を測った)。
+         デモは PRESS SPACE KEY をここで書くので今までどおり。 */
+    if (g_vs_late) {
+        g_vs_late = 0;
+        if (!g_demo) { g_vscroll = (u8)cam; g_vs_pend = 1; return; }
+    }
     {   u8 same = (u8)((u8)cam == g_vscroll);
         /* ★R#23 は毎回書く(vdp_set_vscroll は合図の R#19 も張り直す。変わらないときに省いたら、衝撃波の帯などで
              ずれた合図が戻らず、4 面で合図の割込みが最大 89 フレーム続けて遅れた=openMSX)。点数の書き直しだけ省く。 */
         vdp_set_vscroll((u8)cam);
-        if (same) return;
+        if (same || g_vs_split) return;   /* ★最終面の点数は R#23 が変わる帰線で書く(scene.c)。ここで書くと R#23 より先に動いて裂けた */
     }
     /* ★画面に固定して見せるスプライト(点数・デモの PRESS SPACE KEY)は、縦スクロール(R#23)を変えた**この瞬間に**
          位置(縦スクロールの補正つき)も書き直す。R#23 はここで表示の途中から効くが、ほかのスプライトの位置は 2 回後の

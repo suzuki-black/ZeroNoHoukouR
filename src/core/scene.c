@@ -8,6 +8,10 @@
 #include "raster.h"
 #include "vdp.h"
 #include "entity.h"   /* g_sat_dirty / g_spr_base / g_spr_used */
+#include "scroll.h"   /* g_vs_pend */
+#include "ramexec.h"  /* ramx_use_ram / ramx_use_cart */
+#include "overlay.h"  /* mb_frame */
+#include "final.h"    /* final_arm */
 #include "hud.h"      /* hud_draw: VBLANK 中に描く */   /* g_sat_dirty / g_spr_base / g_spr_used */
 #include "input.h"
 #include "vdp.h"
@@ -139,7 +143,7 @@ static u16 fps_n = 1;  /* JIFFYの1VBLANKあたり増分(実機turboRでは1で�
      (持ち越すと一度詰まると延々 20fps のままになる)。VBLANK 整列は保てないが、処理が 1 VBLANK を
      超えている時点で描画は表示区間へかかっているので、整列しても得は無い。
    ★JIFFY が止まってもハングしないよう、待ちはガード付き。 */
-static u16 ft0;
+u16 g_ft0;
 
 static void frame_sync(u16 t0, u8 n) {
     volatile u16 *jf = (volatile u16 *)0xFC9E;
@@ -159,7 +163,7 @@ void scene_run(u8 cur) {
       a = *jf; g = 0; while (*jf == a && ++g) { }   /* ちょうど1VBLANK分 */
       b = *jf; fps_n = (u16)(b - a); if (fps_n == 0) fps_n = 1; }
 #endif
-    ft0 = *(volatile u16 *)0xFC9E;   /* 最初のフレームの基準 */
+    g_ft0 = *(volatile u16 *)0xFC9E;   /* 最初のフレームの基準 */
     for (;;) {
 #ifdef DEBUG_PROF
         prof_compute_begin();    /* 計算区間(input+update)開始 */
@@ -217,17 +221,23 @@ void scene_run(u8 cur) {
 #ifdef DEBUG_PROF
         if (cur == SC_STAGE) prof_compute_end();   /* ★計測はステージ(SCREEN5)中のみ。タイトル(SCREEN12)でpage切替すると壊れる */
 #endif
-        frame_sync(ft0, (u8)((cur == SC_STAGE && !g_crush_t) ? 2 : 1));
+        /* ★最終面は 1 回目の合図の後で分割表を積み、R#23 とボスの組を次の合図で切り替える(ovl_final.c の final_arm)。
+           final_arm が g_ft0 を積んだ時刻へ合わせるので、下の待ちはその合図で必ず抜ける=点数と属性も同じ帰線で出る。 */
+        if (g_vs_split) { frame_sync(g_ft0, 1); ramx_use_ram(); final_arm(); ramx_use_cart(); }
+        frame_sync(g_ft0, (u8)((cur == SC_STAGE && !g_crush_t) ? 2 : 1));
 #ifdef DEBUG_PROF
         if (cur == SC_STAGE) prof_frame_end();
 #endif
-        ft0 = *(volatile u16 *)0xFC9E;   /* 次のフレームの基準(同期の出口＝ティック境界) */
+        g_ft0 = *(volatile u16 *)0xFC9E;   /* 次のフレームの基準(同期の出口＝ティック境界) */
         /* ★スプライト属性の転送は**ここ**(VBLANK の直後)で。ent_draw_all の中で書くと
            フレームの中ほど(走査線 130 行目付近)になり、画面の上半分と下半分で座標が食い違って
            「走査線抜け」に見える(実機で多発。2026-10-01 に走査線番号で確認)。
            控え(sat_shadow)は RAM なのでいつ作ってもよく、VRAM へ出す時刻だけが問題。 */
         if (cur == SC_STAGE && g_hud_on && !g_demo) hud_draw(g_score, g_lives);   /* ★デモ中は HUD の枠に PRESS SPACE KEY(demo.c) */   /* ★HUD も VBLANK 中に(上端は最もラスタ競合しやすい) */
         g_hud_skip = 0;   /* ★省いてよいのは scroll_to と同じフレームの中だけ */
+        /* ★点数の次に R#23 を書き、続けて属性を送る(scroll.c の scroll_to)。帰線の間に割込みで 40〜70 行遅れることがあり、
+             R#23 を先に書くとその間は点数が 1 回ずれて見えた(2026-10-31) */
+        if (g_vs_pend) { g_vs_pend = 0; vdp_set_vscroll(g_vscroll); }
         if (g_sat_dirty) { g_sat_dirty = 0; vdp_sat_flush(g_spr_base, g_spr_used); }
             /* ★色表も同じ関数が**枠ごとに位置の直前で**送る。ent_draw_all の中で書くと色だけ1フレーム先になり、
                表示の途中で枠の色が次の持ち主の色へ変わる(自機の影が白く点滅した。entity.c の cdirty 参照)。 */

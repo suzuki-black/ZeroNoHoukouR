@@ -66,6 +66,7 @@ void vdp_wait_frame(void);
 void vdp_set_vscroll(u8 v);                 /* R#23 = v(縦スクロール)。0で無効化。 */
 void vdp_hud_burst(const u8 *src);           /* HUD の 8 枚の属性 32B を表 A(と表 B)へ続けて送る(hud.c) */
 extern u8 g_vs_split;                       /* 1 = R#23 は分割表(フレーム先頭)が書く。vdp_set_vscroll は g_vscroll だけ(最終面。raster.c) */
+extern u8 g_vs_show;                        /* 合図が R#23 へ書き直す値(raster.c) */
 extern u8 g_vscroll;                        /* 現在の縦スクロール量(vdp_set_vscroll が保持)。
                                                ★entity.c の asm と raster.c(分割行の VRAM 行補正)が参照する。 */
 void vdp_set_hscroll(u8 coarse, u8 fine);   /* R#26=coarse(8px単位)/R#27=fine(0-7)。蛇行はスプライト非影響。 */

@@ -28,5 +28,7 @@
 void final_init(void);          /* 面の準備: 海の写し/リング/ボスの状態/弱点エンティティ */
 u8   final_frame(void);         /* 毎フレーム: スクロール/ボス/分割表。戻り 1=撃墜演出が終わった */
 void final_bgbul(void);         /* 弾を背景に描く(ent_draw_all の前に呼ぶ＝スプライトでは描かせない) */
+#define final_arm() mb_frame()  /* 分割表を積む(scene.c のループ)。常駐の入口(slot23)を共用。常駐を増やさない */
+extern u16 g_ft0;               /* フレームの基準の JIFFY(scene.c) */
 
 #endif /* FINAL_H */
