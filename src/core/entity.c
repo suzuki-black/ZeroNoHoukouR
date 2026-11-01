@@ -245,7 +245,7 @@ Entity *ent_spawn(u8 type) {
      画面上方(負のy)にある間に (u8)y へ折り返して海上に幽霊表示されるのを防ぐ。
    ★V9938 mode2 は1走査線8枚まで(9枚目以降は欠落)。弾幕対策:
      - HUD(slot 0..g_spr_base-1) と 自機 は固定の最優先スロットで絶対に欠けさせない。
-     - 残り(弾/敵/砲塔/エフェクト)は毎フレーム割当開始を回転(rot)させ、9枚以上の走査線での
+     - 残り(弾/敵/砲塔/エフェクト)は同じ色どうしの中で毎フレーム割当開始を回転(rot)させ、9枚以上の走査線での
        欠落を「常に同じ弾が消える」でなく「フレーム毎に入れ替わるちらつき」に分散する。
      - 総数は 32 枚で頭打ち(それ以上は描かない)。 */
 /* ★色表(mode2=16B/枚)を毎フレーム全枚書くと弾数比例で重い(もたつきの一因)。前フレームと同じ単色なら
@@ -373,12 +373,71 @@ static u8 draw_shadow(u8 slot, const Entity *e) {
       vdp_sat_pos(slot, (u8)sx, (u8)(e->y + SHADOW_DY + off), pat); }   /* ★A6: シャドウへ */
     return (u8)(slot + 1);
 }
+/* ★v[0] と同じ色(coltab か単色 color)の実体を v の先頭へ集め、その数を返す。A=n(1以上), DE=v。Entity offset: color=16, coltab=24(2B) */
+static u8 vis_group(u8 n, Entity **v) __naked {
+    (void)n; (void)v;
+    __asm
+        push ix
+        push iy
+        ld   b, a                  ; B = 残り
+        ld   c, #0                 ; C = 集めた数
+        ld   l, e
+        ld   h, d                  ; HL = 読む位置, DE = 書く位置
+        ld   a, (hl)
+        .db  0xDD, 0x6F           ; ld ixl, a(sdasz80 が知らないので生バイト)
+        inc  hl
+        ld   a, (hl)
+        .db  0xDD, 0x67           ; ld ixh, a。IX = v[0]
+        dec  hl
+    00001$:
+        ld   a, (hl)
+        .db  0xFD, 0x6F           ; ld iyl, a
+        inc  hl
+        ld   a, (hl)
+        .db  0xFD, 0x67           ; ld iyh, a。IY = 候補
+        ld   a, 24 (iy)
+        cp   24 (ix)
+        jr   nz, 00003$
+        ld   a, 25 (iy)
+        cp   25 (ix)
+        jr   nz, 00003$
+        or   24 (iy)
+        jr   nz, 00002$            ; 色表が同じ
+        ld   a, 16 (iy)
+        cp   16 (ix)
+        jr   nz, 00003$            ; 単色が違う
+    00002$:                        ; v[書く] と v[読む] を入れ替える
+        dec  hl
+        call 00010$
+        inc  hl
+        inc  de
+        call 00010$
+        inc  de
+        inc  c
+    00003$:
+        inc  hl
+        djnz 00001$
+        ld   a, c
+        pop  iy
+        pop  ix
+        ret
+    00010$:
+        ld   a, (de)
+        .db  0xFD, 0x6F           ; ld iyl, a
+        ld   a, (hl)
+        ld   (de), a
+        .db  0xFD, 0x7D           ; ld a, iyl
+        ld   (hl), a
+        ret
+    __endasm;
+}
+
 /* ★プール全走査を1回に統合(従来は自機探索/可視収集/合体弾/影 で4回走査していた=各エンティティの
    active/type/x/y を4回読み直していた)。1走査で自機・通常描画対象(vis)・合体弾(co)・影(sh)へ分類し、
    以後は各リストだけを回す。描画順(自機→回転割当vis→合体弾→影)とスロット優先/影の包含は従来と同一。 */
 void ent_draw_all(void) {
     static u8 rot;
-    u8 i, j, n = 0, nco = 0, nsh = 0, slot = g_spr_base;
+    u8 i, j, m, n = 0, nco = 0, nsh = 0, slot = g_spr_base;
     Entity *vis[ENT_MAX], *co[ENT_MAX], *sh[ENT_MAX];
     Entity *player = (Entity *)0;
     Entity *e = pool;
@@ -404,17 +463,20 @@ void ent_draw_all(void) {
        影とアイコンが枠 32・33 に書かれて SAT の控え(sat_shadow)を溢れ、隣の g_spr_hide_to が 220 に化けた。
        その値で「隠す」を 220 枚ぶん書いてパターン表(弾・数字)を壊し、中ボスの後もゲームが続けられなかった(実機で指摘) */
     if (player && player->shadow == 2 && slot < g_spr_limit) slot = draw_shadow(slot, player);
-    /* 収集集合内で開始位置を毎フレーム回転させて割当(9枚/走査線超の欠落をちらつきへ均等分散)。
+    /* 同じ色の集合内で開始位置を毎フレーム回転させて割当(9枚/走査線超の欠落をちらつきへ均等分散)。
        ★D2(§D2 逆順SAT): 交互フレームで割当て順を"正順/逆順"に反転する。SATは低slot=高優先(1走査線8枚まで)
          なので、順を反転すると混雑ラインで"表示される8枚"が前半⇔後半で交互に入れ替わる=消える弾が
          30Hzで入れ替わり実質16枚/ラインに見える(自機は上で最優先slot固定=ちらつかない)。 */
-    if (n) {
-        u8 start = (u8)(rot % n);
-        u8 rev = (u8)(rot & 1);   /* 交互フレームで反転 */
-        for (j = 0; j < n && slot < g_spr_limit; j++) {
-            u8 d = rev ? (u8)(n - 1 - j) : j;   /* 逆順フレームは末尾から割当て=優先が反転 */
-            i = (u8)(start + d); if (i >= n) i -= n;
-            slot = draw1(slot, vis[i]);
+    /* ★同じ色どうしの中でだけ回す。全体を回すと枠の色が毎フレーム変わり、色表の書き直しで約 3.6ms 食っていた(openMSX。2026-11-01)。
+         色(coltab か単色)ごとに続きの枠へ置けば、回しても枠の色は変わらない。 */
+    for (j = 0; j < n && slot < g_spr_limit; j += m) {
+        Entity **g = vis + j;
+        u8 k, start;
+        m = vis_group((u8)(n - j), g);
+        start = (u8)(rot % m);
+        for (k = 0; k < m && slot < g_spr_limit; k++) {
+            i = (u8)(start + ((rot & 1) ? (u8)(m - 1 - k) : k)); if (i >= m) i -= m;   /* 交互フレームは末尾から割当て=優先が反転 */
+            slot = draw1(slot, g[i]);
         }
     }
     /* 合体弾パス(双子艦): 中心±off の2発として描く。 */
