@@ -36,7 +36,7 @@ void bh_player(Entity *e) {
 
     /* 画面内へクランプ(スプライト16x16)
        ★左限界は g_msk(左端8ドットのマスク)に追従する。マスク中にそこへ入ると自機が欠ける
-         (MSK はスプライトも削る。蛇行=R#27 を使う戦艦戦と3面の中ボスの帯ずらしが該当)。 */
+         (MSK はスプライトも削る。最終面以外は面の頭から立てている)。 */
     {   s16 xmin = g_msk ? 8 : 0;
         if (e->x < xmin) e->x = xmin; else if (e->x > (s16)(SCR_W - 16)) e->x = SCR_W - 16; }
     if (e->y < (s16)g_py_min) e->y = g_py_min; else if (e->y > (s16)(SCR_H - 16)) e->y = SCR_H - 16;

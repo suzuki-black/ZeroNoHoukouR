@@ -272,7 +272,7 @@ void pb_update(void) {
            ・下の帯(ボム棒・JAMMED・パワーの山): 自機のそばなので消さない。HUD の横の範囲に入ったら描き直させる
              (2=左下 4=下中央。hud_bg は弾が出ていった直後に 1 回だけ描き直す)。
              ★帯ごと毎フレーム描き直すと、上の帯に弾が居る間ずっと重く、フレームが半分に落ちた(openMSX) */
-        if ((u8)y > 185) { if (x < 84) g_pb_hit |= 2; else if (x > 114 && x < 140) g_pb_hit |= 4; }
+        if ((u8)y > 185) { if (x < 92) g_pb_hit |= 2; else if (x > 114 && x < 140) g_pb_hit |= 4; }
         if (x < 4 || x > 248 || y < 18 || y > 204) { pb_erase(b); continue; }
         dx = (s16)(x + 2 - px); dy = (s16)(y + 2 - py);
         if (dx < 0) dx = -dx;

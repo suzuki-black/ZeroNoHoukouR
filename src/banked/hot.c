@@ -111,7 +111,7 @@ static void bh_fighter(Entity *e) {
     } else if ((u8)e->ax == 1) {                          /* 英: 横蛇行 */
         if ((++e->ay & 15) == 0) e->vx = (s16)(-e->vx);
     }
-    if (e->x < 0 || e->x > (s16)(SCR_W - e->w)) e->vx = (s16)(-e->vx);  /* 端で横反転 */
+    if ((u16)(e->x - 8) > (u16)(SCR_W - 8 - e->w)) e->vx = (s16)(-e->vx);  /* 端で横反転。★左は MSK の隠す 8 ドットの内側で返す(符号なしの比較 1 回で左右とも見る) */
     e->pat = (u8)(SPR_PLANE_L + dir8(e->vx, e->vy) * 4);  /* ★8方向: 移動方向に機首を向ける(大サイズ) */
     if (e->fire) run_fire(e);
     if (e->y > SCR_H + 8) e->active = 0;                  /* 下へ抜けたら消滅 */

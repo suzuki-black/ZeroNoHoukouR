@@ -88,7 +88,7 @@ static void turn_to(u8 tgt) {
 static u8 move(s8 vx, s8 vy) {
     s16 x = (s16)(cx + vx), y = (s16)(cy + vy);
     u8 out = 0;
-    if (x < 24) { x = 24; out = 1; } else if (x > 232) { x = 232; out = 1; }
+    if (x < 32) { x = 32; out = 1; } else if (x > 232) { x = 232; out = 1; }   /* ★左は MSK で 8 ドット隠れるので 32 */
     if (y < 28) { y = 28; out = 1; } else if (y > (solo ? 150 : 70)) { y = solo ? 150 : 70; out = 1; }
     cx = x; cy = y;
     return out;

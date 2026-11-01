@@ -59,7 +59,7 @@ static void fly(void) {
     qx += vx16[dir]; qy += vy16[dir];
     if (hurt) { qx += vx16[dir] >> 1; qy += vy16[dir] >> 1; }
     if (st == ST_LEAVE || st == ST_ENTER) return;
-    if (qx < (16 << 2)) qx = 16 << 2; else if (qx > (240 << 2)) qx = 240 << 2;
+    if (qx < (24 << 2)) qx = 24 << 2; else if (qx > (240 << 2)) qx = 240 << 2;   /* ★左は MSK で 8 ドット隠れるので 24 */
     if (qy < (16 << 2)) qy = 16 << 2; else if (qy > (196 << 2)) qy = 196 << 2;
 }
 

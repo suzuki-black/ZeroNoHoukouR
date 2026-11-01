@@ -304,6 +304,7 @@ static void results_impl(const char *m) {
     vdp_set_display_page(0);            /* ★塗り終えてから表示(page0 に残る開始カードを見せない) */
     vdp_set_vscroll(0);
     vdp_set_hscroll(0, 0);              /* ★横スクロール(蛇行weaveX)も解除=残ると画面全体が右に寄る */
+    vdp_msk(0);                         /* ★左端のマスクもここで外す(面の間は立てたまま) */
     vdp_palette_game();                 /* ★面の色調(夕焼け/夜など)を昼の基準へ戻す(切替の後。先だと沈んだ海の色が変わって見える) */
     /* 撃破!! 。黒影を横+6/縦+2へずらす。透過blitで「青地 → 影(黒) → 本体(白)」の順に重ねる */
     blit_panel_t(78, 42, 0);

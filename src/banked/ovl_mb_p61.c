@@ -122,7 +122,7 @@ static void crush_bg(u8 bars) {
     if (bars >= 2) { l |= 0x03; rt |= 0xC0; }
     if (bars >= 3) { rt |= 0x0F; }
     for (r = 0; r < 16; r++) { u8 on = (u8)(r >= 1 && r <= 14); pat[r] = on ? l : 0; pat[16 + r] = on ? rt : 0; }
-    bgspr(8, 190, pat, (const u8 *)0, 13);   /* ★妨害中なので暗い色(撃てない) */
+    bgspr(16, 190, pat, (const u8 *)0, 13);   /* ★妨害中なので暗い色(撃てない) */
 }
 static void hud_bg(void) {
     {   u8 m = (u8)(pb_hit0 & ~g_pb_hit);           /* ★背景の弾が崩した HUD を、弾が**出ていった直後に 1 回だけ**描き直す(ovl_bgbul.c)。
@@ -143,17 +143,17 @@ static void hud_bg(void) {
         u16 v = g_score; u8 i, d[5];
         hud_last = v;
         for (i = 5; i; ) { d[--i] = (u8)(v % 10); v /= 10; }
-        sea_box(8, 2, 40, 8);
+        sea_box(16, 2, 40, 8);
         vdp_cmd_wait();
-        for (i = 0; i < 5; i++) glyph((u8)(8 + i * 8), 2, (u8)('0' + d[i]), 15);
+        for (i = 0; i < 5; i++) glyph((u8)(16 + i * 8), 2, (u8)('0' + d[i]), 15);
     }
     if (g_lives != hud_lv) { hud_lv = g_lives; sea_box(234, 2, 8, 8); vdp_cmd_wait(); glyph(234, 2, (u8)('0' + (g_lives % 10)), 11); }
     if (g_crush != hud_cr) {                         /* ボム残数(画面下): 1〜3 は棒の本数、4以上は棒1本＋数字(HUD と同じ) */
         hud_cr = g_crush;
-        sea_box(8, 190, 32, 16);
+        sea_box(16, 190, 32, 16);
         vdp_cmd_wait();
         if (g_crush) crush_bg((u8)(g_crush <= 3 ? g_crush : 1));
-        if (g_crush > 3) glyph(28, 192, (u8)('0' + (g_crush % 10)), 15);
+        if (g_crush > 3) glyph(36, 192, (u8)('0' + (g_crush % 10)), 15);
     }
     /* ★パワーアップ段階の山形(画面下中央)。この面の中ボスの間はスプライトが拡大なので背景へ描く
        (常駐の ent_draw_all は g_pwr_icon=0 で出さない)。絵は焼いてある SPR_PWRLV を読み、
@@ -166,7 +166,7 @@ static void hud_bg(void) {
             static const u8 jam_s[6] = { 'J','A','M','M','E','D' };
             u8 i, c = (u8)((s == 2) ? 15 : 13);
             jam_on = s;
-            for (i = 0; i < 6; i++) glyph((u8)(32 + i * 8), 192, jam_s[i], c);
+            for (i = 0; i < 6; i++) glyph((u8)(40 + i * 8), 192, jam_s[i], c);
         }
     }
     if (g_pwr != hud_pw) {

@@ -134,7 +134,7 @@ static void aim(void) {
 static u8 move(s8 vx, s8 vy) {
     s16 x = (s16)(bx + vx), y = (s16)(by + vy);
     u8 out = 0;
-    if (x < -16) { x = -16; out = 1; } else if (x > 208) { x = 208; out = 1; }
+    if (x < -8) { x = -8; out = 1; } else if (x > 208) { x = 208; out = 1; }   /* ★左は MSK で 8 ドット隠れるので -8 で右と同じ 1/4 */
     if (y < -16) { y = -16; out = 1; } else if (y > 150) { y = 150; out = 1; }
     bx = x; by = y;
     return out;

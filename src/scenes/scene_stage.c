@@ -762,7 +762,7 @@ static void stage_build(void) {
          stage_vars)でまとめて入れる(常駐の節約) */
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; rng = 0x1234;
-    vdp_msk(0);   /* ★蛇行前(海の接近)は横スクロールを使わない=左端のマスクも要らない */
+    vdp_msk(0);   /* ★カードの裏で準備する間は外す(カードの絵を左端まで見せる)。立てるのは stage_begin_display */
 
     e = ent_spawn(ET_PLAYER);
     if (e) { e->x = 120; e->y = 176; e->pat = SPR_ZERO; e->coltab = zcol; e->shadow = 1; }  /* 零戦＋行別陰影＋落ち影 */
@@ -807,6 +807,8 @@ static void stage_begin_display(void) {
         vdp_blit_bank_vram(BOSS_VRAM0_BANK, BOSS_VRAM0_LEN, 0, (u16)(BOSS_VRAM0_Y * 128));
     sea_init(curstage);          /* 艦種別の海コラム帯を選択 */
     vdp_set_hscroll(0, 0);
+    vdp_msk((u8)(curstage != STAGE_FINAL));   /* ★蛇行(R#27)の始まりで左端を隠すと途中で画面の幅が 256→248 に変わるので、面の頭から立てる。
+                                                 自機の左限界もここから 8。最終面は横スクロールを使わず、ボスの翼が左端まで来るので立てない */
     g_shake = 0; g_hitstop = 0; sfresh = SFRESH_HOLD;   /* ★出だしの誤揺れ抑止(stage_update冒頭でも数フレーム強制0) */
 }
 
@@ -1218,10 +1220,7 @@ u8 stage_update(void) {
             bgm_play(stage_bgm[curstage]);   /* ★敵艦が見えた=海イントロ共通→面別BGMへ切替 */
             ramx_use_ram();                  /* ★戻す(以降のホット区間へ) */
         }
-        if (cam <= SC_CAM_SHIP) { phase = 1; camdir = -1;
-            /* ★蛇行は R#27(ドット単位)を使う。MSK を立てないと左端の黒帯が 0〜7 ドットで
-               毎フレーム伸び縮みする(実機で指摘。詳細は vdp.c の vdp_msk)。自機の左限界も 8 になる。 */
-            vdp_msk(1); }
+        if (cam <= SC_CAM_SHIP) { phase = 1; camdir = -1; }
     } else {
         /* 戦艦: 船首↔船尾の往復(今の高速蛇行≈1.6px/f=緊迫感)。艦出現(cam=SHIP>STERN)から入るので、
            下降中は STERN でクランプせず BOW まで一気に見せ、以後 BOW↔STERN を往復する。 */
@@ -1495,7 +1494,7 @@ u8 stage_update(void) {
     if (phase == 1 && ent_live_turrets() == 0 && aa_alive() == 0) {
         dmode = 1; dtimer = 150;   /* 約2.5秒の炎上スペクタクル */
         arm_plain_split();         /* ★ここから分割表の組み直しが止まる。衝撃波の帯を残さない */
-        vdp_set_hscroll(0, 0); vdp_msk(0);   /* 蛇行(横HW)を0に=火球のX基準を艦アートへ揃える(旧版準拠)。左端のマスクも外す */
+        vdp_set_hscroll(0, 0);   /* 蛇行(横HW)を0に=火球のX基準を艦アートへ揃える(旧版準拠)。★左端のマスクは結果画面まで残す(幅を変えない) */
         /* ★艦全体を炎に包む(旧版): 全撃破エンプレ27基に加え散布火球18枚を追加登録。fire_draw が2コマ描画。
            撃破時に一度だけ(毎フレーム散布=もっさりの主因は回避)。 */
         { u8 q; for (q = 0; q < 18; q++) {
