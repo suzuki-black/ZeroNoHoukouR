@@ -721,13 +721,24 @@ static void sat_tail(u8 live) {
    sat_pass(表, from, live, col):
      vdp_write_addr(表 + from*4);
      for (; from < live; from++) {
-         if (col && cdirty[from]) { ent_col_put(from); vdp_write_addr(表 + from*4); }   // 色→その枠の位置
+         if (col && cdirty[from]) {                                                    // 隠す→色→その枠の位置
+             枠 from を表 A で画面外へ;
+             if (g_spr_dual) 枠 from を表 B で画面外へ;
+             ent_col_put(from);
+             if (g_spr_dual) 表 B の枠 from の位置を送る;                               // ★色は両表へ書くので
+             vdp_write_addr(表 + from*4);
+         }
          控え(sat_shadow)の 4B を送る                                                  // アドレスは自動で次の枠へ
      }
      sat_tail(live);
    ★以前は 1 枚ごとに A・B へ交互に書き、そのたびにアドレスを張り直していた(24 枚で 48 回)。表ごとに通しで流せば
      張り直しは色を変えた枠のぶんだけで済む(2026-10-28、openMSX の 1 面戦艦で転送 6.7ms/フレームの大半がこれだった)。
-     セットBは 96 行目より下の帯でしか出ないので、Aを全部送ってからでも表示に間に合う。
+     セットBは 96 行目より下の帯でしか出ないので、位置は Aを全部送ってからでも表示に間に合う。
+     ★ただし色を変える枠は、表 B の位置も色の直後に送る。表 B を通しで後に回すだけだと、下の帯の影が「色だけ新しく位置は古い」間に
+       入り、白い点数の色で光った。10-11 の直し(色→位置)が 10-28 の高速化で下の帯だけ戻っていた(2026-10-31)。
+     ★色を書く数行の間も古い位置に別の色で出ないよう、両表で隠してから色を書く(隠れるのは重いフレームの数行だけ)。
+       表 B を隠すのは g_spr_dual のときだけ。最終面の表 B はボスの絵で、弾の枠の色が変わるたびに機体の枠が画面外へ飛び、
+       尾翼が欠けた(実機で指摘。2026-11-01)。
    ★1 枚の 4B を続けて書くのは vdp_sprite_pos と同じ間隔(実機で落ちない。OTIR にはしない)。 */
 void vdp_sat_flush(u8 from, u8 live) __naked {
     (void)from; (void)live;
@@ -762,12 +773,39 @@ void vdp_sat_flush(u8 from, u8 live) __naked {
         jr   z, 00022$
         push bc
         push de
+        call 00050$              ; ★まず両表で隠す(色が先に変わっても、古い位置に別の色で出ない)
+        ld   d, #0x72
+        ld   a, (_g_spr_dual)
+        or   a
+        call nz, 00050$          ; ★g_spr_dual=0 の表 B は別の絵(最終面のボス)なので触らない
         ld   a, b
-        call _ent_col_put        ; ★色を先に
+        call _ent_col_put        ; 色
         pop  de
         pop  bc
+        ld   a, (_g_spr_dual)
+        or   a
+        jr   z, 00023$
+        push de
+        ld   d, #0x72            ; ★色は両表へ書いたので、表 B の位置もここで送る
+        call 00030$
+        call 00040$
+        pop  de
+    00023$:
         call 00030$              ; その枠の位置へ戻す
     00022$:
+        call 00040$
+        inc  b
+        jr   00021$
+    00025$:                      ; 残りの枠(停止マーカ / 画面外へ)。アドレスはもう枠 live を指している
+        ld   a, c
+        jp   _sat_tail
+    00050$:                      ; 枠 B の Y を画面外へ
+        call 00030$
+        ld   a, #220
+        call _spr_y              ; HL しか壊さない
+        out  (_VDP_DAT), a
+        ret
+    00040$:                      ; 枠 B の控え 4B を送る
         ld   a, b
         add  a, a
         add  a, a
@@ -788,11 +826,7 @@ void vdp_sat_flush(u8 from, u8 live) __naked {
         inc  hl
         ld   a, (hl)
         out  (_VDP_DAT), a
-        inc  b
-        jr   00021$
-    00025$:                      ; 残りの枠(停止マーカ / 画面外へ)。アドレスはもう枠 live を指している
-        ld   a, c
-        jp   _sat_tail
+        ret
     00030$:                      ; 書込みアドレス = D * 256 + B * 4。BC・DE は壊さない
         push bc
         push de
