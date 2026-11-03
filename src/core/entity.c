@@ -514,15 +514,6 @@ void ent_draw_all(void) {
         }
         spop_t[i]--;   /* 表示時間を1減らす(0で次フレームから消える) */
     }
-    /* ★パワーアップ段階のアイコンは**いちばん最後**=最低優先(1走査線8枚を超えたら弾ではなくこれが落ちる)。
-       HUD の枠(優先度が高い)に置いていたら、中ボス戦で弾がアイコンの行で消えると実機で指摘された。
-       ★5面の中ボスの間は拡大(MAG)なので出さない(g_pwr_icon=0。代わりにオーバレイが背景へ描く)。 */
-    if (g_pwr_icon && slot < SPR_TOP) { /* ★枠は scene_stage が1つ予約してある(g_spr_limit-1)。ただし枠が尽きたときは出さない(上の★) */
-        const u8 *tab = pwr_col[g_pwr];
-        if (slot_ctab[slot] != tab) { slot_ctab[slot] = tab; slot_col[slot] = 0xFF; cdirty[slot] = 1; }
-        vdp_sat_pos(slot, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);
-        slot++;
-    }
     /* ★A6: 溜めた属性(g_spr_base..slot-1)は**ここでは VRAM へ書かない**。印だけ立て、
        実際の転送(vdp_sat_flush)は次の VBLANK で scene.c のループが行う。
        ★理由: ent_draw_all はフレームの中ほど(実測で走査線 115 行目付近)から走り、SAT の転送は

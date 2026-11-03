@@ -31,8 +31,9 @@ void hud_colors(void) {
     vdp_sprite_color(HUD_SL_BNUM, 15);
     vdp_sprite_color(HUD_SL_LICON, 3);    /* 残機アイコン=緑(零戦シルエット) */
     vdp_sprite_color(HUD_SL_LNUM, 11);    /* 残機数=黄 */
+    vdp_sprite_color_tab(HUD_SL_PWR, pwr_col[g_pwr]);   /* パワーアップ段階(出す本数を行別色で決める) */
 #ifdef DEBUG_FPS
-    { u8 sl; for (sl = (u8)(HUD_SL0 + 8); sl < 32; sl++) vdp_sprite_color(sl, 13); }   /* FPS2桁＋mask値2桁=ほぼ黒(視認性) */
+    { u8 sl; for (sl = (u8)(HUD_SL0 + 9); sl < 32; sl++) vdp_sprite_color(sl, 13); }   /* FPS2桁＋mask値2桁=ほぼ黒(視認性) */
 #endif
 }
 
@@ -41,7 +42,7 @@ void hud_colors(void) {
    ★作業場は pat_buf を借りる(常駐 RAM が足りない。焼くのは 1 面に数回だけなので毎回 0 で埋め直してよい)。
      ローカル配列にすると sdcc が IX のスタック枠を組んで常駐を 150B 食った。 */
 u8 g_hud_skip;
-static u8 pat_buf[32];     /* 32B すべてを毎回書く用途の作業場(数字の投入・ボム棒・上位2桁・HUD の属性)。
+static u8 pat_buf[HUD_PUT_N * 4];   /* 作業場(数字の投入・ボム棒・上位2桁は 32B、HUD の属性は 36B)。
                               ★ローカル配列にすると sdcc が IX のスタック枠を組んで常駐を食う。 */
 static u8 dig[5];          /* 今のスコアの 5 桁 */
 
@@ -156,8 +157,10 @@ void hud_draw(u16 score, u8 lives) {
     static u8  last_lives = 0xFF;   /* 残機は最大 5(設定の 2/3/5。増える仕組みは無い)なので桁分解は要らない */
     static u8  last_crush = 0xFF;   /* ボム残数: 変化時だけパターンを書き換える */
     static u8  last_vs;
+    static u8  last_pwr;
     u8 crush_n = g_crush;
     u8 i;
+    if (g_pwr != last_pwr) { last_pwr = g_pwr; vdp_sprite_color_tab(HUD_SL_PWR, pwr_col[g_pwr]); }   /* ★段階が変わったときだけ色表を書く */
     /* ★同じフレームの 2 回目(scroll_to で描いた後の VBLANK の分)は、入力が全部同じなら省く(VRAM はもう同じ中身)。
          g_hud_skip は scroll_to が描いた直後に立て、scene.c のループが毎フレーム倒す=前のフレームからは持ち越さない。 */
     if (g_hud_skip && score == last_score && lives == last_lives && crush_n == last_crush && g_vscroll == last_vs) return;
@@ -193,6 +196,7 @@ void hud_draw(u16 score, u8 lives) {
     else         hud_put(4, 0, 220, SPR_CRUSH);                                  /* 画面下端外へ */
     if (crush_n > 3) hud_put(5, 35, 192, (u8)(SPR_DIGIT0 + (crush_n % 10) * 4));
     else             hud_put(5, 0, 220, SPR_DIGIT0);                             /* 3 本以下(0 を含む)は数字を出さない */
+    hud_put(8, PWR_ICON_X, PWR_ICON_Y, SPR_PWRLV);                              /* パワーアップ段階(HUD_SL_PWR) */
     vdp_hud_burst(pat_buf);
 #ifdef DEBUG_FPS
     /* ★デバッグROMのみ。左2桁=g_fps(JIFFY基準の参考値)、右4桁=フレームカウンタ(ストップウォッチ実測用の真値)。
@@ -200,9 +204,9 @@ void hud_draw(u16 score, u8 lives) {
     /* ★y=24 に FPS2桁(slot9,10)＋mask値2桁(slot11,12)。低slot=高優先なのでゲームスプライトより必ず出る。
        ★"MASK" の文字は廃止(16x16 パターンの空き枠4つを津波 SPR_WAVE0 へ譲った)。 */
     { u8 f = (g_fps > 99) ? 99 : g_fps;
-      vdp_sprite_pos((u8)(HUD_SL0 + 8),  96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));   /* FPS十の位 */
-      vdp_sprite_pos((u8)(HUD_SL0 + 9), 104, 24, (u8)(SPR_DIGIT0 + (f % 10) * 4));   /* FPS一の位 */
-      vdp_sprite_pos((u8)(HUD_SL0 + 10), 120, 24, (u8)(SPR_DIGIT0 + (u8)((g_dbgmask / 10) % 10) * 4));   /* マスク十の位 */
-      vdp_sprite_pos((u8)(HUD_SL0 + 11), 128, 24, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask % 10) * 4)); }        /* マスク一の位 */
+      vdp_sprite_pos((u8)(HUD_SL0 + 9),  96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));   /* FPS十の位 */
+      vdp_sprite_pos((u8)(HUD_SL0 + 10),104, 24, (u8)(SPR_DIGIT0 + (f % 10) * 4));   /* FPS一の位 */
+      vdp_sprite_pos((u8)(HUD_SL0 + 11), 120, 24, (u8)(SPR_DIGIT0 + (u8)((g_dbgmask / 10) % 10) * 4));   /* マスク十の位 */
+      vdp_sprite_pos((u8)(HUD_SL0 + 12), 128, 24, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask % 10) * 4)); }        /* マスク一の位 */
 #endif
 }

@@ -20,12 +20,12 @@
    ★並びは「落ちても困らない順」。上位桁ほど手前(低slot)に置き、いちばん先に落ちるのは
      スコアの一の位。 */
 #ifdef DEBUG_FPS
-#define HUD_SLOTS 12  /* 通常8 ＋ FPS2桁 ＋ mask値2桁 */
+#define HUD_SLOTS 13  /* 通常9 ＋ FPS2桁 ＋ mask値2桁 */
 extern u8  g_fps;     /* JIFFY増分を校正して算出した実FPS */
 extern u16 g_frame;   /* ★JIFFY非依存: ループ毎+1のフレームカウンタ。ストップウォッチ検証用 */
 extern u8  g_dbgmask; /* ★M(TRIGB)で0→7巡回。bit0=海停止/bit1=AI停止/bit2=描画停止。切り分け用 */
 #else
-#define HUD_SLOTS 8   /* スコア上位2桁(詰め)＋3桁＝4 / ボム棒＋残数 / 残機アイコン＋残機数 */
+#define HUD_SLOTS 9   /* スコア上位2桁(詰め)＋3桁＝4 / ボム棒＋残数 / 残機アイコン＋残機数 / パワーアップ段階 */
 #endif
 
 /* ゲームのスプライトが使ってよい上限(この後ろが HUD)。ent_draw_all / 弾幕 / 中ボスは
@@ -38,6 +38,11 @@ extern u8  g_dbgmask; /* ★M(TRIGB)で0→7巡回。bit0=海停止/bit1=AI停�
 #define HUD_SL_BNUM  (HUD_SL0 + 5)   /* ボム残数(4本目以降の数字) */
 #define HUD_SL_LICON (HUD_SL0 + 6)   /* 残機アイコン(零戦) */
 #define HUD_SL_LNUM  (HUD_SL0 + 7)   /* 予備機数 */
+#define HUD_SL_PWR   (HUD_SL0 + 8)   /* パワーアップ段階の山形。★最後尾=最低優先(混んだ行ではこれが先に欠ける)。
+                                        以前はエンティティの最後の枠に描いていたが、属性の転送のいちばん最後になり、混んだコマでは
+                                        190 行目の描画に間に合わず 1 コマ前の位置で出た=スクロールで震えた(2026-11-02 openMSX で確認)。
+                                        HUD の一員にして、帰線の最初に送る */
+#define HUD_PUT_N    9               /* hud_draw が組んで送る枚数(HUD_SL0..HUD_SL_PWR) */
 
 void hud_init(void);                 /* 数字パターン投入＋HUD色＋g_spr_base 確保 */
 void hud_colors(void);               /* HUDスロットの色だけ置き直す(色表を他用途に使った後の復旧) */

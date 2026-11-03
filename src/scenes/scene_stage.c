@@ -1326,10 +1326,6 @@ u8 stage_update(void) {
          1 面の中ボス(18 枚、末尾から)が 6〜23 番に来て文字と自機の枠に重なり、自機・敵弾・文字がちらついた(2026-10-10)。
          中ボスのオーバレイも同じ上限を使う(rank.h の SPR_GAME_TOP)。 */
     {   u8 sp_top = (u8)((g_demo || (g_mb == MB_ACTIVE && curstage == 4)) ? 32 : SPR_TOP);
-    /* ★パワーアップ段階のアイコン: ent_draw_all が**最後の枠**(最低優先)に描く。
-       5面の中ボスの間は拡大(MAG)なので出さない(オーバレイが背景へ描く)。デモ中も出さない(文字の行と重なる)。
-       どちらも上限が 32 のとき(通常弾でも1本出す。段階が無いのではなく最下段)。 */
-    g_pwr_icon = (u8)(sp_top == SPR_TOP);
     g_spr_limit = (u8)((g_cbul_live || g_rage) ? (u8)(sp_top - CURTAIN_SLOTS) : sp_top);
     /* ★中ボスはふだん末尾の枠(最低優先=混んだら中ボスが欠ける)。ただし**自機より高い所に居る間**は
        手前(HUD の直後)へ置き、エンティティをその後ろへ下げる(2面の中ボスが上昇中=自機の上を通る)。 */
@@ -1349,9 +1345,6 @@ u8 stage_update(void) {
        g_spr_hide_to を常に上限へ向けておけば、vdp.c は空き枠を画面外(Y=220)で埋めるだけで
        マーカを書かない。中ボスが末尾に居るときはその手前まで。 */
     g_spr_hide_to = (u8)((g_mb == MB_ACTIVE && g_mb_end == sp_top) ? g_spr_limit : sp_top);
-    g_spr_limit = (u8)(g_spr_limit - g_pwr_icon);   /* ★アイコンのぶんを1枠予約(敵/弾はその手前まで)。
-                                                       予約しないと中ボス戦のように枠が少ないときアイコンが
-                                                       出ずっぱりで消えた(実機で「消えている時間が長い」と指摘)。 */
     }
     if (curstage == STAGE_FINAL && g_ovl_ok) final_bgbul();   /* ★弾を背景へ(スプライトでは描かせない) */
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */

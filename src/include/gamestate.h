@@ -70,7 +70,6 @@ extern u8  g_pwr;
 extern u8  g_pdmg;         /* 今の段階の威力(半分単位)。発砲時に g_pwr から決める(対空砲の当たり判定はこれを見る) */
 #define PWR_MAX 3
 extern u8  g_jam_t;                 /* >0: 電探妨害の合図(5面の中ボス戦でボムを押した) */
-extern u8  g_pwr_icon;              /* 1=段階のアイコンを出す(ent_draw_all が最低優先で描く) */
 extern u8 pwr_col[PWR_MAX + 1][16];   /* 段階ごとの山形の行別色(0=その行は出さない)。通常弾=1本〜最終=4本 */
 /* ★増槽(アイテム)の行別色。**常駐のRAM**に置くこと(中身は面の準備で bank16 が流し込む)。
    色表は ent_col_put() が **VBLANK に** 読む＝そのとき page2 は cart に戻っている。

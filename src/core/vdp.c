@@ -635,7 +635,7 @@ void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum) {
     }
 }
 
-/* ★HUD の 8 枚(HUD_SL0..)の属性 32B を、表ごとに 1 回のアドレス設定で続けて送る(hud.c の hud_draw)。HL = 32B。
+/* ★HUD の 9 枚(HUD_SL0..)の属性 36B を、表ごとに 1 回のアドレス設定で続けて送る(hud.c の hud_draw)。HL = 32B。
    1 枚ずつ vdp_sprite_pos で書くと、表 2 組で 128 回のポート書き込みになり(turboR は 1 回約 7µs)、HUD の描き直し 1 回に
    約 1.9ms かかっていた(openMSX、戦艦の場面。毎フレーム 2 回呼ぶ)。続けて送れば 72 回。
    ★1 バイトずつ ld/out/inc で送る(vdp_sat_flush と同じ間隔)。OTIR は速すぎて実機で欠ける(vdp_sat_flush の★)。asm(常駐の節約) */
@@ -657,7 +657,7 @@ void vdp_hud_burst(const u8 *src) __naked {
         call _vdp_write_addr
         pop  hl
     00010$:
-        ld   b, #32
+        ld   b, #HUD_PUT_N * 4
     00011$:
         ld   a, (hl)
         out  (_VDP_DAT), a
