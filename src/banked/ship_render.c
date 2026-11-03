@@ -379,7 +379,7 @@ static void death_impl(u16 cam) {
     sfx(2, SFX_BOOM);
     for (t = 0; t < 84; t++) {          /* ~1.4s */
         scroll_to(cam);
-        vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 9) - 4));   /* 沈没の揺れ: 縦±4px */
+        vdp_set_vscroll(vs_shake((s8)(rnd() % 9 - 4)));   /* 沈没の揺れ: 縦±4px(描いてある行の内側で。scroll.c) */
         if ((t & 7) == 0) ent_spawn_explosion(px + (s16)(rnd() % 14) - 7, py + (s16)(rnd() % 14) - 7);
         if ((t % 24) == 0) sfx(2, SFX_BOOM);
         ent_update_all();

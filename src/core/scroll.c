@@ -153,6 +153,16 @@ void scroll_rebase(u16 add) {
     drawn_bot = (s16)(drawn_bot + ((s16)add >> 4));
 }
 
+/* ★画面の揺れ: g_cam に d を足した縦位置を、リングに描いてある行 [drawn_top, drawn_bot] から画面(212 行)が
+     はみ出さない範囲へ収めて返す。そのまま足すと、船首(cam=32)で 2 行上の描いていない行が見え、リングに残った
+     艦の途中の行が船首の上に横線のゴミとして出た(2026-11-03。1 面の最初の船首で砲台を壊した瞬間。openMSX の VRAM で確認) */
+u8 vs_shake(s8 d) {
+    s16 v = (s16)g_cam + d, lo = (s16)(drawn_top << 4), hi = (s16)((drawn_bot << 4) - 196);
+    if (v < lo) v = lo;
+    if (v > hi) v = hi;
+    return (u8)v;
+}
+
 void scroll_to(u16 cam) {
     s16 vt = (s16)(cam >> 4);
     s16 vb = (s16)((cam + 211) >> 4);

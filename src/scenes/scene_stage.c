@@ -1231,7 +1231,7 @@ u8 stage_update(void) {
     /* ★画面揺れ: 被弾/砲台撃破で数フレーム、R#23を縦±2pxジッタ(既存scroll上に上書き)。 */
     if (g_shake) {
         g_shake--;
-        if (!g_vs_split) { g_vscroll = (u8)((s16)cam + (s16)(rnd() % 5) - 2); g_vs_pend = 1; }   /* ★R#23 は点数と同じ帰線で。最終面の R#23 は分割表が決めるので揺らさない */
+        if (!g_vs_split) { g_vscroll = vs_shake((s8)(rnd() % 5 - 2)); g_vs_pend = 1; }   /* ★R#23 は点数と同じ帰線で。最終面の R#23 は分割表が決めるので揺らさない */
     }
 
     /* ★HUD は**ここでは描かない**。scene.c のループが次の VBLANK で R#23 と一緒に描く(走査線 0〜20 行目)。

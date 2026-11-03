@@ -134,7 +134,7 @@ u8 ovl_sink_frame(void) {
     ovl_pal_update();
 
     if (t < BLAST_T) {                                   /* ---- 誘爆 ---- */
-        vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 7) - 3));
+        vdp_set_vscroll(vs_shake((s8)(rnd() % 7 - 3)));   /* ★描いてある行の内側で揺らす(scroll.c) */
         if ((t % 3) == 0) ent_spawn_explosion((s16)(80 + (rnd() % 96)), (s16)(20 + (rnd() % 172)));
         if ((t % 12) == 0) sfx(2, SFX_BOOM);
         if (++t == BLAST_T) { sink_flash = 3; sfx(2, SFX_THUNDER); g_rumble_lv = 10; }
