@@ -27,6 +27,8 @@
 #include "overlay.h"
 #include "scroll.h"
 #include "aa_hot.h"      /* curstage(4面=双子艦だけ噴き口が 2 つ) */
+void ovl_pal_update(void);   /* 同じオーバレイ(ovl7)のパレットエンジン(ovl_palette.c) */
+void ovl_pal_reset(void);
 
 #define TMPL_ADDR 0xC600
 #define PRT_ADDR  0xCE00
@@ -531,7 +533,8 @@ void ovl_part(void) {
     white_pal();
     vdp_wait_frame();
     vdp_wait_frame();
-    vdp_palette_game();
+    ovl_pal_reset();       /* ★この面の色へ戻す。vdp_palette_game() は 1 面(昼)の色なので、4 面(朝霧)の双子艦の色が変わった */
+    ovl_pal_update();
     for (t = 0; t < SEQ_END; t++) {
         if (t < SEQ_FALL) {
             u8 ny = (u8)(((u16)t * 212) / SEQ_FALL);   /* ★表示は 212 行。196 で止めると下に艦が残る */
