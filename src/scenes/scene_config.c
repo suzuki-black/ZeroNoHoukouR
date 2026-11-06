@@ -163,6 +163,14 @@ static void st_change(s8 d) {
     if (scur == ST_VOICE) { s8 v = (s8)s_voice + d; if (v >= 0 && v < VOICE_N) s_voice = (u8)v; }
     st_row(scur);
 }
+/* ★曲・ファンファーレを切り替える前に、前の音を全部止める(サウンドテストの曲の切り替えの共通の入口)。
+   bgm_play は FM しか落とさないので、ドラムの無い曲(07 SEA など)・PSG だけで鳴らすときやファンファーレへ
+   切り替えると、前の曲のドラムの音量がノイズ(PSG の C)に残り「さーーー」と鳴り続けた。
+   PSG の 3 チャンネルと FM(bgm_stop)、PCM(pcm_stop)をまとめて止めてから鳴らす。 */
+static void st_quiet(void) {
+    bgm_stop();
+    pcm_stop();
+}
 /* 戻ったら 1 を返す */
 static u8 st_update(u8 e) {
     if ((e & INP_DOWN) && scur < ST_EXIT) { u8 o = scur; scur++; st_row(o); st_row(scur); }
@@ -170,12 +178,14 @@ static u8 st_update(u8 e) {
     if (e & INP_RIGHT) st_change(+1);
     if (e & INP_LEFT)  st_change(-1);
     if ((e & INP_TRIGB) || ((e & INP_TRIG) && scur == ST_EXIT)) {
+        st_quiet();
         snd_test(0);             /* ★タイトル曲に戻す(設定画面はタイトル曲を続けて鳴らしている) */
         snd = 0;
         draw_all();
         return 1;
     }
     if (e & INP_TRIG) {
+        if (scur == ST_BGM || scur == ST_FAN || scur == ST_STOP) st_quiet();
         if (scur == ST_BGM) snd_test(s_bgm);
         else if (scur == ST_SE) {
             if (s_se + 1 == SFX_RUMBLE) g_rumble_lv = 12;   /* ★地鳴りの音量は鳴らす側が決める(本編は津波の進み具合) */
