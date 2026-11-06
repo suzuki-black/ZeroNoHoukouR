@@ -295,8 +295,9 @@ void fm_silence(void) {
 
 void bgm_play(u8 track) {
     u8 *p;
-    bgmOn = 0;                  /* 再構築中は ISR に BGM を無視させる(単バイト) */
-    fm_silence();               /* ★前の曲の FM を必ず落としてから(落とし忘れると鳴り続ける) */
+    bgm_stop();                 /* 再構築中は ISR に BGM を無視させる(bgmOn=0)。★前の曲の FM と PSG を必ず落としてから。
+                                   PSG を落とさないと、ドラムの無い曲(07 SEA・エンディングなど)へ切り替えたとき、前の曲の
+                                   ドラムの音量がノイズ(C)に残り「さーーー」と鳴り続けた(サウンドテストで顕在化。scene_config.c) */
     fmDrum = (u8)(g_opll && FM_DRUM_TRACK(track));
     if (track >= BGM_TRACK_COUNT) { fmDrum = 0; return; }
     data_read(BGM_BANK, bgm_off[track], bgm_ram, bgm_len[track]);
