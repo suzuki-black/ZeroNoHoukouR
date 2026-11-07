@@ -970,6 +970,8 @@ static u8 defeat_update(void) {
     hud_draw(g_score, g_lives);         /* ★撃沈中は画面が進む(R#23 が動く)ので HUD の位置も毎フレーム書き直す */
     ent_update_all();                   /* 爆発アニメを進める */
     fire_draw();                        /* 残っている炎上サイトを2コマ描画 */
+    if (g_ovl_ok) { ramx_use_ram(); power_frame(); ramx_use_cart(); }   /* ★撃沈のオーバレイ(ovl7)の slot21 = 自機弾と爆発に枠を交互に
+                                         先に渡す(ovl_pborder.c)。呼ばないと爆発が枠を取り続け、自機弾が 2 秒消えた */
     ent_draw_all();
     if (done) {
         g_rumble_lv = 0;
@@ -1293,9 +1295,10 @@ u8 stage_update(void) {
       }
       if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
       if (g_ovl_ok && DBG_ON(8) && !g_loop_t) curtain_collide();   /* ★CPU弾幕の被弾(常駐 ent_player_hit に集約) */
-      if (g_ovl_ok && curstage != STAGE_FINAL) power_frame();   /* ★増槽: 銀の敵機が落ちたら出す/自機が触れたら取る */
       if (sea_on) { while (sea_step()) { } vdp_cmd_wait(); }   /* ★aa_collide(burn=VDPコマンド)前に海完全完了 */
       if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_collide());
+      if (g_ovl_ok && curstage != STAGE_FINAL) power_frame();   /* ★増槽: 銀の敵機が落ちたら出す/自機が触れたら取る。
+                     ★自機弾と敵側の並べ替え(ovl_pborder.c)もここから呼ぶので、爆発を出す当たり判定(aa_collide)の後に置く */
     }
 #ifdef DEBUG_PROF
     prof_begin();   /* PF_DRAW。★この区間の中に PROF_CALL を置かない(開始 tick は 1 つ) */

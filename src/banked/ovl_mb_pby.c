@@ -129,10 +129,12 @@ static void shoot(void) {
     sfx(2, SFX_EFIRE);
 }
 
+void ovl_pb_order(void);   /* ovl_pborder.c */
 void ovl_mb_frame(void) {
     u8 tgt = dir, dv = (u8)(hurt ? 3 : 2);
     s16 cx = (s16)(qx >> 2), cy = (s16)(qy >> 2);
     s16 px = (s16)(g_player_x + 8), py = (s16)(g_player_y + 8);
+    ovl_pb_order();   /* ★自機弾と敵弾に枠を交互に先に渡す(ovl_pborder.c) */
     if (st == ST_DONE) return;
     if (g_mb_recol) { g_mb_recol = 0; coldirty = 1; }   /* ★津波が色表を奪った(scene_stage)。塗り直す */
     t++;

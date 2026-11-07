@@ -7,6 +7,7 @@
         .globl  _ovl_sink_init
         .globl  _ovl_sink_frame
         .globl  _ovl_part
+        .globl  _ovl_pb_order
         .area   _CODE
         jp      stub_ret             ; slot0  curtain_update
         jp      stub_ret             ; slot1  curtain_ring
@@ -29,7 +30,7 @@
         jp      stub_ret             ; slot18 final_bgbul
         jp      _ovl_sink_init       ; slot19 (OVL_SLOT_SINK_INIT)
         jp      _ovl_sink_frame      ; slot20 (OVL_SLOT_SINK_FRAME)
-        jp      stub_ret             ; slot21 power_frame(撃沈中は呼ばない)
+        jp      _ovl_pb_order        ; slot21 power_frame の口: 撃沈中は自機弾と爆発に枠を交互に先に渡すだけ(ovl_pborder.c)
         jp      stub_ret             ; slot22 mb_init(「きりもみ」は別バンク OVL13 の slot22)
         jp      _ovl_part            ; slot23 ★撃沈の「火の粉・破片」に転用(中ボスの frame は撃沈中に呼ばれない)
 stub_zero:

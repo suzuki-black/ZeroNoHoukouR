@@ -189,8 +189,10 @@ static void shoot(u8 k) {
     hb_fan(ox, oy, 2);   /* 自機狙いの2方向(背景に描く) */
 }
 
+void ovl_pb_order(void);   /* ovl_pborder.c */
 void ovl_mb_frame(void) {
     u8 tgt = fcur, k, crush = g_crush_t;
+    ovl_pb_order();   /* ★自機弾と敵弾に枠を交互に先に渡す(ovl_pborder.c) */
     if (st == ST_DONE) return;
     t++;
     hb_update();                                   /* 背景の弾(ボムの後の読み直しも中でする) */

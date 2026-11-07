@@ -363,10 +363,10 @@ $(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs $(SRC)/include/hotcode.h
 # page2 を RAM 化している間だけ見える seg5 上位8KB(=0xA000-0xBFFF)へ載せる。0xA000 リンク。
 # data-loc はバンクシーン(0xE000)と衝突しない高位フリー帯へ。rompack が bank OVL_BANK へ格納し、
 # シーン初期化で overlay_load() が seg5 上位へ複製する。
-OVL_SRCS = $(SRC)/banked/ovl_curtain.c $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_crush.c $(SRC)/banked/ovl_shock.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_power.c
+OVL_SRCS = $(SRC)/banked/ovl_pborder.c $(SRC)/banked/ovl_curtain.c $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_crush.c $(SRC)/banked/ovl_shock.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_power.c
 # ★主砲の弾幕(ovl_curtain)は**最後**にリンクする。中ボス用オーバレイ(ovl8)は弾幕を抜いた同じ .rel を同じ順で並べるので、
 #   パレット/クラッシュ/衝撃波/宙返り/増槽の static が 0xEE00〜 の同じ番地になる＝途中で入れ替えても状態がそのまま続く。
-OVL_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_power.rel $(BUILD)/ovl_curtain.rel
+OVL_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_power.rel $(BUILD)/ovl_curtain.rel $(BUILD)/ovl_pborder.rel
 $(BUILD)/ovl.ihx: $(OVL_SRCS) $(HDRS) $(BUILD)/ovlhead.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_curtain.c -o $(BUILD)/ovl_curtain.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl_palette.rel
@@ -374,6 +374,7 @@ $(BUILD)/ovl.ihx: $(OVL_SRCS) $(HDRS) $(BUILD)/ovlhead.rel $(BUILD)/resident_sym
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_shock.c -o $(BUILD)/ovl_shock.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl_rot.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_power.c -o $(BUILD)/ovl_power.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_pborder.c -o $(BUILD)/ovl_pborder.rel   # ★自機弾と敵弾に枠を交互に先に渡す。末尾にリンク(static をずらさない)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead.rel $(OVL_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovl.bin: $(BUILD)/ovl.ihx tools/ihx2bin.mjs $(SRC)/include/overlay.h
@@ -417,8 +418,8 @@ ROMPACK_BANKS += --asset 32 $(BUILD)/boss_vram.bin --asset 40 $(BUILD)/boss_vram
 
 # 撃沈シーンのオーバレイ: 撃破の瞬間に通常面のものと入れ替える。パレット(面の天候つき)は同じソースを別名で入れる。
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
-OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel $(BUILD)/ovl_part.rel
-$(BUILD)/ovl7.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(SRC)/banked/ovl_part.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
+OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel $(BUILD)/ovl_part.rel $(BUILD)/ovl_pborder.rel
+$(BUILD)/ovl7.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(SRC)/banked/ovl_part.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_SINK $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl7_palette.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_sink.c -o $(BUILD)/ovl_sink.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_part.c -o $(BUILD)/ovl_part.rel
@@ -469,7 +470,7 @@ ROMPACK_BANKS += --bank 29 $(BUILD)/ovl13.bin
 # 中ボス用オーバレイ: 通常面のオーバレイから主砲の弾幕を抜き、中ボスを足す。海の区間で出現の瞬間に入れ替え、戦艦の前に戻す。
 # ★共通部分は ovl.bin と同じ .rel を同じ順で(static の番地を揃えるため)。中ボス本体は最後。
 # ★増槽(ovl_power)は入れない: 中ボス戦の間は戦闘機(銀の敵機)が出ず、その前の増槽は海と一緒に流れ去っている。static も持たないので番地はずれない
-OVL8_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_midboss.rel
+OVL8_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_midboss.rel $(BUILD)/ovl_pborder.rel
 $(BUILD)/ovl8.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_midboss.c $(HDRS) $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel   # ★8KB 枠に収めるため常にサイズ優先(1フレーム1回の処理で速度は効かない)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
@@ -493,9 +494,10 @@ $(BUILD)/fw200_sh.bin: $(BUILD)/fw200.bin
 ROMPACK_BANKS += --asset 44 $(BUILD)/fw200.bin --bank 24 $(BUILD)/ovl8.bin --bank 62 $(BUILD)/bank62.bin
 
 # 2面の中ボス(PBY カタリナ)用オーバレイ: 共通部分は ovl8 と同じ .rel を同じ順で、入口表も ovlhead8 を共用。中ボス本体だけ差し替え。
-OVL9_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_pby.rel
+OVL9_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_pby.rel $(BUILD)/ovl9_pborder.rel
 $(BUILD)/ovl9.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_pby.c $(HDRS) $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_pby.c -o $(BUILD)/ovl_mb_pby.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DPBO_LITE $(INC) $(SRC)/banked/ovl_pborder.c -o $(BUILD)/ovl9_pborder.rel   # ★空きが無いので敵弾だけを相手にする版
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead8.rel $(OVL9_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovl9.bin: $(BUILD)/ovl9.ihx tools/ihx2bin.mjs
@@ -524,11 +526,12 @@ ROMPACK_BANKS += --bank 25 $(BUILD)/ovl9.bin --asset 48 $(BUILD)/pby.bin --bank 
 # 4面の中ボス(He 111 ×2)用オーバレイ: 共通部分は同じ順。宙返り(ovl_rot)だけ -DOVL_TWIN(下の帯の絵の表Bにも写す)。
 # 入口表は ovlhead10(slot14 の衝撃波の分割表を ovl_twin_shock へ差し替え)。
 # ★衝撃波(ovl_shock)は入れない(static を持たないので番地はずれない)。4面の中ボスの間は衝撃波のゆがみを出さない。
-OVL10_RELS = $(BUILD)/ovl10_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl10_rot.rel $(BUILD)/ovl_mb_he.rel
+OVL10_RELS = $(BUILD)/ovl10_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl10_rot.rel $(BUILD)/ovl_mb_he.rel $(BUILD)/ovl10_pborder.rel
 $(BUILD)/ovl10.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_he.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead10.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl10_palette.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl10_rot.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_he.c -o $(BUILD)/ovl_mb_he.rel
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DPBO_SMALL $(INC) $(SRC)/banked/ovl_pborder.c -o $(BUILD)/ovl10_pborder.rel   # ★空きが無いので画面外の自機弾を除かない版
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead10.rel $(OVL10_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead10.rel: $(SRC)/banked/ovlhead10.s | $(BUILD)
@@ -556,7 +559,7 @@ ROMPACK_BANKS += --bank 26 $(BUILD)/ovl10.bin --asset 20 $(BUILD)/he111.bin --ba
 
 # 3面の中ボス(駆逐艦)用オーバレイ: パレット処理は -DOVL_DD(3面の1行だけ・9 番を艦の色に)。宙返りは通常版。
 # 入口表は ovlhead11(slot14 を ovl_dd_split=艦の帯の横ずれと荒天のうねりへ)。衝撃波(ovl_shock)は入れない。
-OVL11_RELS = $(BUILD)/ovl11_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_dd.rel
+OVL11_RELS = $(BUILD)/ovl11_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_dd.rel $(BUILD)/ovl_pborder.rel
 $(BUILD)/ovl11.ihx: $(HWDIAG_DEPS) $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_dd.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead11.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_DD $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl11_palette.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_dd.c -o $(BUILD)/ovl_mb_dd.rel

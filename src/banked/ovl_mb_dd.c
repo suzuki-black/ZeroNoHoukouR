@@ -285,8 +285,10 @@ static void finish(void) {
 
 static void sink(u8 k) { sk[k] = SK_SINK; er[k] = DD_H; }
 
+void ovl_pb_order(void);   /* ovl_pborder.c */
 void ovl_mb_frame(void) {
     u8 k;
+    ovl_pb_order();   /* ★自機弾と敵弾に枠を交互に先に渡す(ovl_pborder.c) */
     if (st == ST_DONE) return;
     /* ★メガクラッシュ(津波)は稲妻を消すために背景を世界の正本から引き直す(scroll_repaint_all)。
        艦はリングへ直接描いてあるので**一緒に消える**(実機で「ボムで本体が消える」と指摘)。

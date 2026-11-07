@@ -140,8 +140,10 @@ static u8 move(s8 vx, s8 vy) {
     return out;
 }
 
+void ovl_pb_order(void);   /* ovl_pborder.c */
 void ovl_mb_frame(void) {
     u8 tgt = fcur;
+    ovl_pb_order();   /* ★自機弾と敵弾に枠を交互に先に渡す(ovl_pborder.c) */
     if (st == ST_DONE) return;
     if (g_mb_recol) { g_mb_recol = 0; coldirty = 1; }   /* ★津波が色表を奪った(scene_stage)。塗り直す */
     hb_update();   /* 背景の弾(ボムの後の読み直しも中でする) */

@@ -48,9 +48,11 @@ static void fade_frame(void) {
     }
 }
 
+void ovl_pb_order(void);   /* ovl_pborder.c */
 void ovl_power_frame(void) {
     u8 i;
     Entity *e;
+    ovl_pb_order();   /* ★自機弾と敵弾に枠を交互に先に渡す(ovl_pborder.c) */
     if (g_fade) fade_frame();
     if (g_drop) {
         g_drop = 0;
