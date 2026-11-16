@@ -18,7 +18,11 @@ OPT_DEBUG   = --max-allocs-per-node 3000
 # ★常駐だけ割付の探索を深くする。3000→9000 で 800B、**9000→20000 でさらに 79B** 小さくなった
 #   (どちらも実測。コードは一切変えていない)。常駐が詰まったら、コードを削る前にまずここを上げる。
 #   ★上げるとコンパイルは遅くなる。player/ramexec/entity は逆に太る/落ちるので Makefile で除外してある。
-OPT_RES     = --max-allocs-per-node 20000
+# ★2026-11-16: --opt-code-size を足して 50000 にした。常駐の残り 10B → 219B
+#   (scene_stage -86 / scene -42 / sound -25 / scroll -24 / hud -19 / vdp -17)。
+#   1〜5 面の自動通し(openMSX)で空き時間は変わらなかった。
+#   ★--opt-code-size は 50000 と組で効く。3000 や 20000 と組ませるとほとんどの部品が逆に太る(実測)。
+OPT_RES     = --opt-code-size --max-allocs-per-node 50000
 OPT_RELEASE = --opt-code-size --max-allocs-per-node 9000
 
 # ── MegaROM(ASCII8, 1MB=128bank×8KB)レイアウト(rompack が強制) ──
