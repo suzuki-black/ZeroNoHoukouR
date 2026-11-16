@@ -13,16 +13,20 @@ OPT_DEBUG   = --max-allocs-per-node 3000
 #   スピル(スタック往復)が減るので**小さくなる上に速くなる**。実測の節約: sound 264B /
 #   fire 186B / vdp 148B / hud 147B / scroll 38B / scene_stage 22B(合計 800B 強)。
 #   ★player.c と ramexec.c だけは逆に太る(+76/+9)ので 3000 のまま(Makefile で個別指定)。
-#   ★オーバレイ(8KB 窓に詰める)には効かせない: 1バイトも余っていないものがあり、
-#     太った瞬間にビルドが止まる。$(OPT) のままにしておく。
+#   ★オーバレイは 2026-11-16 から OPT_OVL(下)で作る。
 # ★常駐だけ割付の探索を深くする。3000→9000 で 800B、**9000→20000 でさらに 79B** 小さくなった
 #   (どちらも実測。コードは一切変えていない)。常駐が詰まったら、コードを削る前にまずここを上げる。
 #   ★上げるとコンパイルは遅くなる。player/ramexec/entity は逆に太る/落ちるので Makefile で除外してある。
 # ★2026-11-16: --opt-code-size を足して 50000 にした。常駐の残り 10B → 219B
 #   (scene_stage -86 / scene -42 / sound -25 / scroll -24 / hud -19 / vdp -17)。
-#   1〜5 面の自動通し(openMSX)で空き時間は変わらなかった。
+#   入力をフレーム数で押す自動通し(openMSX)で 1〜5 面とも同じ展開にして比べ、空き時間の差は -0.05〜+0.29ms だった。
 #   ★--opt-code-size は 50000 と組で効く。3000 や 20000 と組ませるとほとんどの部品が逆に太る(実測)。
 OPT_RES     = --opt-code-size --max-allocs-per-node 50000
+# ★2026-11-16: バンクのコード(艦の描画・面の準備・hot・オーバレイ)も同じ設定で作る。合計で約 3.3KB 縮んだ
+#   (hot 残り 1B→242B / ovl9 2B→603B / ovl10 2B→324B / ovl12 4B→420B / ovl13 17B→900B)。
+#   入力をフレーム数で押す自動通しで 1〜5 面とも同じ展開にして比べ、空き時間の差は ±0.12ms 以内だった。
+#   縮まない ovl12_palette(+9B)・hot_hb・pborder の 3 版は Makefile で従来の指定のまま。
+OPT_OVL     = --opt-code-size --max-allocs-per-node 50000
 OPT_RELEASE = --opt-code-size --max-allocs-per-node 9000
 
 # ── MegaROM(ASCII8, 1MB=128bank×8KB)レイアウト(rompack が強制) ──

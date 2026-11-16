@@ -283,13 +283,13 @@ $(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(HDRS) $(BUILD)/version.h $(BUILD)/ba
 # バンク化した冷たいコード(シーン以外)。艦の重い描画本体 banked/ship_render.c → bank16。
 # 常駐の ship_aag が薄いラッパで bcall、こちらの banked_entry が g_shipargs を読んで描画。
 $(BUILD)/ship_render.ihx: $(SRC)/banked/ship_render.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/ship_render.c -o $(BUILD)/ship_render.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(INC) $(SRC)/banked/ship_render.c -o $(BUILD)/ship_render.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/ship_render.rel $(BUILD)/resident_syms.rel -o $@
 
 # 冷たい手続き生成(戦闘機8方向)を bank19 へ。常駐リクレイムのため sprites.c から移設。
 $(BUILD)/gen_planes.ihx: $(SRC)/banked/gen_planes.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/gen_planes.c -o $(BUILD)/gen_planes.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(INC) $(SRC)/banked/gen_planes.c -o $(BUILD)/gen_planes.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/gen_planes.rel $(BUILD)/resident_syms.rel -o $@
 	@DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/gen_planes.map | head -1); \
@@ -297,13 +297,13 @@ $(BUILD)/gen_planes.ihx: $(SRC)/banked/gen_planes.c $(HDRS) $(BUILD)/bankhead.re
 
 # アトラクトモードのデモ(自動操縦)を bank68 へ。デモ中は scene.c のループが毎フレーム bcall する。
 $(BUILD)/demo.ihx: $(SRC)/banked/demo.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/demo.c -o $(BUILD)/demo.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(INC) $(SRC)/banked/demo.c -o $(BUILD)/demo.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/demo.rel $(BUILD)/resident_syms.rel -o $@
 
 # 面の準備の配置処理(対空砲の初期化・主砲/停泊機の配置)を bank30 へ。常駐リクレイムのため scene_stage.c から移設。
 $(BUILD)/coldsetup.ihx: $(SRC)/banked/coldsetup.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/coldsetup.c -o $(BUILD)/coldsetup.rel   # ★$(DEFS) が要る(DEBUG_PROF でスネアを写さない・OPLLTEST の和音)
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/coldsetup.c -o $(BUILD)/coldsetup.rel   # ★$(DEFS) が要る(DEBUG_PROF でスネアを写さない・OPLLTEST の和音)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/coldsetup.rel $(BUILD)/resident_syms.rel -o $@
 
@@ -335,7 +335,7 @@ $(BUILD)/pcm_cfg.inc: FORCE
 	@if cmp -s $@.tmp $@; then rm -f $@.tmp; else mv $@.tmp $@; fi
 FORCE:
 $(BUILD)/hot.ihx: $(SRC)/banked/hot.c $(SRC)/banked/hot_hb.c $(SRC)/banked/hot_pcm.s $(BUILD)/pcm_cfg.inc $(HDRS) $(BUILD)/hothead.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/hot.c -o $(BUILD)/hot.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(INC) $(SRC)/banked/hot.c -o $(BUILD)/hot.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(INC) $(SRC)/banked/hot_hb.c -o $(BUILD)/hot_hb.rel   # ★中ボスの背景弾はサイズ優先
 	sdasz80 -I$(BUILD) -o $(BUILD)/hot_pcm.rel $(SRC)/banked/hot_pcm.s   # ★面中の PCM(割込みから呼ぶ)。必ずリンクの最後=hot_ram の末尾
 	@HA=$$(awk '/^DEF _hot_ram /{print $$3}' $(BUILD)/rom.noi); \
@@ -368,12 +368,12 @@ OVL_SRCS = $(SRC)/banked/ovl_pborder.c $(SRC)/banked/ovl_curtain.c $(SRC)/banked
 #   パレット/クラッシュ/衝撃波/宙返り/増槽の static が 0xEE00〜 の同じ番地になる＝途中で入れ替えても状態がそのまま続く。
 OVL_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_power.rel $(BUILD)/ovl_curtain.rel $(BUILD)/ovl_pborder.rel
 $(BUILD)/ovl.ihx: $(OVL_SRCS) $(HDRS) $(BUILD)/ovlhead.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_curtain.c -o $(BUILD)/ovl_curtain.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl_palette.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_crush.c -o $(BUILD)/ovl_crush.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_shock.c -o $(BUILD)/ovl_shock.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl_rot.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_power.c -o $(BUILD)/ovl_power.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_curtain.c -o $(BUILD)/ovl_curtain.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl_palette.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_crush.c -o $(BUILD)/ovl_crush.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_shock.c -o $(BUILD)/ovl_shock.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl_rot.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_power.c -o $(BUILD)/ovl_power.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_pborder.c -o $(BUILD)/ovl_pborder.rel   # ★自機弾と敵弾に枠を交互に先に渡す。末尾にリンク(static をずらさない)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead.rel $(OVL_RELS) $(BUILD)/resident_syms.rel -o $@
@@ -398,9 +398,9 @@ $(BUILD)/boss_vram.bin $(BUILD)/boss_vram0.bin $(BUILD)/boss_misc.bin: $(BUILD)/
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
 OVL6_RELS = $(BUILD)/ovl6_palette.rel $(BUILD)/ovl6_rot.rel $(BUILD)/ovl_final.rel
 $(BUILD)/ovl6.ihx: $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_final.c $(HDRS) $(BUILD)/boss_frames.h $(BUILD)/ovlhead6.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) --opt-code-size $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl6_palette.rel
-	sdcc -m$(TARGET) -c $(OPT) --opt-code-size $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl6_rot.rel
-	sdcc -m$(TARGET) -c $(OPT) --opt-code-size $(DEFS) $(INC) $(SRC)/banked/ovl_final.c -o $(BUILD)/ovl_final.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl6_palette.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) -DOVL_FINAL $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl6_rot.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_final.c -o $(BUILD)/ovl_final.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead6.rel $(OVL6_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead6.rel: $(SRC)/banked/ovlhead6.s | $(BUILD)
@@ -420,9 +420,9 @@ ROMPACK_BANKS += --asset 32 $(BUILD)/boss_vram.bin --asset 40 $(BUILD)/boss_vram
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
 OVL7_RELS = $(BUILD)/ovl7_palette.rel $(BUILD)/ovl_sink.rel $(BUILD)/ovl_part.rel $(BUILD)/ovl_pborder.rel
 $(BUILD)/ovl7.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_palette.c $(SRC)/banked/ovl_sink.c $(SRC)/banked/ovl_part.c $(HDRS) $(BUILD)/ovlhead7.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_SINK $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl7_palette.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_sink.c -o $(BUILD)/ovl_sink.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_part.c -o $(BUILD)/ovl_part.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) -DOVL_SINK $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl7_palette.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_sink.c -o $(BUILD)/ovl_sink.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_part.c -o $(BUILD)/ovl_part.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead7.rel $(OVL7_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead7.rel: $(SRC)/banked/ovlhead7.s | $(BUILD)
@@ -443,9 +443,9 @@ ROMPACK_BANKS += --bank 28 $(BUILD)/ovl7.bin
 # ★static は 0xEE00〜0xEEFF に収めること(0xEF00 は分割表)。リンク後に検証する。
 OVL13_RELS = $(BUILD)/ovl_spin.rel $(BUILD)/ovl_crack.rel $(BUILD)/ovl_tilt.rel
 $(BUILD)/ovl13.ihx: $(SRC)/banked/ovl_spin.c $(SRC)/banked/ovl_crack.c $(SRC)/banked/ovl_tilt.c $(HDRS) $(BUILD)/ovlhead13.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_spin.c -o $(BUILD)/ovl_spin.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_crack.c -o $(BUILD)/ovl_crack.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $(SRC)/banked/ovl_tilt.c -o $(BUILD)/ovl_tilt.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_spin.c -o $(BUILD)/ovl_spin.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_crack.c -o $(BUILD)/ovl_crack.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_tilt.c -o $(BUILD)/ovl_tilt.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead13.rel $(OVL13_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead13.rel: $(SRC)/banked/ovlhead13.s | $(BUILD)
@@ -472,7 +472,7 @@ ROMPACK_BANKS += --bank 29 $(BUILD)/ovl13.bin
 # ★増槽(ovl_power)は入れない: 中ボス戦の間は戦闘機(銀の敵機)が出ず、その前の増槽は海と一緒に流れ去っている。static も持たないので番地はずれない
 OVL8_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_midboss.rel $(BUILD)/ovl_pborder.rel
 $(BUILD)/ovl8.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_midboss.c $(HDRS) $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel   # ★8KB 枠に収めるため常にサイズ優先(1フレーム1回の処理で速度は効かない)
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_midboss.c -o $(BUILD)/ovl_midboss.rel   # ★8KB 枠に収めるため常にサイズ優先(1フレーム1回の処理で速度は効かない)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead8.rel $(OVL8_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead8.rel: $(SRC)/banked/ovlhead8.s | $(BUILD)
@@ -496,7 +496,7 @@ ROMPACK_BANKS += --asset 44 $(BUILD)/fw200.bin --bank 24 $(BUILD)/ovl8.bin --ban
 # 2面の中ボス(PBY カタリナ)用オーバレイ: 共通部分は ovl8 と同じ .rel を同じ順で、入口表も ovlhead8 を共用。中ボス本体だけ差し替え。
 OVL9_RELS = $(BUILD)/ovl_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_shock.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_pby.rel $(BUILD)/ovl9_pborder.rel
 $(BUILD)/ovl9.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_pby.c $(HDRS) $(BUILD)/ovlhead8.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_pby.c -o $(BUILD)/ovl_mb_pby.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_mb_pby.c -o $(BUILD)/ovl_mb_pby.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DPBO_LITE $(INC) $(SRC)/banked/ovl_pborder.c -o $(BUILD)/ovl9_pborder.rel   # ★空きが無いので敵弾だけを相手にする版
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead8.rel $(OVL9_RELS) $(BUILD)/resident_syms.rel -o $@
@@ -528,9 +528,9 @@ ROMPACK_BANKS += --bank 25 $(BUILD)/ovl9.bin --asset 48 $(BUILD)/pby.bin --bank 
 # ★衝撃波(ovl_shock)は入れない(static を持たないので番地はずれない)。4面の中ボスの間は衝撃波のゆがみを出さない。
 OVL10_RELS = $(BUILD)/ovl10_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl10_rot.rel $(BUILD)/ovl_mb_he.rel $(BUILD)/ovl10_pborder.rel
 $(BUILD)/ovl10.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_he.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead10.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl10_palette.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl10_rot.rel
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_he.c -o $(BUILD)/ovl_mb_he.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl10_palette.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) -DOVL_TWIN $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl10_rot.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_mb_he.c -o $(BUILD)/ovl_mb_he.rel
 	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DPBO_SMALL $(INC) $(SRC)/banked/ovl_pborder.c -o $(BUILD)/ovl10_pborder.rel   # ★空きが無いので画面外の自機弾を除かない版
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead10.rel $(OVL10_RELS) $(BUILD)/resident_syms.rel -o $@
@@ -561,8 +561,8 @@ ROMPACK_BANKS += --bank 26 $(BUILD)/ovl10.bin --asset 20 $(BUILD)/he111.bin --ba
 # 入口表は ovlhead11(slot14 を ovl_dd_split=艦の帯の横ずれと荒天のうねりへ)。衝撃波(ovl_shock)は入れない。
 OVL11_RELS = $(BUILD)/ovl11_palette.rel $(BUILD)/ovl_crush.rel $(BUILD)/ovl_rot.rel $(BUILD)/ovl_mb_dd.rel $(BUILD)/ovl_pborder.rel
 $(BUILD)/ovl11.ihx: $(HWDIAG_DEPS) $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_dd.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead11.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT) $(DEFS) -DOVL_DD $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl11_palette.rel
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_dd.c -o $(BUILD)/ovl_mb_dd.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) -DOVL_DD $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl11_palette.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_mb_dd.c -o $(BUILD)/ovl_mb_dd.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead11.rel $(OVL11_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead11.rel: $(SRC)/banked/ovlhead11.s | $(BUILD)
@@ -588,9 +588,9 @@ $(BUILD)/hwdiag_sums.h: $(BUILD)/rom.ihx tools/gen_hwdiag_sums.mjs
 OVL12_RELS = $(BUILD)/ovl12_palette.rel $(BUILD)/ovl12_rot.rel $(BUILD)/ovl_mb_p61.rel $(BUILD)/ovl12_bgbul.rel
 $(BUILD)/ovl12.ihx: $(BUILD)/ovl.ihx $(SRC)/banked/ovl_mb_p61.c $(SRC)/banked/ovl_bgbul.c $(SRC)/banked/ovl_rot.c $(SRC)/banked/ovl_palette.c $(HDRS) $(BUILD)/ovlhead12.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DOVL_P61 $(INC) $(SRC)/banked/ovl_palette.c -o $(BUILD)/ovl12_palette.rel
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) -DOVL_MAG $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl12_rot.rel
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_mb_p61.c -o $(BUILD)/ovl_mb_p61.rel
-	sdcc -m$(TARGET) -c --opt-code-size --max-allocs-per-node 9000 $(DEFS) $(INC) $(SRC)/banked/ovl_bgbul.c -o $(BUILD)/ovl12_bgbul.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) -DOVL_MAG $(INC) $(SRC)/banked/ovl_rot.c -o $(BUILD)/ovl12_rot.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_mb_p61.c -o $(BUILD)/ovl_mb_p61.rel
+	sdcc -m$(TARGET) -c $(OPT_OVL) $(DEFS) $(INC) $(SRC)/banked/ovl_bgbul.c -o $(BUILD)/ovl12_bgbul.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xEE00 \
 	     $(BUILD)/ovlhead12.rel $(OVL12_RELS) $(BUILD)/resident_syms.rel -o $@
 $(BUILD)/ovlhead12.rel: $(SRC)/banked/ovlhead12.s | $(BUILD)
