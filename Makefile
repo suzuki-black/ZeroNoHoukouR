@@ -758,7 +758,25 @@ webmsx:
 	$(MAKE) WEBMSX=1
 	@mv GAME.ROM WEBMSX.ROM && echo "  WEBMSX.ROM を作った(WebMSX 用。製品は make clean && make)"
 
-.PHONY: send send-test verify hstest webmsx run clean FORCE
+# ブラウザ版(itch.io)が読む ROM。web/index.html が webmsx.org を iframe で呼び、webmsx.org がこれを
+# raw.githubusercontent.com から読む(webmsx.org は別オリジンなので、CORS を返すここに置くしかない)。
+# ★git で追跡する「バージョンを保持するファイル」。URL は main を指すので、push した瞬間に遊ぶ人全員が掴む。
+#   リリースを切るとき(タグを打つ前)にだけ make web → make release-check。開発中の ROM を置かない。
+#   中身は製品の GAME.ROM(WEBMSX.ROM ではない: webmsx.org は turboR の PCM が無く、ゲームが起動時に PCM を切る)。
+WEB_ROM := web/zeronohoukou.rom
+
+web: GAME.ROM
+	cp GAME.ROM $(WEB_ROM)
+	@shasum -a 256 $(WEB_ROM)
+
+# 食い違っていたら止める。普段の make では走らせない
+release-check: GAME.ROM
+	@cmp -s GAME.ROM $(WEB_ROM) || { \
+	  echo "$(WEB_ROM) が GAME.ROM と違います。make web で更新してください"; \
+	  exit 1; }
+	@echo "$(WEB_ROM) は最新です"
+
+.PHONY: send send-test verify hstest webmsx web release-check run clean FORCE
 
 clean:
 	rm -rf $(BUILD) GAME.ROM

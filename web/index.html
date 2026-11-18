@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<!--
+  SHIN ZERO NO HOUKOU - browser version (for itch.io and any static host)
+
+  This page embeds WebMSX (https://webmsx.org) in an iframe. It does NOT bundle
+  the emulator: WebMSX ships the MSX system BIOS inside wmsx.js, and we are not
+  in a position to redistribute that. Linking to the emulator keeps this page to
+  our own ROM only. WebMSX's author has asked that embeddings keep the original
+  experience and credit the project - the footer below does that.
+
+  The ROM is read by webmsx.org, which is a different origin, so it has to be
+  served with CORS. raw.githubusercontent.com sends `Access-Control-Allow-Origin: *`;
+  itch.io's own file hosting does not, so the ROM cannot live inside the itch ZIP.
+
+  URL parameters, and why each one is here:
+    ROM          the cartridge, web/zeronohoukou.rom on raw.githubusercontent.com
+                 (the latest release; `make web` copies it, `make release-check` checks it)
+    ROM_FORMAT   ASCII8 - an 8 Mbit (1 MB) ASCII8 MegaROM. Auto-detection finds it
+                 too; stating it removes the guess.
+    M            MSXTRJ (MSX turboR, Japan). The game runs only on a turboR: on
+                 anything older it stops at "*** MSX turboR REQUIRED ***".
+                 WebMSX does not emulate the turboR PCM; the game notices that at
+                 boot and switches its PCM off (PSG and FM still play).
+    FAST_BOOT    0 - off. Any other value runs the boot at 10x for a FRAME COUNT,
+                 not until the BIOS finishes, so a count that outlasts the boot
+                 runs the GAME at 10x, and inside a nested iframe the emulator can
+                 stall on a held note.
+    OPLL_VOL     raise the FM volume so the music is audible.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SHIN ZERO NO HOUKOU</title>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --fg: #d4d9e0;
+    --dim: #7f8894;
+    --line: #20262e;
+    --link: #e6b35c;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  #screen {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    border: 0;
+    display: block;
+    background: #000;
+  }
+  footer {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--line);
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--dim);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    align-items: baseline;
+  }
+  footer b { color: var(--fg); font-weight: 600; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  @media (max-width: 640px) {
+    footer { padding: 6px 10px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<iframe
+  id="screen"
+  title="SHIN ZERO NO HOUKOU running on WebMSX"
+  allow="gamepad; fullscreen; autoplay"
+  src="https://webmsx.org/?ROM=https%3A%2F%2Fraw.githubusercontent.com%2Fsuzuki-black%2FZeroNoHoukouR%2Fmain%2Fweb%2Fzeronohoukou.rom&amp;ROM_FORMAT=ASCII8&amp;M=MSXTRJ&amp;FAST_BOOT=0&amp;OPLL_VOL=F"></iframe>
+
+<footer>
+  <span><b>Click the screen first</b> &mdash; that starts the sound. Arrow keys move, <b>Space</b> fires, <b>B</b> or <b>M</b> is the mega crash, fire + B loops.</span>
+  <span>Running as an <b>MSX turboR</b>, but <b>WebMSX does not emulate the turboR PCM</b>: the sampled snare and the voices stay silent here (PSG and FM play). To hear them, use a real turboR, or <a href="https://openmsx.org/" target="_blank" rel="noopener">openMSX</a> with the system ROMs dumped from your own turboR.</span>
+  <span>Emulation by <a href="https://webmsx.org" target="_blank" rel="noopener">WebMSX</a>. Game source and ROM downloads: <a href="https://github.com/suzuki-black/ZeroNoHoukouR" target="_blank" rel="noopener">GitHub</a>.</span>
+</footer>
+
+</body>
+</html>
