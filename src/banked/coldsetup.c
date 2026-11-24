@@ -19,6 +19,7 @@
 #include "opll.h"        /* ★FM の検出(起動時1回。g_cold_mode=COLD_OPLL で呼ばれる) */
 #include "rank.h"        /* ★ランキングの表の初期値(起動時1回。COLD_OPLL に相乗り) */
 #include "msx.h"         /* MSX_VER(0x002D: 0=MSX1 / 1=MSX2 / 2=MSX2+ / 3=turboR) */
+#include "sound.h"       /* sfx / SFX_HIT(ポーズの受付の音) */
 #include "pcm.h"         /* ★PCM が使えるかの検出(起動時1回)＋スネアの素材を RAM へ写す */
 #ifndef DEBUG_PROF
 #include "snare_data.h"  /* 自動生成(tools/gen_snare.py)。256B の波形 */
@@ -382,8 +383,70 @@ static void view_wait(void) {
     }
 }
 
+/* ───────── ポーズ(F1)の表示。scene_stage.c が止めている間 毎フレーム呼ぶ(g_cold_mode=COLD_PAUSE) ─────────
+   ・文字は「PAUSE」を画面の最上段の中央(スコアと同じ行)に、16x16 のスプライト 3 枚(2 文字ずつ)で出す。
+     最上段は どの面でも スプライト表 A・等倍(最終面の HUD 帯・4面の中ボスの上の帯も)なので、属性はセット A だけに書く。
+     セット B へ書くと、最終面ではボス帯の枠(ボスの絵)を潰す。
+   ・絵は津波のパターン枠(SPR_WAVE0 から 3 枚)を借りる。津波はメガクラッシュのたびに VRAM の控えから
+     描き直す(ovl_crush.c の wave_init)ので、借りたまま返さなくてよい。最終面の第 2 の表・4面の表 B への写しも
+     既存の写し(g_spr_patb)が面倒を見る。
+   ・5面の中ボス(P-61)の間は画面全体が拡大＋絵の表 B なので、表 B にも書いて 32 ドット間隔で並べる(文字は 2 倍)。
+   ・枠は自機(g_spr_base)の直後の 3 枚を借りる。止めている間はそこに居た敵か弾が見えなくなる。抜けるときに
+     画面外へ退避し、色の控えを捨てて、次のフレームのエンティティの描画に塗り直させる。 */
+#define PZ_PAT   SPR_WAVE0
+#define PZ_JIFFY (*(volatile u16 *)0xFC9E)
+#define PZ_FINAL_INTRO 600   /* 最終面: 曲(FINAL_BGM)の頭からこの tick まではボスの登場(イントロ 576f に合わせて動く)。
+                                止めると曲だけ先へ進んでずれるので、予約のまま待たせる */
+extern volatile u16 snd_ticks;
+extern u16 g_bgm_t0;
+static void pause_frame(void) {
+    u8 i, s0 = (u8)(g_spr_base + 1);
+    u8 big = (u8)(g_mb == MB_ACTIVE && curstage == 4);
+    if (g_cold_mode == COLD_PAUSE_IN) {        /* 予約を止められる場面か(宙返り・警報は常駐が見た) */
+        if (curstage == STAGE_FINAL && (u16)(snd_ticks - g_bgm_t0) < PZ_FINAL_INTRO) return;
+        g_pause_req = 0; g_pause = 1;
+    } else if (g_input_edge & INP_PAUSE) {     /* F1 を押した瞬間 */
+        if (g_pause) {                         /* 抜ける */
+            g_pause = 0;
+            for (i = 0; i < 3; i++) vdp_sprite_pos_a((u8)(s0 + i), 0, 220, PZ_PAT);
+            ent_spr_cache_inval(0);
+            if (g_mb == MB_ACTIVE) g_mb_recol = 1;   /* 中ボスが手前の枠に居たときのため */
+            return;
+        }
+        if (!g_pause_req) { g_pause_req = 1; sfx(1, SFX_HIT); }   /* 予約と受付の音(止められる場面なら同じフレームで止まる) */
+        return;
+    }
+    if (g_pause == 1) {                        /* 入った最初のフレーム: 絵と色 */
+        static const char txt[6] = { 'P', 'A', 'U', 'S', 'E', ' ' };
+        u8 buf[32], r, sv = g_spr_patb;
+        g_pause = 2;
+        if (big) g_spr_patb = 1;
+        for (i = 0; i < 3; i++) {
+            const u8 *g;
+            for (r = 0; r < 32; r++) buf[r] = 0;
+            g = vdp_glyph((u8)txt[i * 2]);
+            for (r = 0; r < 8; r++) buf[r] = g[r];
+            if (txt[i * 2 + 1] != ' ') {
+                g = vdp_glyph((u8)txt[i * 2 + 1]);
+                for (r = 0; r < 8; r++) buf[16 + r] = g[r];
+            }
+            vdp_sprite_pattern((u8)(PZ_PAT + i * 4), buf);
+        }
+        g_spr_patb = sv;
+        for (i = 0; i < 3; i++) {              /* 色はセット A だけ(白) */
+            vdp_write_addr((u16)(0x7400 + (u16)(s0 + i) * 16));
+            for (r = 0; r < 16; r++) CS_DAT = 15;
+        }
+    }
+    {   u8 y = (PZ_JIFFY & 32) ? 220 : 2;      /* 約 0.5 秒ずつ点滅(デモの PRESS SPACE KEY とそろえる) */
+        for (i = 0; i < 3; i++)
+            vdp_sprite_pos_a((u8)(s0 + i), big ? (u8)(88 + i * 32) : (u8)(108 + i * 16), y, (u8)(PZ_PAT + i * 4));
+    }
+}
+
 void banked_entry(void) {
     u8 i;
+    if (g_cold_mode == COLD_PAUSE || g_cold_mode == COLD_PAUSE_IN) { pause_frame(); return; }
     if (g_cold_mode >= COLD_FB0) { fb_bake((u8)(g_cold_mode - COLD_FB0)); return; }
     if (g_cold_mode == COLD_VIEW) { view_wait(); return; }
     if (g_cold_mode == COLD_SETB) { setb_init(); return; }

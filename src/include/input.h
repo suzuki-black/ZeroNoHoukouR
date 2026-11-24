@@ -12,6 +12,7 @@
 #define INP_LEFT  0x08
 #define INP_TRIG  0x10   /* トリガA: スペース or ジョイ トリガ1(発砲/決定) */
 #define INP_TRIGB 0x20   /* トリガB: ジョイ トリガ2 or キーM(コナミコマンドのB等) */
+#define INP_PAUSE 0x40   /* F1(row6 bit5): ポーズ。★本体の PAUSE キーは使わない(ハードで CPU を止める) */
 
 extern u8 g_input;       /* 今フレームの押下状態     */
 extern u8 g_input_edge;  /* 今フレーム“押した瞬間”   */

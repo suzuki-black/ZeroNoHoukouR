@@ -120,6 +120,7 @@ The ROM is on the [releases page](https://github.com/suzuki-black/ZeroNoHoukouR/
 | Space / keyboard **A** / trigger A | Fire · confirm |
 | Keyboard **B** or **M** / trigger B (alone) | Mega crash (bomb) |
 | Fire + B (A+B) | Loop manoeuvre |
+| F1 | Pause (the music keeps playing). Pressed during a destruction sequence, a mega crash, a loop or the final boss's entrance, it beeps and pauses as soon as that ends. Not the machine's own PAUSE key |
 | ↑↑↓↓←→←→ B A on the title screen | Hidden settings menu (difficulty, lives, durability, starting stage, continue, invincibility, **FM sound**, **PCM sound**, screen viewer, **sound test**) |
 
 ### Requirements
@@ -358,6 +359,7 @@ silhouettes may differ from the real thing.)
 | スペース／キーボード **A**／トリガーA | 発射・決定 |
 | キーボード **B** または **M**／トリガーB（単押し） | メガクラッシュ（ボム） |
 | 撃ちながら B（A＋B） | 宙返り |
+| F1 | ポーズ（曲は止まりません）。撃沈の演出・メガクラッシュ・宙返り・最終面のボスの登場の間に押すと、受付の音が鳴り、それが終わったところで止まります。本体の PAUSE キーではありません |
 | タイトルで ↑↑↓↓←→←→ B A | 隠しの設定メニュー（難易度・残機・耐久・開始面・継続・無敵・**FM音源**・**PCM**・画面ビューア・**サウンドテスト**） |
 
 ### 動作環境

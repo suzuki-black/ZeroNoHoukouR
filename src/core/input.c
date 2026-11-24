@@ -55,6 +55,22 @@ static void read_row2(void) __naked {
     __endasm;
 }
 
+/* row6 を読む。F1=bit5 → ポーズ(INP_PAUSE)。 */
+static u8 g_raw6;
+static void read_row6(void) __naked {
+    __asm
+        di
+        in   a, (0xAA)
+        and  #0xF0
+        or   #6              ; row 6 を選択
+        out  (0xAA), a
+        in   a, (0xA9)
+        ei
+        ld   (_g_raw6), a
+        ret
+    __endasm;
+}
+
 /* ジョイスティック port1 を PSG 経由で読む(R#15 bit6=0 で port1 選択 → R#14 読み)。
    ラッチ(0xA0)を音ISRと共有するので di で原子化。結果(負論理)を g_joy へ。 */
 static void read_joy1(void) __naked {
@@ -80,6 +96,7 @@ void input_poll(void) {
     read_row8();
     read_row4();
     read_row2();
+    read_row6();
     read_joy1();
     /* キーボード row8: bit7=R,6=D,5=U,4=L,0=SPACE(押下で0) */
     if (!(g_raw & 0x80)) cur |= INP_RIGHT;
@@ -99,6 +116,8 @@ void input_poll(void) {
     /* キーボード row2: A=bit6 → ボタン1(トリガA), B=bit7 → ボタン2(トリガB)。コナミ …BA 用 */
     if (!(g_raw2 & 0x40)) cur |= INP_TRIG;
     if (!(g_raw2 & 0x80)) cur |= INP_TRIGB;
+    /* キーボード row6: F1=bit5 → ポーズ */
+    if (!(g_raw6 & 0x20)) cur |= INP_PAUSE;
     g_input = cur;
     g_input_edge = (u8)(cur & ~prev);   /* 押した瞬間 */
 }

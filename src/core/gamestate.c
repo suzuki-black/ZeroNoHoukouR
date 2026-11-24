@@ -19,6 +19,8 @@ u8  g_lives;
 u8  g_php;
 u8  g_rage;
 u8  g_loop_t;     /* 宙返り中の残りフレーム(0=通常) */
+u8  g_pause;      /* ポーズ(gamestate.h) */
+u8  g_pause_req;
 u8  g_loop_cd;    /* 宙返りのクールダウン */
 u8  g_loop_alt;   /* 宙返り中の高度(影を離す量) */
 u8  g_shock_t;    /* 衝撃波ディストーションの残りフレーム(0=なし) */

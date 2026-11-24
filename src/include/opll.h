@@ -43,6 +43,8 @@ extern u8 g_fm;       /* 設定メニュー: 1=FM を鳴らす(既定) / 0=PSG �
 #define COLD_SETB   5  /* 同: スプライトのセットBを用意する(色表を色 11 で埋め全枚を画面外へ。面の準備で1回。同上) */
 #define COLD_VIEW   6  /* 同: 画面ビューアのトリガ待ち(隠し設定から。常駐の節約) */
 #define COLD_FB0    7  /* 同: fb_ram の火球 k 枚目を page0 へ並べる(COLD_FB0 + k。k=0..5。面の準備で 6 回。同上) */
+#define COLD_PAUSE  13 /* 同: ポーズ。F1 の予約・解除と、止めている間の表示(常駐の節約)。★COLD_FB0 + k の後ろなので判定は FB0 より先に */
+#define COLD_PAUSE_IN 14 /* 同: 予約があり止められる場面なら止める(最終面のボスの登場はここで待たせる) */
 extern u8 g_cold_mode;
 void opll_w(u8 reg, u8 val);   /* レジスタ書込み(規定のウェイト込み)。g_opll=0 なら何もしない */
 

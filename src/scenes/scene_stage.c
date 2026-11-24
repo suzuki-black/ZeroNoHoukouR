@@ -815,6 +815,7 @@ static void stage_music(void) {
 
 /* ミス再挑戦: 開始カード/ファンファーレ無しで即再構築。海(phase0)から再開なので海イントロ共通BGMへ戻す。 */
 static void stage_setup(void) {
+    g_pause_req = 0;   /* ★ポーズの予約は面をまたがない(撃沈演出の後は結果画面=キー待ち。ミスの後も同じ) */
     stage_build();
     stage_begin_display();
     stage_music();   /* ★地形を表示してから曲を始める(下の stage_intro の★) */
@@ -1018,6 +1019,12 @@ u8 stage_update(void) {
         g_opll = g_fm ? g_opll_hw : OPLL_NONE;     /* ★FM の設定を戻す(demo.c で抜けるときと同じ。タイトルの曲は入場より前に始まる) */
         return SC_TITLE;
     }
+    /* ★ポーズ(F1。gamestate.h)。押したら予約して受付の音(止められる場面ならこのフレームの下で止まる)。
+       止めている間はここで抜ける＝ヒットストップと同じ形(分割表・HUD・曲は scene.c のループと割込みが回し続ける)。 */
+    if ((g_input_edge & INP_PAUSE) || g_pause) {   /* 中身(予約・解除・表示)は冷たいバンク(常駐の節約) */
+        cold_call(COLD_PAUSE);
+        if (g_pause) return SCENE_NONE;
+    }
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
     /* ★メガクラッシュ(設計メモ §4-1「安い出力で最大の爽快」)。Bボタンで発動。
        発動中はスクロールもAIもBGMも全部止め、画面全体を雷光が覆う。数瞬のち(CRUSH_WIPE)に
@@ -1141,6 +1148,12 @@ u8 stage_update(void) {
        以降 phase処理(scroll_to/蛇行)・HUD・ホット区間(海/AI/衝突/描画/炎)まで page1常駐コードを
        R800で約3.8×速フェッチ。区間内で唯一バンキングする bgm_play(艦出現時1回)だけ一時cartへ退避する。
        区間の出口(fire_draw後 と 全早期return経路)で必ず ramx_use_cart() に戻す。 */
+    /* ★ポーズの予約をここで止める(撃沈演出・メガクラッシュ・ヒットストップは上で抜けている)。宙返り・警報の間は待つ。
+       最終面のボスの登場を待つ判定は冷たいバンク(COLD_PAUSE_IN)。 */
+    if (g_pause_req && !g_loop_t && !g_alert) {
+        cold_call(COLD_PAUSE_IN);
+        if (g_pause) return SCENE_NONE;
+    }
     ramx_use_ram();
 
     /* ★パレットエンジン(設計メモ §2-A)。ホット区間の**先頭**で呼ぶ:
