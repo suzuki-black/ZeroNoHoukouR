@@ -135,6 +135,11 @@ static u8 run_ending(void) {
     vdp_set_hscroll(0, 0);   /* ★横スクロール(蛇行weaveX)も解除=実プレイ(クリア→エンディング)で残ると全体が右に寄る */
     vdp_set_display_page(0);
     vdp_fill(0, 0, 256, 256, END_BG);      /* page0 リングをクリア */
+    /* ★塗り終わるまではフレーム待ちで回す。LMMV で 256x256 は約 0.39 秒かかり、すぐ次の vdp_fill(行クリア)の
+         vdp_cmd_wait でそのまま待つと、その間 vdp_wait_frame が回らず FM の予約が書かれない。曲は割込みが鳴らすので
+         PSG だけが先に鳴り、FM は一拍遅れて入っていた(撃墜→結果画面→エンディングの経路。設定画面から直接入ると、
+         塗る前にシーンのループの fm_flush が一度回るので出なかった。openMSX で OPLL と PSG への書き込みを時刻つきで確認) */
+    while (end_cmd_busy()) vdp_wait_frame();
 
     stopcam = (s16)((NROWS - 1) * 16 + 24);
     cam = -212;
