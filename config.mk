@@ -26,6 +26,10 @@ OPT_RES     = --opt-code-size --max-allocs-per-node 50000
 #   (hot 残り 1B→242B / ovl9 2B→603B / ovl10 2B→324B / ovl12 4B→420B / ovl13 17B→900B)。
 #   入力をフレーム数で押す自動通しで 1〜5 面とも同じ展開にして比べ、空き時間の差は ±0.12ms 以内だった。
 #   縮まない ovl12_palette(+9B)・hot_hb・pborder の 3 版は Makefile で従来の指定のまま。
+#   ★2026-11-25: gen_planes(bank19)は従来の指定に戻した。--opt-code-size で alert_bits の (u16)(256 + 行) が
+#     「H を 0 にしないまま inc h」のコードになり(SDCC 4.6)、敵艦発見の文字が崩れた。上の自動通しは時間しか
+#     比べていなかったので見逃した。★設定を変えたら、同じ入力の通しで**画面**を撮って前の版と比べること
+#     (等速で撮る。全速のままだと screenshot が古いコマを返す)。他の場面(面中・開始カード・結果画面・デモ)は比べて同じだった。
 OPT_OVL     = --opt-code-size --max-allocs-per-node 50000
 OPT_RELEASE = --opt-code-size --max-allocs-per-node 9000
 

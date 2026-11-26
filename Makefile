@@ -289,7 +289,7 @@ $(BUILD)/ship_render.ihx: $(SRC)/banked/ship_render.c $(HDRS) $(BUILD)/bankhead.
 
 # 冷たい手続き生成(戦闘機8方向)を bank19 へ。常駐リクレイムのため sprites.c から移設。
 $(BUILD)/gen_planes.ihx: $(SRC)/banked/gen_planes.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
-	sdcc -m$(TARGET) -c $(OPT_OVL) $(INC) $(SRC)/banked/gen_planes.c -o $(BUILD)/gen_planes.rel
+	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/gen_planes.c -o $(BUILD)/gen_planes.rel   # ★OPT_OVL にしない: --opt-code-size で alert_bits の (u16)(256 + 行) が H を 0 にせず inc h するコードになり、敵艦発見の文字が壊れた(SDCC 4.6。2026-11-25)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/gen_planes.rel $(BUILD)/resident_syms.rel -o $@
 	@DL=$$(awk '/l__DATA/{print $$1}' $(BUILD)/gen_planes.map | head -1); \
