@@ -38,7 +38,7 @@ static void psg(u8 r, u8 v) {
 #define SFX_THUNDER_DUR 42   /* 60Hz ISR で 42 フレーム=0.7秒。クラッシュの停止(24フレーム@30fps=48 ISRフレーム)に収まる長さ */
 #define SFX_RUMBLE_DUR  56   /* 60Hz ISR で 56 フレーム≒0.93秒。津波の助走に合わせて打ち直す */
 #define SFX_LOOP_DUR    46   /* 60Hz で 46 フレーム≒0.77秒=宙返り(30fps で 16 コマ=32 ISR フレーム)＋抜けていく余韻 */
-static const u8 sfxDur[SFX_COUNT] = { 0, 8, 16, SFX_LOOP_DUR, 4, 28, 6, SFX_THUNDER_DUR, SFX_RUMBLE_DUR };
+static const u8 sfxDur[SFX_COUNT] = { 0, 8, 16, SFX_LOOP_DUR, 4, 28, 6, SFX_THUNDER_DUR, SFX_RUMBLE_DUR, 24 };   /* PAUSE=0.4秒 */
 /* ★tone B の3種(SHOT/PHIT/LOOP)は同じ形: 周期 = 始め + 経過フレーム×傾き、音量 = 残り2フレームまで一定→ぷつっと落とす。
    経過フレーム = 持続長-1-残り(SHOT は 7-rem、PHIT は 15-rem で従来と同じ値)。
    LOOP: 周期 500(約224Hz)→ 230(約486Hz)=唸りが引き起こしで1オクターブ上ずる。音量は 15 と 10 を 2 フレームずつ交互=エンジンの
@@ -85,6 +85,8 @@ void sfx_update(void) {
             bb = 1;
             psg(2, p & 0xFF); psg(3, (p >> 8) & 0x0F);   /* ★chB tone period */
             psg(9, (rem < 2) ? (u8)(rem * sfxBk[i]) : (t == SFX_LOOP && (rem & 2)) ? 10 : sfxBv[i]);   /* ★chB volume(宙返りは震わせる) */
+        } else if (t == SFX_PAUSE) {
+            bb = 1;                                /* ★ポーズの合図は tone B を空けるだけ。音はポーズの処理(冷たいバンク)が書く */
         } else {
             bc = 1;                                /* 残り(HIT/BOOM/EFIRE/THUNDER/RUMBLE)は noise C を占有 */
         }

@@ -119,6 +119,7 @@ extern u8  g_loop_alt;     /* 宙返り中の高度(0..16)。自機の影をこ�
    (撃沈演出の後は結果画面＝キー待ちなので、次の面の頭で止めない)。表示は coldsetup.c(COLD_PAUSE)。 */
 extern u8  g_pause;        /* 0=動いている / 1=止めた最初のフレーム(表示の準備) / 2=止めている */
 extern u8  g_pause_req;    /* 1=予約中 */
+extern u16 g_pause_t0;     /* ポーズの合図を鳴らし始めた snd_ticks */
 
 /* ★画面ビューア(デバッグ/確認用): config が設定し stage_init が分岐。各画面を個別に表示できる。
    0=通常ゲーム / 1=ステージ説明カードのみ / 2=撃破結果(SUNK)画面のみ。エンディングは config が SC_ENDING を直接返す。 */

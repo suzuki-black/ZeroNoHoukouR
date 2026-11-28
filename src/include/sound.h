@@ -22,6 +22,7 @@ enum {
     SFX_EFIRE,  /* 敵発砲: 静かな短いノイズ "プッ"(noise C) */
     SFX_THUNDER,/* ★メガクラッシュの雷鳴: 鋭い炸裂→深い轟きへ、うねりながら長く減衰(noise C) */
     SFX_RUMBLE, /* ★津波の地鳴り: 最も深いノイズ。音量は g_rumble_lv で演出側が制御(noise C) */
+    SFX_PAUSE,  /* ★ポーズに入った合図(tone B をベースから空ける。音は coldsetup.c の pause_frame が書く) */
     SFX_COUNT
 };
 

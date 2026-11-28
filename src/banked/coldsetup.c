@@ -399,12 +399,31 @@ static void view_wait(void) {
                                 止めると曲だけ先へ進んでずれるので、予約のまま待たせる */
 extern volatile u16 snd_ticks;
 extern u16 g_bgm_t0;
+/* ★ポーズの合図(このゲームのために作った音型): A5→E6→A6→C#7 と 2 tick ずつ駆け上がり、C#7 と A6 を
+   交互に鳴らしながら消えていく。tone B は SFX_PAUSE の間だけ割込みのベースが譲るので、ここで直接書く。
+   常駐の空きが少ないので、表も書込みも冷たいバンクに置く。周期 = 3579545 / 16 / 周波数。 */
+#define PZ_SND_N 11
+static const u8 pz_per[PZ_SND_N] = { 254, 170, 127, 101, 101, 127, 101, 127, 101, 127, 101 };
+static const u8 pz_vol[PZ_SND_N] = {  13,  13,  13,  14,  11,   9,   8,   6,   5,   4,   3 };
+static void pz_psg(u8 r, u8 v) __naked {   /* A=レジスタ, L=値(sdcccall 1)。割込みの PSG 書込みと混ざらないよう di */
+    (void)r; (void)v;
+    __asm
+        di
+        out  (0xA0), a
+        ld   a, l
+        out  (0xA1), a
+        ei
+        ret
+    __endasm;
+}
 static void pause_frame(void) {
     u8 i, s0 = (u8)(g_spr_base + 1);
     u8 big = (u8)(g_mb == MB_ACTIVE && curstage == 4);
     if (g_cold_mode == COLD_PAUSE_IN) {        /* 予約を止められる場面か(宙返り・警報は常駐が見た) */
         if (curstage == STAGE_FINAL && (u16)(snd_ticks - g_bgm_t0) < PZ_FINAL_INTRO) return;
         g_pause_req = 0; g_pause = 1;
+        sfx(1, SFX_PAUSE);                     /* 止まった合図。割込みに tone B を空けさせる(予約の受付音 SFX_HIT は同じ ch で上書き) */
+        g_pause_t0 = snd_ticks;
     } else if (g_input_edge & INP_PAUSE) {     /* F1 を押した瞬間 */
         if (g_pause) {                         /* 抜ける */
             g_pause = 0;
@@ -437,6 +456,9 @@ static void pause_frame(void) {
             vdp_write_addr((u16)(0x7400 + (u16)(s0 + i) * 16));
             for (r = 0; r < 16; r++) CS_DAT = 15;
         }
+    }
+    {   u16 e = (u16)(snd_ticks - g_pause_t0) >> 1;   /* 合図の段(2 tick で 1 段)。割込みが空けている 24 tick の内だけ書く */
+        if (e < PZ_SND_N) { pz_psg(2, pz_per[e]); pz_psg(3, 0); pz_psg(9, pz_vol[e]); }
     }
     {   u8 y = (PZ_JIFFY & 32) ? 220 : 2;      /* 約 0.5 秒ずつ点滅(デモの PRESS SPACE KEY とそろえる) */
         for (i = 0; i < 3; i++)
